@@ -70,6 +70,9 @@ static void write_log(const char *msg)
         OPEN_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     if (f != INVALID_HANDLE_VALUE) {
         DWORD w;
+        char ts[128];
+        wsprintfA(ts, "[t=%lu] ", GetTickCount());
+        WriteFile(f, ts, lstrlenA(ts), &w, NULL);
         WriteFile(f, msg, lstrlenA(msg), &w, NULL);
         CloseHandle(f);
     }
@@ -92,41 +95,60 @@ static HRESULT __stdcall stub_create3(void *this_, void *arg1, void **ppOut)
 }
 
 /*
- * Dump music buffer to file (called once from stub_BeginScene).
- * Synthesis output: floats at MUSIC_BUF, then int16 conversion starts
- * at 0x870500.  We write both.
+ * Dump music PCM to file.
+ *
+ * Source: generateMusic() in synth.asm.
+ * Flow: generateMusic initialises EDI = _MusicBuffer - STACK_SAMPLES*8
+ *   (= music_buf_addr, our VirtualAlloc result), runs the machine loop
+ *   accumulating float32 into _MusicBuffer (= music_buf_addr + 0x4900000),
+ *   then converts float32 → int16 in-place via .mixloop.
+ *   After generateMusic returns, _MusicBuffer contains int16 stereo PCM.
+ *
+ * Correct address: music_buf_addr + 0x4900000 (= _MusicBuffer)
+ * Correct size:    TOTAL_SAMPLES * 4 = 0x920000 * 4 = 0x2480000 (36.5 MB)
+ * Format:          int16 LE stereo, 44100 Hz
+ *
+ * Dump is triggered by stub_ExitProcess (after waveOutGetPosition hook
+ * returns INTRO_EXIT_SAMPLE so the render loop exits naturally).
  */
+#define STACK_SAMPLES_BYTES  0x4900000  /* TOTAL_SAMPLES * 8 = 0x920000 * 8 */
+#define PCM_SIZE             0x2480000  /* TOTAL_SAMPLES * 4 = 0x920000 * 4 */
+
 static int music_dumped = 0;
 
 static void dump_music(void)
 {
     if (music_dumped) return;
     music_dumped = 1;
-    write_log("dumping music buf...\r\n");
+    write_log("dumping music PCM...\r\n");
 
-    /* Raw float32 synthesis output: ~76 MB */
+    /* int16 stereo PCM: at _MusicBuffer = music_buf_addr + STACK_SAMPLES*8 */
     {
-        HANDLE f = CreateFileA("C:\\music_float.bin",
+        DWORD pcm_addr = music_buf_addr + STACK_SAMPLES_BYTES;
+        char msg[80];
+        wsprintfA(msg, "PCM at 0x%08lx, size 0x%x\r\n", pcm_addr, PCM_SIZE);
+        write_log(msg);
+
+        HANDLE f = CreateFileA("C:\\music_pcm.bin",
             GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         if (f != INVALID_HANDLE_VALUE) {
-            /* Write in 1MB chunks to avoid timeout */
-            DWORD total = 0x4900000; /* 76.5 MB */
             DWORD chunk = 0x100000;  /* 1 MB */
-            BYTE *src = (BYTE *)music_buf_addr;
+            BYTE *src = (BYTE *)pcm_addr;
             DWORD written, offset = 0;
-            while (offset < total) {
-                DWORD sz = (offset + chunk <= total) ? chunk : (total - offset);
+            while (offset < PCM_SIZE) {
+                DWORD sz = (offset + chunk <= PCM_SIZE) ? chunk : (PCM_SIZE - offset);
                 WriteFile(f, src + offset, sz, &written, NULL);
                 offset += sz;
             }
             CloseHandle(f);
-            write_log("music_float.bin written\r\n");
+            write_log("music_pcm.bin written\r\n");
         }
     }
 }
 
 /*
- * stub_BeginScene: render-loop call — also triggers music dump.
+ * stub_BeginScene: belt-and-suspenders dump trigger (may not fire).
+ * Primary dump is from stub_ExitProcess via waveOutGetPos hook.
  */
 static HRESULT __stdcall stub_BeginScene(void *this_)
 {
@@ -136,9 +158,38 @@ static HRESULT __stdcall stub_BeginScene(void *this_)
 }
 
 /*
- * Hook ExitProcess via [0x430000] so we dump before the demo exits.
- * The demo never calls BeginScene because the waveOut position check
- * fails (no real audio device), so we must catch ExitProcess instead.
+ * Hook waveOutGetPosition via [0x43003c].
+ * Without a working audio device, waveOutGetPosition always returns 0
+ * and the render loop never exits.  Return INTRO_EXIT_SAMPLE = 0x900000
+ * immediately so the loop exits on the first call, firing ExitProcess
+ * which dumps the PCM.  By the time waveOutGetPosition is called,
+ * generateMusic() has already completed and PCM is ready at _MusicBuffer.
+ */
+static MMRESULT __stdcall stub_waveOutGetPos(UINT hwo, void *pmmt, UINT cbmmt)
+{
+    (void)hwo; (void)cbmmt;
+    write_log("stub_waveOutGetPos called\r\n");
+    /* Write TIME_SAMPLES=2, cb=INTRO_EXIT_SAMPLE so render loop exits */
+    if (pmmt) {
+        DWORD *mmt = (DWORD *)pmmt;
+        mmt[0] = 2;         /* wType = TIME_SAMPLES */
+        mmt[1] = 0x900000;  /* INTRO_EXIT_SAMPLE = (9503040 & 0xFFFF0000) */
+    }
+    return 0;
+}
+
+static void hook_waveout_getpos(void)
+{
+    DWORD *slot = (DWORD *)0x43003c;
+    DWORD old;
+    VirtualProtect(slot, 4, PAGE_READWRITE, &old);
+    *slot = (DWORD)stub_waveOutGetPos;
+    VirtualProtect(slot, 4, old, &old);
+    write_log("waveOutGetPos hook OK\r\n");
+}
+
+/*
+ * Hook ExitProcess via [0x430000] — dumps PCM then exits.
  */
 typedef void (__stdcall *ExitProcessFn)(UINT);
 static ExitProcessFn real_ExitProcess = NULL;
@@ -176,7 +227,8 @@ static HRESULT __stdcall stub_CreateDevice(
     (void)this_; (void)adapter; (void)devtype;
     (void)hwnd;  (void)flags;   (void)pPP;
     write_log("stub_CreateDevice called\r\n");
-    dump_music();          /* synthesis is done by the time CreateDevice is called */
+    /* NOTE: synthesis (generateMusic) runs AFTER CreateDevice returns.
+     * Do NOT dump here; dump from stub_ExitProcess instead. */
     *ppDevice = &fake_device;
     return 0;
 }
@@ -269,6 +321,7 @@ IDirect3D9 * __stdcall Direct3DCreate9(UINT sdk_version)
     patch_music_buf();
     patch_d3d_setup();
     hook_exit_process();
+    hook_waveout_getpos();
 
     /* Dump decompressed code for analysis */
     {
@@ -282,13 +335,13 @@ IDirect3D9 * __stdcall Direct3DCreate9(UINT sdk_version)
         }
     }
 
-    /* Dump synthesis init code (0x420100-0x420500) for analysis */
+    /* Dump synthesis init code (0x420000-0x420500) for analysis */
     {
         HANDLE f = CreateFileA("C:\\synth_code.bin",
             GENERIC_WRITE, 0, NULL, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
         if (f != INVALID_HANDLE_VALUE) {
             DWORD w;
-            WriteFile(f, (void*)0x420100, 0x400, &w, NULL);
+            WriteFile(f, (void*)0x420000, 0x500, &w, NULL);
             CloseHandle(f);
             write_log("synth dump OK\r\n");
         }
