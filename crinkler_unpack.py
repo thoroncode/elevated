@@ -42,29 +42,32 @@ def unpack(exe_path: str, out_path: str) -> bool:
     # Stack
     mu.reg_write(UC_X86_REG_ESP, STACK_TOP - 16)
 
-    # ── Track output ───────────────────────────────────────────────
-    out_shadow = bytearray(OUT_SIZE)
-    high_water = [0]
+    # ── Skip the 79M-iteration rep stosw probability-table init ───────
+    # At 0x4000c8 Crinkler does `rep stosw` with ECX≈79M to zero the
+    # probability table.  Fresh mapped memory is already zeroed, so we
+    # can skip it by forcing ECX=0.  Use address-range filter so Python
+    # is only called ONCE for this address, not for every instruction.
+    REP_STOSW_ADDR = 0x4000C8
 
-    def on_mem_write(uc, access, addr, size, val, _ud):
-        if OUT_BASE <= addr < OUT_BASE + OUT_SIZE:
-            off = addr - OUT_BASE
-            for i in range(size):
-                out_shadow[off + i] = (val >> (8 * i)) & 0xFF
-            if off + size > high_water[0]:
-                high_water[0] = off + size
+    def on_rep_stosw(uc, addr, size, _ud):
+        ax  = uc.reg_read(UC_X86_REG_EAX) & 0xFFFF
+        ecx = uc.reg_read(UC_X86_REG_ECX)
+        print(f"  [skip] rep stosw @ 0x{addr:08x}  AX=0x{ax:04x}  ECX={ecx:,} → set ECX=0")
+        uc.reg_write(UC_X86_REG_ECX, 0)
 
-    mu.hook_add(UC_HOOK_MEM_WRITE, on_mem_write)
+    mu.hook_add(UC_HOOK_CODE, on_rep_stosw,
+                begin=REP_STOSW_ADDR, end=REP_STOSW_ADDR + 1)
 
     # ── Stop when execution reaches decompressed code ──────────────
+    # Address-range filter: only fire Python callback inside output region
     reached_out = [None]
 
     def on_code(uc, addr, size, _ud):
-        if addr >= OUT_BASE:
-            reached_out[0] = addr
-            uc.emu_stop()
+        reached_out[0] = addr
+        uc.emu_stop()
 
-    mu.hook_add(UC_HOOK_CODE, on_code)
+    mu.hook_add(UC_HOOK_CODE, on_code,
+                begin=OUT_BASE, end=OUT_BASE + OUT_SIZE)
 
     # ── Lazy-map any unmapped pages (zeroed) ───────────────────────
     def on_unmapped(uc, access, addr, size, val, _ud):
@@ -91,26 +94,32 @@ def unpack(exe_path: str, out_path: str) -> bool:
         mu.emu_start(
             ENTRY,
             OUT_BASE + OUT_SIZE,
-            timeout=120_000_000,   # 120 s wall-clock guard
-            count=100_000_000,     # instruction count guard
+            timeout=300_000_000,   # 300 s wall-clock guard
+            count=500_000_000,     # 500M instruction guard
         )
     except UcError as e:
         print(f"  Emulation stopped: {e}")
 
-    # ── Results ────────────────────────────────────────────────────
+    # ── Results: read memory directly from emulator ────────────────
     if reached_out[0]:
         print(f"  Execution reached decompressed code @ 0x{reached_out[0]:08x}")
+    else:
+        print("  WARNING: never reached decompressed code (stopped by limit?)")
 
-    n = high_water[0]
+    out_bytes = bytes(mu.mem_read(OUT_BASE, OUT_SIZE))
+
+    # Trim trailing zeros for a useful size indicator
+    trimmed = out_bytes.rstrip(b"\x00")
+    n = len(trimmed)
     if n == 0:
-        print("ERROR: nothing written to output region – wrong entry point?")
+        print("ERROR: output region is empty – wrong entry point?")
         return False
 
-    print(f"  Decompressed {n:,} bytes  ({n // 1024} KB)")
+    print(f"  Decompressed {n:,} useful bytes  ({n // 1024} KB), full window {OUT_SIZE // 1024} KB")
 
     with open(out_path, "wb") as f:
-        f.write(bytes(out_shadow[:n]))
-    print(f"  Saved → {out_path}")
+        f.write(out_bytes)          # save full window so all offsets are correct
+    print(f"  Saved → {out_path}  ({OUT_SIZE // 1024} KB padded)")
     return True
 
 
