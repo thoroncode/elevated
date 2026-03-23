@@ -38,7 +38,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         // Synthesize in background (~1s); when done, sync renderer clock and start audio together.
         synth.synthesize { [weak self] ok in
             guard let self, ok else { print("Synthesis failed"); return }
-            self.renderer.startTime = CACurrentMediaTime()
+            self.renderer.start()
             self.synth.play()
         }
     }

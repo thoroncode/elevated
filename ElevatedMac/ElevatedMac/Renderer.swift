@@ -293,13 +293,20 @@ class Renderer: NSObject, MTKViewDelegate {
 
     // Time
     var startTime: Double = 0
+    weak var view: MTKView?
+
+    func start() {
+        startTime = CACurrentMediaTime()
+        view?.isPaused = false
+    }
 
     init(mtkView: MTKView) {
         self.device   = mtkView.device!
         self.cmdQueue = device.makeCommandQueue()!
         super.init()
 
-        startTime = CACurrentMediaTime()
+        self.view = mtkView
+        mtkView.isPaused = true          // hold until synthesis is ready
         mtkView.depthStencilPixelFormat = .depth32Float
         mtkView.colorPixelFormat        = .bgra8Unorm
         mtkView.sampleCount             = 1
