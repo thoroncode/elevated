@@ -459,6 +459,12 @@ class Renderer: NSObject, MTKViewDelegate {
     }
 
     func draw(in view: MTKView) {
+        let t = CACurrentMediaTime() - startTime
+        if t >= 217.5 {
+            NSApplication.shared.terminate(nil)
+            return
+        }
+
         guard let drawable = view.currentDrawable,
               let rpd = view.currentRenderPassDescriptor else { return }
 

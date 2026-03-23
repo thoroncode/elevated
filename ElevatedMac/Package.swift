@@ -10,7 +10,10 @@ let package = Package(
             path: "CSynth",
             publicHeadersPath: "include",
             cSettings: [
-                .unsafeFlags(["-O2"])
+                .unsafeFlags(["-O3", "-ffast-math", "-march=native"])
+            ],
+            linkerSettings: [
+                .linkedFramework("Accelerate")
             ]
         ),
         .executableTarget(

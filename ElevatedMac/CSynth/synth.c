@@ -13,6 +13,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
+#include <Accelerate/Accelerate.h>
 
 /* ── constants ─────────────────────────────────────────────────────────────── */
 #define TOTAL_SAMPLES     9568256   /* ((9503040+65535) & ~0xFFFF) */
@@ -40,11 +41,25 @@ static float frandom(void) {
     return v * RAND_SCALE;
 }
 
+/* ── Fast sin(pi*x) for x in [-1,1], 9th-order Taylor in Horner form ────── */
+/* Max error ~0.006 near x=±1 (sin→0 there anyway). Fine for audio. */
+static __attribute__((always_inline)) float fast_sinpif(float x) {
+    float u  = 3.14159265f * x;
+    float u2 = u * u;
+    float r  = 2.75573e-6f;
+    r = r * u2 - 1.98413e-4f;
+    r = r * u2 + 8.33333e-3f;
+    r = r * u2 - 1.66667e-1f;
+    return u * (r * u2 + 1.0f);
+}
+
 /* ── Oscillator (saw / square / sine) ───────────────────────────────────── */
-static float osc_wave(float phase, float phase_shift, uint8_t type) {
+static __attribute__((always_inline))
+float osc_wave(float phase, float phase_shift, uint8_t type) {
     float p = phase + phase_shift;
-    p = 2.0f * (p - roundf(p));   /* [-1, 1] via 2*frac(nearest) */
-    if (type == 1) return sinf(3.14159265358979f * p);
+    /* round to nearest: x - floor(x+0.5) — avoids FP-mode-switching roundf */
+    p = 2.0f * (p - floorf(p + 0.5f));   /* [-1, 1] */
+    if (type == 1) return fast_sinpif(p);
     if (type == 2) return (p >= 0.0f) ? 1.0f : -1.0f;
     return p;   /* saw */
 }
@@ -206,6 +221,17 @@ static void machine_synth(float **pedi, const uint8_t **pesi, int *pedx) {
     float stereo    = fi[8];
     const uint8_t *oscs = instr + 9 * 4;
 
+    /* Hoist oscillator params — constant for the entire instrument */
+    struct { uint8_t type, mode; float phshift, det, det2; } ocp[3];
+    for (int oi = 0; oi < 3; oi++) {
+        const uint8_t *op = oscs + oi * 12;
+        ocp[oi].type  = op[0];
+        ocp[oi].mode  = op[1];
+        memcpy(&ocp[oi].phshift, op + 4, 4);
+        memcpy(&ocp[oi].det,     op + 8, 4);
+        ocp[oi].det2  = 2.0f - ocp[oi].det;
+    }
+
     int edx = *pedx;
 
     for (int n = 0; n < NUM_ROWS * 16; n++, edx++) {
@@ -219,16 +245,13 @@ static void machine_synth(float **pedi, const uint8_t **pesi, int *pedx) {
 
         const float *env = (note == 0xFE) ? ENV_STOP : ENV_NORMAL;
 
-        /* calculate note frequency: note_freq_start * note_freq_step^note */
-        float freq = NOTE_FREQ_START;
-        for (int i = 0; i < (int)note; i++)
-            freq *= NOTE_FREQ_STEP;
-        freq -= base_freq; /* fsub base_freq */
+        /* note frequency via powf — replaces O(note) multiply loop */
+        float freq = NOTE_FREQ_START * powf(NOTE_FREQ_STEP, (float)note) - base_freq;
 
         float phase   = 0.0f;
         float env_val = 0.0f;
         float *out = base + (size_t)n * MAX_NOTE_SAMPLES * 2;
-        float *end = base + STACK_FLOATS;   /* don't write past here */
+        float *end = base + STACK_FLOATS;
 
         for (int seg = 0; seg < 4; seg++) {
             if (dur[seg] == 0) continue;
@@ -240,22 +263,14 @@ static void machine_synth(float **pedi, const uint8_t **pesi, int *pedx) {
                 freq = new_freq;
                 phase += new_freq + base_freq;
 
-                /* oscillators */
+                /* oscillators — params already in registers */
                 float acc = 0.0f;
-                const uint8_t *op = oscs;
-                for (int oi = 0; oi < 3; oi++, op += 12) {
-                    uint8_t otype   = op[0];
-                    uint8_t omode   = op[1];
-                    float   ophshift;
-                    float   detune;
-                    memcpy(&ophshift, op + 4, 4);
-                    memcpy(&detune,   op + 8, 4);
-                    float o = osc_wave(phase * (2.0f - detune), ophshift, otype)
-                            + osc_wave(phase * detune,          ophshift, otype);
-                    if      (omode == 2) acc += o;
-                    else if (omode == 3) acc -= o;
-                    else if (omode == 4) acc *= o;
-                    /* mode 1: discard (nop) */
+                for (int oi = 0; oi < 3; oi++) {
+                    float o = osc_wave(phase * ocp[oi].det2, ocp[oi].phshift, ocp[oi].type)
+                            + osc_wave(phase * ocp[oi].det,  ocp[oi].phshift, ocp[oi].type);
+                    if      (ocp[oi].mode == 2) acc += o;
+                    else if (ocp[oi].mode == 3) acc -= o;
+                    else if (ocp[oi].mode == 4) acc *= o;
                 }
 
                 float samp = (acc + frandom() * noise_mix) * env_val * volume;
@@ -282,63 +297,53 @@ static void machine_synth(float **pedi, const uint8_t **pesi, int *pedx) {
  *   [5] ch1_low [6] ch1_high [7] ch1_band
  */
 static void machine_filter(float *edi, uint8_t *params, float *pm) {
-    float *fp = (float *)params;
-    float cutoff    = fp[0];
-    /* fp[2] = lfo1_freq, fp[3] = cos_1 (mutable) */
-    /* fp[4] = lfo2_freq, fp[5] = cos_2 (mutable) */
-    float dry       = fp[6];
-    int   ftype     = ((int *)params)[7];
+    float *fp  = (float *)params;
+    float *fpm = (float *)pm;
 
-    float *sin1 = &((float *)pm)[0];
-    float *sin2 = &((float *)pm)[1];
-    /* SVF state per channel (offset 2..4, 5..7) */
-    float *ch[2][3]; /* [channel][low/high/band] */
-    ch[0][0] = &((float *)pm)[2];
-    ch[0][1] = &((float *)pm)[3];
-    ch[0][2] = &((float *)pm)[4];
-    ch[1][0] = &((float *)pm)[5];
-    ch[1][1] = &((float *)pm)[6];
-    ch[1][2] = &((float *)pm)[7];
+    /* Constant params */
+    float cutoff = fp[0];
+    float res    = fp[1];
+    float lfo1f  = fp[2];
+    float lfo2f  = fp[4];
+    float dry    = fp[6];
+    int   ftype  = ((int *)params)[7];
+
+    /* Load all mutable state into locals so the compiler keeps them in regs */
+    float s1 = fpm[0], s2 = fpm[1];
+    float c1 = fp[3],  c2 = fp[5];
+    float L0 = fpm[2], H0 = fpm[3], B0 = fpm[4];
+    float L1 = fpm[5], H1 = fpm[6], B1 = fpm[7];
 
     for (int i = 0; i < TOTAL_SAMPLES; i++) {
-        /* update LFO1 (quadrature oscillator) */
-        float s1 = *sin1;
-        float c1 = fp[3];
-        float new_c1 = c1 - s1 * fp[2];
-        fp[3] = new_c1;
-        float new_s1 = s1 + new_c1 * fp[2];
-        *sin1 = new_s1;
+        /* LFO1 quadrature step */
+        float nc1 = c1 - s1 * lfo1f;  c1 = nc1;
+        float ns1 = s1 + nc1 * lfo1f; s1 = ns1;
+        /* LFO2 quadrature step */
+        float nc2 = c2 - s2 * lfo2f;  c2 = nc2;
+        float ns2 = s2 + nc2 * lfo2f; s2 = ns2;
 
-        /* update LFO2 */
-        float s2 = *sin2;
-        float c2 = fp[5];
-        float new_c2 = c2 - s2 * fp[4];
-        fp[5] = new_c2;
-        float new_s2 = s2 + new_c2 * fp[4];
-        *sin2 = new_s2;
+        float f = (ns1 + ns2 + cutoff) * CUTOFF_SCALE;
 
-        float f = (new_s1 + new_s2 + cutoff) * CUTOFF_SCALE;
+        /* Channel 0 */
+        float in0 = edi[i * 2];
+        L0 += f * B0;
+        float h0 = res * (in0 - B0) - L0;  H0 = h0;
+        B0 = (f * h0 + B0) + 1e-30f - 1e-30f;  /* de-normalise */
+        edi[i * 2]     = dry * in0 + (ftype == 0 ? L0 : ftype == 1 ? h0 : B0);
 
-        /* two-pass: left then right channel */
-        for (int c = 0; c < 2; c++) {
-            float in = edi[i * 2 + c];
-
-            *ch[c][0] += f * (*ch[c][2]);                          /* low  */
-            float high = fp[1] * (in - *ch[c][2]) - *ch[c][0];    /* high */
-            *ch[c][1] = high;
-            float band = f * high + *ch[c][2];
-            /* de-normalise */
-            band = band + 1e-30f - 1e-30f;
-            *ch[c][2] = band;
-
-            float wet;
-            if      (ftype == 0) wet = *ch[c][0];  /* low  */
-            else if (ftype == 1) wet = high;        /* high */
-            else                 wet = band;        /* band */
-
-            edi[i * 2 + c] = dry * in + wet;
-        }
+        /* Channel 1 */
+        float in1 = edi[i * 2 + 1];
+        L1 += f * B1;
+        float h1 = res * (in1 - B1) - L1;  H1 = h1;
+        B1 = (f * h1 + B1) + 1e-30f - 1e-30f;
+        edi[i * 2 + 1] = dry * in1 + (ftype == 0 ? L1 : ftype == 1 ? h1 : B1);
     }
+
+    /* Write mutable state back */
+    fpm[0] = s1; fpm[1] = s2;
+    fp[3]  = c1; fp[5]  = c2;
+    fpm[2] = L0; fpm[3] = H0; fpm[4] = B0;
+    fpm[5] = L1; fpm[6] = H1; fpm[7] = B1;
 }
 
 /* ── Machine: compressor ────────────────────────────────────────────────── */
@@ -366,8 +371,11 @@ static void machine_compressor(float *edi, const uint8_t *params) {
 static void machine_distortion2(float *edi, const uint8_t *params) {
     const float *fp = (const float *)params;
     float a = fp[0], b = fp[1];
-    for (int i = 0; i < TOTAL_SAMPLES * 2; i++)
-        edi[i] = sinf(edi[i] * a) * b;
+    int   n = TOTAL_SAMPLES * 2;
+    /* Scale by a, then batch-vectorised sin via Accelerate, then scale by b */
+    vDSP_vsmul(edi, 1, &a, edi, 1, (vDSP_Length)n);
+    vvsinf(edi, edi, &n);
+    vDSP_vsmul(edi, 1, &b, edi, 1, (vDSP_Length)n);
 }
 
 /* ── Machine: delay (ping-pong) ─────────────────────────────────────────── */
@@ -473,7 +481,7 @@ void elevated_generate_music(float *output) {
     int            eax = 0;            /* first machine = synth (0) */
 
     do {
-        uint8_t *ebp = (uint8_t *)esi;  /* params for this machine */
+        uint8_t *ebp = (uint8_t *)esi;
 
         switch (eax) {
         case 0: machine_synth(&edi, &esi, &edx);          break;
@@ -487,12 +495,12 @@ void elevated_generate_music(float *output) {
                 esi += 8;                                   break;
         case 5: machine_distortion2(edi, ebp);
                 esi += 8;                                   break;
-        case 7: machine_allpass(edi, ebp, (float *)ebx);
+        case 6: machine_allpass(edi, ebp, (float *)ebx);
                 esi += 12; ebx += MAX_DELAY_SAMPLES * 8;   break;
         default: break;
         }
 
-        eax = (uint8_t)*esi++;  /* lodsb: read next machine type */
+        eax = (uint8_t)*esi++;
     } while (!(eax & 0x80));
 
     /* The final output is at stack slot 1 = &stack[STACK_FLOATS].
@@ -500,7 +508,6 @@ void elevated_generate_music(float *output) {
      * Copy to caller's output buffer.                                */
     float *result = stack + STACK_FLOATS;
     memcpy(output, result, STACK_FLOATS * sizeof(float));
-
     free(mt);
     free(param_mem_raw);
     free(stack);
