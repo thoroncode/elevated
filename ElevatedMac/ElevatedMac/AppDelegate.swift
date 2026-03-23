@@ -9,7 +9,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var window: NSWindow!
     var renderer: Renderer!
     let synth = SynthPlayer()
-    var wavPlayer: AVAudioPlayer?
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let device = MTLCreateSystemDefaultDevice() else {
@@ -36,28 +35,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         NSApp.activate(ignoringOtherApps: true)
 
-        // Try to play pre-rendered WAV immediately; fall back to live synthesis.
-        // Look for elevated_music.wav next to the executable (or 3 levels up from source).
-        let exeDir = URL(fileURLWithPath: CommandLine.arguments[0])
-            .deletingLastPathComponent()
-        let candidates = [
-            exeDir.appendingPathComponent("elevated_music.wav"),
-            URL(fileURLWithPath: NSHomeDirectory())
-                .appendingPathComponent("src/elevated/elevated_music.wav"),
-        ]
-        let wavURL = candidates.first { FileManager.default.fileExists(atPath: $0.path) }
-
-        if let wavURL = wavURL,
-           let player = try? AVAudioPlayer(contentsOf: wavURL) {
-            print("[AppDelegate] Playing WAV: \(wavURL.path)")
-            wavPlayer = player
-            player.play()
-        } else {
-            print("[AppDelegate] WAV not found, running live synthesis…")
-            synth.synthesize { [weak self] ok in
-                guard ok else { print("Synthesis failed"); return }
-                self?.synth.play()
-            }
+        // Synthesize in background (~1s); when done, sync renderer clock and start audio together.
+        synth.synthesize { [weak self] ok in
+            guard let self, ok else { print("Synthesis failed"); return }
+            self.renderer.startTime = CACurrentMediaTime()
+            self.synth.play()
         }
     }
 
