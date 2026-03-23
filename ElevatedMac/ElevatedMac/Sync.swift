@@ -17,10 +17,11 @@ func syncParam(_ position: Int, _ track: [TrackKey]) -> Float {
     let ir = floorf(ro)
     let iri = Int(ir)
     var r = 0
-    while r < 100 {
+    while r < track.count {
         if track[r].row >= iri { break }
         r += 1
     }
+    if r >= track.count { r = track.count - 1 }
     if r > 0 { r -= 1 }
     if track[r].interp == 0 { return track[r].value }
     return track[r].value + (track[r+1].value - track[r].value) * (ro - Float(track[r].row)) / Float(track[r+1].row - track[r].row)
