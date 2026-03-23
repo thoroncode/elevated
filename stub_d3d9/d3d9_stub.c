@@ -112,7 +112,7 @@ static HRESULT __stdcall stub_create3(void *this_, void *arg1, void **ppOut)
  * returns INTRO_EXIT_SAMPLE so the render loop exits naturally).
  */
 #define STACK_SAMPLES_BYTES  0x4900000  /* TOTAL_SAMPLES * 8 = 0x920000 * 8 */
-#define PCM_SIZE             0x2480000  /* TOTAL_SAMPLES * 4 = 0x920000 * 4 */
+#define PCM_SIZE             0x4900000  /* full float32 buffer = TOTAL_SAMPLES * 8 */
 
 static int music_dumped = 0;
 
