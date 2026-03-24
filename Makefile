@@ -1,4 +1,4 @@
-.PHONY: all build run debug capture app app-icon pkg uninstall ref compare compare-range clean
+.PHONY: all build run debug capture app app-icon pkg zip uninstall ref compare compare-range clean
 
 BIN       = ElevatedMac/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -74,6 +74,12 @@ app: build
 	@echo "  Copy to Desktop:  cp -r $(CURDIR)/$(APP) ~/Desktop/"
 	@echo "  Run normal:       open $(CURDIR)/$(APP)"
 	@echo "  Run debug:        open $(CURDIR)/$(APP) --args --debug"
+
+# Zip Elevated.app and drop it on the Desktop — ready to send via Slack/email
+zip: app
+	@echo "Zipping to ~/Desktop/Elevated.zip..."
+	@cd $(dir $(APP)) && zip -qr ~/Desktop/Elevated.zip $(notdir $(APP))
+	@echo "  ~/Desktop/Elevated.zip — ready to send"
 
 # Build a macOS .pkg installer — installs Elevated.app to /Applications
 # Always cleans Swift build artifacts first to guarantee a fresh binary.
