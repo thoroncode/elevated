@@ -17,6 +17,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var muteMenuItem: NSMenuItem?
     private var captureMode = false
     private var launchTime: CFTimeInterval = 0
+    private var fullscreenCursorMonitor: Any?
+    private var fullscreenCursorHidden = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let device = MTLCreateSystemDefaultDevice() else {
@@ -152,23 +154,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
             // Let Cmd+key combos pass through to the menu
             guard !event.modifierFlags.contains(.command) else { return event }
-            self?.handleKey(event)
-            return nil
+            guard let self else { return event }
+            return self.handleKey(event) ? nil : event
         }
     }
 
-    private func handleKey(_ event: NSEvent) {
+    @discardableResult
+    private func handleKey(_ event: NSEvent) -> Bool {
         let frame = 1.0 / 60.0
         let shift = event.modifierFlags.contains(.shift)
         switch event.keyCode {
-        case 49:  togglePlayPause()                          // Space
-        case 123: seekBy(shift ? -frame : -5)                // ←  (-1f / -5s)
-        case 124: seekBy(shift ?  frame :  5)                // →  (+1f / +5s)
-        case 125: seekBy(-60)                                // ↓  (-60s)
-        case 126: seekBy( 60)                                // ↑  (+60s)
-        case 47:  if renderer.isPaused { seekBy( frame) }   // .  step forward
-        case 43:  if renderer.isPaused { seekBy(-frame) }   // ,  step backward
-        default:  break
+        case 53:
+            if window.styleMask.contains(.fullScreen) {
+                NSApp.terminate(nil)                         // Esc
+                return true
+            }
+            return false
+        case 49:  togglePlayPause(); return true            // Space
+        case 123: seekBy(shift ? -frame : -5); return true  // ←  (-1f / -5s)
+        case 124: seekBy(shift ?  frame :  5); return true  // →  (+1f / +5s)
+        case 125: seekBy(-60); return true                  // ↓  (-60s)
+        case 126: seekBy( 60); return true                  // ↑  (+60s)
+        case 47:
+            if renderer.isPaused { seekBy(frame); return true } // .  step forward
+            return false
+        case 43:
+            if renderer.isPaused { seekBy(-frame); return true } // ,  step backward
+            return false
+        default:
+            return false
         }
     }
 
@@ -243,9 +257,42 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    func applicationWillTerminate(_ notification: Notification) { endFullscreenCursorHide() }
+
+    private func beginFullscreenCursorHide() {
+        guard !fullscreenCursorHidden else { return }
+        fullscreenCursorHidden = true
+        NSCursor.hide()
+
+        guard fullscreenCursorMonitor == nil else { return }
+        fullscreenCursorMonitor = NSEvent.addLocalMonitorForEvents(
+            matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .scrollWheel]
+        ) { [weak self] event in
+            self?.endFullscreenCursorHide()
+            return event
+        }
+    }
+
+    private func endFullscreenCursorHide() {
+        guard fullscreenCursorHidden else { return }
+        fullscreenCursorHidden = false
+        NSCursor.unhide()
+        if let monitor = fullscreenCursorMonitor {
+            NSEvent.removeMonitor(monitor)
+            fullscreenCursorMonitor = nil
+        }
+    }
+
+    func windowWillEnterFullScreen(_ notification: Notification) {
+        beginFullscreenCursorHide()
+    }
 
     func windowDidEnterFullScreen(_ notification: Notification) {
-        NSCursor.setHiddenUntilMouseMoves(true)
+        beginFullscreenCursorHide()
+    }
+
+    func windowWillExitFullScreen(_ notification: Notification) {
+        endFullscreenCursorHide()
     }
 }
 
