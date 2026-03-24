@@ -165,7 +165,7 @@ class Renderer: NSObject, MTKViewDelegate {
     var gbufWorldPos: MTLTexture!  // rgba32float — world pos + hit flag
     var gbufColor:    MTLTexture!  // rgba32float — vertex color
     var gbufDepth:    MTLTexture!  // depth32float
-    var sceneColor:   MTLTexture!  // rgba16float — scene after deferred pass
+    var sceneColor:   MTLTexture!  // bgra8unorm — scene after deferred pass (matches D3D9 A8R8G8B8)
 
     // Mesh buffers
     var terrainVBuf: MTLBuffer!
@@ -292,7 +292,7 @@ class Renderer: NSObject, MTKViewDelegate {
         let deferredDesc = MTLRenderPipelineDescriptor()
         deferredDesc.vertexFunction   = lib.makeFunction(name: "fullscreenVert")
         deferredDesc.fragmentFunction = lib.makeFunction(name: "deferredFrag")
-        deferredDesc.colorAttachments[0].pixelFormat = .rgba16Float
+        deferredDesc.colorAttachments[0].pixelFormat = .bgra8Unorm
         deferredPSO = try! device.makeRenderPipelineState(descriptor: deferredDesc)
 
         let postDesc = MTLRenderPipelineDescriptor()
@@ -329,7 +329,7 @@ class Renderer: NSObject, MTKViewDelegate {
         gbufWorldPos = makeTex(.rgba32Float)
         gbufColor    = makeTex(.rgba32Float)
         gbufDepth    = makeTex(.depth32Float, [.renderTarget])
-        sceneColor   = makeTex(.rgba16Float)
+        sceneColor   = makeTex(.bgra8Unorm)
     }
 
     // ── Meshes ─────────────────────────────────────────────────────────────
