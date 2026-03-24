@@ -154,14 +154,12 @@ fragment float4 deferredFrag(
     float2 o = x + 0.5/1280;
     float4 d = t1.sample(s1, o);  // G-buffer world pos
 
-    // Reconstruct world-space ray direction from NDC using inverse VP
-    float4 near4 = u.vi * float4(x.x*2-1, 1-x.y*2, 0, 1);
-    float4 far4  = u.vi * float4(x.x*2-1, 1-x.y*2, 1, 1);
-    float3 nearW = near4.xyz / near4.w;
-    float3 farW  = far4.xyz  / far4.w;
-    float3 e = normalize(farW - nearW);
-    // Guard against rays pointing at/below horizon (avoid divide-by-zero and sky blowout)
-    float ey = max(e.y, 0.001);
+    // Exact m3 style: e = normalize(mul(v, float4(ndc.xy, 1, 1))) where v is inverse(VP).
+    // Do not perspective-divide here; the original shader normalizes xyz directly.
+    float4 eye4 = u.vi * float4(x.x*2-1, 1-x.y*2, 1, 1);
+    float3 e = normalize(eye4.xyz);
+    // Preserve sign near the horizon to avoid a hard branch/discontinuity at e.y = 0.
+    float ey = (abs(e.y) < 0.001) ? ((e.y < 0.0) ? -0.001 : 0.001) : e.y;
     float2 s = e.xz / ey;
 
     // Cloud band index
@@ -182,11 +180,8 @@ fragment float4 deferredFrag(
         // Exact port of m3: float t=length(d.xyz-q[4].xyz)
         float t = length(d.xyz - u.q[4].xyz);
         float w = u.q[1].w - d.y;   // water level - surface.y  (< 0 = above water = terrain)
-        // Water reflection path is only valid when the view ray intersects the
-        // water plane in front of the camera (downward ray in this coordinate system).
-        bool useWater = (w >= 0.0) && (e.y < -0.001);
 
-        if (!useWater) {
+        if (w < 0) {
             // ── TERRAIN — exact m3 port ───────────────────────────────
             float3 n = cn(d.xz, 0.001*t, 12 - log2(t), u, t0, s0);
             float  h = fbm(3*d.xz, 3, t0, s0);
