@@ -48,7 +48,7 @@ icon: build
 #   CLI:     Elevated.app/Contents/MacOS/ElevatedMac --debug
 app: build icon
 	@echo "Assembling $(APP)..."
-	@sudo rm -rf $(APP)
+	@rm -rf $(APP)
 	@mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	@cp $(BIN) $(APP)/Contents/MacOS/
 	@cp -r ElevatedMac/.build/release/ElevatedMac_ElevatedMac.bundle \
@@ -80,12 +80,14 @@ pkg:
 	@swift package --package-path ElevatedMac clean
 	@$(MAKE) app
 	@echo "Building Elevated.pkg..."
+	@rm -rf /tmp/elevated_pkg_stage && cp -r $(APP) /tmp/elevated_pkg_stage
 	@pkgbuild \
 	    --install-location /Applications \
-	    --component $(APP) \
+	    --component /tmp/elevated_pkg_stage \
 	    --identifier org.rgba.elevated \
 	    --version 1.0 \
 	    Elevated.pkg
+	@rm -rf /tmp/elevated_pkg_stage
 	@echo ""
 	@echo "  Installer: $(CURDIR)/Elevated.pkg"
 	@echo "  Send this file — recipient double-clicks to install to /Applications"
