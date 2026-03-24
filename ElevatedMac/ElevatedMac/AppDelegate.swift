@@ -10,7 +10,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     var renderer: Renderer!
     let synth = SynthPlayer()
     private var transportBar: TransportBar!
-    private var hideTimer: Timer?
     private var captureMode = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -67,11 +66,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             self?.synth.seek(to: t)
         }
 
-        // Show bar on any mouse activity
-        NSEvent.addLocalMonitorForEvents(matching: [.mouseMoved, .leftMouseDown]) { [weak self] event in
-            self?.showTransportBar()
-            return event
-        }
+        transportBar.alphaValue = 1  // always visible in debug mode
 
         // Plug into render loop
         renderer.onDraw = { [weak self] in self?.onFrame() }
@@ -104,22 +99,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     // ── Transport bar show / hide ──────────────────────────────────────────
 
     private func showTransportBar() {
-        hideTimer?.invalidate()
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.15
-            transportBar.animator().alphaValue = 1
-        }
-        guard !renderer.isPaused else { return }   // keep visible while paused
-        hideTimer = Timer.scheduledTimer(withTimeInterval: 3.0, repeats: false) { [weak self] _ in
-            self?.hideTransportBar()
-        }
-    }
-
-    private func hideTransportBar() {
-        NSAnimationContext.runAnimationGroup { ctx in
-            ctx.duration = 0.5
-            transportBar.animator().alphaValue = 0
-        }
+        // no-op: always visible in debug mode
     }
 
     // ── Keyboard (mpv-style) ───────────────────────────────────────────────
