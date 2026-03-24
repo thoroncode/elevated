@@ -208,28 +208,38 @@ With `.front` culling: Metal culls CCW-in-framebuffer = CW-in-NDC = what D3D9 al
 
 ---
 
-## Fix 6: Water Seam — Raise Terrain Grid Density to 512 (2026-03-24)
+## Fix 6: Water Seam — Higher Density Plus Alternating Quad Diagonals (2026-03-24)
 
-**Problem**: A hard diagonal seam appeared in reflective water around `00:01:21`, visible as a straight-edged slab cutting across the scene. Earlier hypotheses about camera extraction, inverse-VP reconstruction, and post-processing were falsified by exact frame captures and source-side camera probing.
+**Problem**: A hard diagonal seam appeared in reflective water around `00:01:21` and again at later camera angles such as row `175`. The artifact presented as a large straight-edged slab, clearly geometric rather than post-process driven.
 
-**Root cause**: The port used a `256×256` regular grid for terrain while the original D3D9 demo used `D3DXCreatePolygon(52.0f, 4)` followed by `D3DXTessellateNPatches(..., 512)`. The coarse grid produced large triangle interpolation regions in the G-buffer, which then showed up as a straight seam in the water shading path.
+**Root cause**: The port shades water from a proxy terrain mesh stored in the G-buffer. A regular grid with a fixed triangle split direction leaves long planar interpolation features in screen space. Raising density from `256` to `512` helped, but some seam cases remained because the grid still split every quad along the same diagonal.
 
 **Evidence**:
-- Original source: `D3DXTessellateNPatches(COMHandles.mesh, NULL, 512, false, &COMHandles.mesh, NULL);`
-- `main` (256 grid) reproduces the seam
-- `512` and `1024` grid experiment branches both remove the obvious slab artifact
-- Exact frame capture at `t=81.383333` confirms `512` and `1024` are much closer to each other than either is to broken `main`
+- `256` grid: severe slab artifact
+- `512` grid: major improvement, but not complete
+- `1024` grid: further improvement, but still residual seam at row `175`
+- alternating quad diagonals: reduces the fixed-direction slab pattern
+- `1024` + alternating diagonals: best visual result among the tested pragmatic fixes
 
-**Fix**: Increase the terrain grid density in `Renderer.buildMeshes()` from `256` to `512`.
+**Decision**: Keep the pragmatic visual fix instead of pursuing a larger mesh-topology rewrite. This is not the most source-faithful option, but it removes the visible artifact in the tested bad shots and matches demoscene priorities better.
 
-**Why 512, not 1024**:
-- `512` matches the original source
-- `1024` only produced a comparatively small additional change
-- `512` is cheaper and already fixes the visible bug
+**Fix**:
+- terrain grid density increased to `1024`
+- terrain quad split direction alternates by checkerboard parity instead of using one global diagonal
 
-**Code change in `Renderer.swift`**:
+**Code shape in `Renderer.swift`**:
 ```swift
-let (vb, ib, ic) = makeTerrainMesh(device: device, size: 512, scale: 104)
+let (vb, ib, ic) = makeTerrainMesh(device: device, size: 1024, scale: 104)
+```
+
+and the index generation alternates the triangle split:
+
+```swift
+if ((x + z) & 1) == 0 {
+    indices += [i, i+1, i+row, i+1, i+row+1, i+row]
+} else {
+    indices += [i, i+1, i+row+1, i, i+row+1, i+row]
+}
 ```
 
 ---
