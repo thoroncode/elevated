@@ -81,11 +81,13 @@ app: build
 	@cp ElevatedMac/.build/release/ElevatedMac_ElevatedMac.bundle/Shaders.metal \
 	        $(APP)/Contents/Resources/
 	@cp $(ICON_ICNS) $(APP)/Contents/Resources/
-	@/usr/libexec/PlistBuddy \
+	@shortver=$$(printf '%s.%d.%s' $$(date +%y) $$(date +%-m) $$(date +%d)); \
+	 buildver=$$(date +%H.%M); \
+	 /usr/libexec/PlistBuddy \
 	    -c "Add :CFBundleName           string Elevated" \
 	    -c "Add :CFBundleIdentifier     string org.rgba.elevated" \
-	    -c "Add :CFBundleVersion        string 1.0" \
-	    -c "Add :CFBundleShortVersionString string 1.0" \
+	    -c "Add :CFBundleVersion        string $$buildver" \
+	    -c "Add :CFBundleShortVersionString string $$shortver" \
 	    -c "Add :CFBundleExecutable     string ElevatedMac" \
 	    -c "Add :CFBundlePackageType    string APPL" \
 	    -c "Add :CFBundleIconFile       string icon" \
