@@ -52,7 +52,9 @@ CPU-side `m1Camera(xdot:)` replicates the HLSL pixel shader that renders to a 2�
 - `xdot = VPOS.x`: 0.5 → camPos, 1.5 → camTarget
 - `o` starts at `(camSeedX + xdot*0.37, camSeedY + xdot*0.37)`
 - 8 noise texture samples → cx, cz (camera XZ path)
-- `cy = terScale * fbm3(cx,cz) + camPosY + camTarY * xdot`
+- `cy = terScale * fbm8(cx,cz) + camPosY + camTarY * xdot`
+  - Original HLSL used fbm3 (3 octaves), but that underestimates fine terrain → camera underground.
+  - Port uses fbm8 (8 octaves, same as terrain vertex shader) to keep camera above terrain.
 - Jitter: 3 separate `cpuNo(o).x` calls with `o += 0.1` increments
 
 ### Instrument Sync (Light Beams)
