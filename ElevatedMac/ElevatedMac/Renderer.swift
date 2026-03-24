@@ -619,6 +619,7 @@ class Renderer: NSObject, MTKViewDelegate {
         var uCopy = uniforms
         if let enc = cmd.makeRenderCommandEncoder(descriptor: gbRPD) {
             enc.setRenderPipelineState(gbufferPSO)
+            enc.setCullMode(.back)   // hide terrain underside when camera dips below mesh
             enc.setDepthStencilState(depthState)
             enc.setVertexBuffer(terrainVBuf, offset: 0, index: 0)
             enc.setVertexBytes(&uCopy, length: MemoryLayout<Uniforms>.size, index: 1)
