@@ -589,7 +589,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
     func draw(in view: MTKView) {
         let t = currentTime
-        if t >= 217.0 && !isPaused {
+        if t >= 217.0 && !isPaused && !debugMode {
             NSApplication.shared.terminate(nil)
             return
         }
