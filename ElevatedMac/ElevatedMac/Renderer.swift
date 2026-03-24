@@ -120,6 +120,11 @@ class DebugOverlay {
         label.cell?.wraps       = true
     }
 
+    var isHidden: Bool {
+        get { label.isHidden }
+        set { label.isHidden = newValue }
+    }
+
     func install(in view: NSView) {
         view.addSubview(label)
     }
@@ -173,7 +178,7 @@ class Renderer: NSObject, MTKViewDelegate {
     weak var view: MTKView?
 
     // Debug / capture
-    let debugMode: Bool
+    var debugMode: Bool
     let captureMode: Bool           // --capture: save one PNG per second to /tmp/elevated_cap/
     var frameNumber: Int = 0
     var lastCapturedSecond: Int = -1
