@@ -16,6 +16,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var transportBar: TransportBar!
     private var debugActive = false
     private var debugMenuItem: NSMenuItem?
+    private var helpMenuItem: NSMenuItem?
     private var muteMenuItem: NSMenuItem?
     private var captureMode = false
     private var launchTime: CFTimeInterval = 0
@@ -106,6 +107,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         renderer.debugOverlay?.isHidden = !on
         transportBar?.isHidden = !on
         debugMenuItem?.state = on ? .on : .off
+        helpMenuItem?.isHidden = !on
         refreshFullscreenCursorPolicy()
     }
 
@@ -268,7 +270,45 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         fsItem.keyEquivalentModifierMask = [.command, .control]
         viewMenu.addItem(fsItem)
 
+        // ── Help menu ──
+        let helpItem = NSMenuItem()
+        mainMenu.addItem(helpItem)
+        let helpMenu = NSMenu(title: "Help")
+        helpItem.submenu = helpMenu
+        helpItem.isHidden = !debugActive
+        helpMenuItem = helpItem
+
+        addHelpSection("Playback", to: helpMenu)
+        addHelpItem("Space  Play / Pause", to: helpMenu)
+        addHelpItem("Left / Right  Seek -5s / +5s", to: helpMenu)
+        addHelpItem("Shift+Left / Shift+Right  Seek -1f / +1f", to: helpMenu)
+        addHelpItem("Up / Down  Seek -60s / +60s", to: helpMenu)
+        addHelpItem(", / .  Step backward / forward when paused", to: helpMenu)
+        helpMenu.addItem(.separator())
+        addHelpSection("App", to: helpMenu)
+        addHelpItem("Cmd+D  Toggle debug overlay", to: helpMenu)
+        addHelpItem("Cmd+M  Mute", to: helpMenu)
+        addHelpItem("Ctrl+Cmd+F  Toggle full screen", to: helpMenu)
+        addHelpItem("Esc  Quit when in full screen", to: helpMenu)
+        addHelpItem("Cmd+Q  Quit Elevated", to: helpMenu)
+
         NSApp.mainMenu = mainMenu
+    }
+
+    private func addHelpSection(_ title: String, to menu: NSMenu) {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        item.attributedTitle = NSAttributedString(
+            string: title,
+            attributes: [.font: NSFont.boldSystemFont(ofSize: NSFont.systemFontSize)]
+        )
+        menu.addItem(item)
+    }
+
+    private func addHelpItem(_ title: String, to menu: NSMenu) {
+        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
+        item.isEnabled = false
+        menu.addItem(item)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
