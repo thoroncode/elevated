@@ -1,4 +1,4 @@
-.PHONY: all build run debug capture app icon pkg ref compare compare-range clean
+.PHONY: all build run debug capture app icon pkg uninstall ref compare compare-range clean
 
 BIN       = ElevatedMac/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -89,6 +89,14 @@ pkg:
 	@echo ""
 	@echo "  Installer: $(CURDIR)/Elevated.pkg"
 	@echo "  Send this file — recipient double-clicks to install to /Applications"
+
+# Remove the installed app from /Applications
+uninstall:
+	@if [ -d /Applications/Elevated.app ]; then \
+	    sudo rm -rf /Applications/Elevated.app && echo "Uninstalled /Applications/Elevated.app"; \
+	else \
+	    echo "Elevated.app is not installed in /Applications"; \
+	fi
 
 # Run and save one PNG per second to /tmp/elevated_cap/
 # Progress printed to console. Quit (Cmd-Q) after the demo ends (~215s).
