@@ -7,6 +7,7 @@ import AVFoundation
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private static let releaseStartupDelay: TimeInterval = 5
+    private static let fullscreenCursorIdleDelay: TimeInterval = 0.1
 
     var window: NSWindow!
     var renderer: Renderer!
@@ -19,6 +20,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var launchTime: CFTimeInterval = 0
     private var fullscreenCursorMonitor: Any?
     private var fullscreenCursorHidden = false
+    private var fullscreenCursorHideTimer: Timer?
+    private var fullscreenCursorActive = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let device = MTLCreateSystemDefaultDevice() else {
@@ -102,6 +105,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         renderer.debugOverlay?.isHidden = !on
         transportBar?.isHidden = !on
         debugMenuItem?.state = on ? .on : .off
+        refreshFullscreenCursorPolicy()
     }
 
     @objc private func toggleDebug() {
@@ -257,42 +261,79 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
-    func applicationWillTerminate(_ notification: Notification) { endFullscreenCursorHide() }
+    func applicationWillTerminate(_ notification: Notification) { deactivateFullscreenCursorPolicy() }
 
-    private func beginFullscreenCursorHide() {
-        guard !fullscreenCursorHidden else { return }
-        fullscreenCursorHidden = true
-        NSCursor.hide()
+    private func shouldAutoHideFullscreenCursor() -> Bool {
+        fullscreenCursorActive && !debugActive
+    }
+
+    private func refreshFullscreenCursorPolicy() {
+        if shouldAutoHideFullscreenCursor() { activateFullscreenCursorPolicy() }
+        else                               { deactivateFullscreenCursorPolicy() }
+    }
+
+    private func activateFullscreenCursorPolicy() {
+        beginFullscreenCursorHide()
 
         guard fullscreenCursorMonitor == nil else { return }
         fullscreenCursorMonitor = NSEvent.addLocalMonitorForEvents(
             matching: [.mouseMoved, .leftMouseDragged, .rightMouseDragged, .otherMouseDragged, .scrollWheel]
         ) { [weak self] event in
-            self?.endFullscreenCursorHide()
+            self?.noteFullscreenCursorActivity()
             return event
         }
+    }
+
+    private func deactivateFullscreenCursorPolicy() {
+        fullscreenCursorHideTimer?.invalidate()
+        fullscreenCursorHideTimer = nil
+        if let monitor = fullscreenCursorMonitor {
+            NSEvent.removeMonitor(monitor)
+            fullscreenCursorMonitor = nil
+        }
+        endFullscreenCursorHide()
+    }
+
+    private func noteFullscreenCursorActivity() {
+        guard shouldAutoHideFullscreenCursor() else { return }
+        if fullscreenCursorHidden {
+            fullscreenCursorHidden = false
+            NSCursor.unhide()
+        }
+        fullscreenCursorHideTimer?.invalidate()
+        fullscreenCursorHideTimer = Timer.scheduledTimer(
+            withTimeInterval: Self.fullscreenCursorIdleDelay,
+            repeats: false
+        ) { [weak self] _ in
+            self?.beginFullscreenCursorHide()
+        }
+    }
+
+    private func beginFullscreenCursorHide() {
+        guard shouldAutoHideFullscreenCursor(), !fullscreenCursorHidden else { return }
+        fullscreenCursorHidden = true
+        NSCursor.hide()
     }
 
     private func endFullscreenCursorHide() {
         guard fullscreenCursorHidden else { return }
         fullscreenCursorHidden = false
         NSCursor.unhide()
-        if let monitor = fullscreenCursorMonitor {
-            NSEvent.removeMonitor(monitor)
-            fullscreenCursorMonitor = nil
-        }
     }
 
     func windowWillEnterFullScreen(_ notification: Notification) {
-        beginFullscreenCursorHide()
+        fullscreenCursorActive = true
+        refreshFullscreenCursorPolicy()
     }
 
     func windowDidEnterFullScreen(_ notification: Notification) {
-        beginFullscreenCursorHide()
+        fullscreenCursorActive = true
+        refreshFullscreenCursorPolicy()
     }
 
     func windowWillExitFullScreen(_ notification: Notification) {
-        endFullscreenCursorHide()
+        fullscreenCursorActive = false
+        deactivateFullscreenCursorPolicy()
     }
 }
 
