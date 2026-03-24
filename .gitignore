@@ -1,3 +1,13 @@
 ElevatedMac/.build/
 Elevated.app/
 Elevated.pkg
+
+# Original demo files — available from scene.org / pouet.net, no need to track
+elevated_1920_1080.exe
+elevated_8000.avi
+
+# Ephemeral artifacts
+camera_log.csv
+wine_crash.txt
+d3d9.dll
+dist/
