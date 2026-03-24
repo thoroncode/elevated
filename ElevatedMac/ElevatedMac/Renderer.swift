@@ -343,7 +343,7 @@ class Renderer: NSObject, MTKViewDelegate {
         // D3DXTessellateNPatches(..., 512), which is substantially denser than
         // the baseline 256x256 grid. Match the extent first, then increase
         // density to test for water seams caused by coarse triangle interpolation.
-        let (vb, ib, ic) = makeTerrainMesh(device: device, size: 512, scale: 104)
+        let (vb, ib, ic) = makeTerrainMesh(device: device, size: 1024, scale: 104)
         terrainVBuf = vb; terrainIBuf = ib; terrainIndexCount = ic
     }
 
