@@ -48,7 +48,7 @@ icon: build
 #   CLI:     Elevated.app/Contents/MacOS/ElevatedMac --debug
 app: build icon
 	@echo "Assembling $(APP)..."
-	@rm -rf $(APP)
+	@sudo rm -rf $(APP)
 	@mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	@cp $(BIN) $(APP)/Contents/MacOS/
 	@cp -r ElevatedMac/.build/release/ElevatedMac_ElevatedMac.bundle \
