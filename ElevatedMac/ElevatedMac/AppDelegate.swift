@@ -20,7 +20,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         mtkView.enableSetNeedsDisplay     = false
         mtkView.isPaused                  = false
 
-        renderer = Renderer(mtkView: mtkView)
+        let debugMode   = CommandLine.arguments.contains("--debug")
+        let captureMode = CommandLine.arguments.contains("--capture")
+        renderer = Renderer(mtkView: mtkView, debug: debugMode || captureMode, capture: captureMode)
         mtkView.delegate = renderer
 
         window = NSWindow(
@@ -32,6 +34,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.contentView = mtkView
         window.center()
         window.makeKeyAndOrderFront(nil)
+
+        if debugMode {
+            renderer.installDebugOverlay(in: mtkView)
+        }
 
         NSApp.activate(ignoringOtherApps: true)
 

@@ -28,11 +28,6 @@ struct TerrainVert {
     float4 world;              // world-space position
 };
 
-struct WaterVert {
-    float4 pos   [[position]];
-    float4 world;
-};
-
 struct PostVert {
     float4 pos [[position]];
     float2 uv;
@@ -66,7 +61,10 @@ float fbm(float2 p, float o, texture2d<float> t0, sampler s0) {
         float3 n = no(0.25*p, t0, s0);
         d += n.yz;
         a += (bv *= 0.5) * n.x / (1 + dot(d, d));
-        p = float2x2(1.6,-1.2,1.2,1.6) * p;
+        // HLSL float2x2(a,b,c,d) is row-major; MSL is column-major.
+        // HLSL [[1.6,-1.2],[1.2,1.6]] * p = (1.6px-1.2py, 1.2px+1.6py)
+        // To get same result in MSL: transpose the constructor args.
+        p = float2x2(1.6,1.2,-1.2,1.6) * p;
     }
     return a;
 }
@@ -101,14 +99,16 @@ vertex TerrainVert terrainVert(
     constant Uniforms& u       [[buffer(1)]],
     texture2d<float> t0        [[texture(0)]])
 {
-    constexpr sampler s0(address::repeat, filter::linear);
+    constexpr sampler s0(address::repeat, filter::nearest);
     float2 xz = positions[vid];
 
-    // Offset FBM by camera world XZ so terrain is procedurally generated around camera.
-    // q[4].xz = camera world position XZ; mesh vertices are camera-relative.
-    float2 worldXZ = xz + u.q[4].xz;
-    float height = u.q[2].w * fbm(worldXZ.yx, 8, t0, s0);
-    float4 world = float4(xz.x, height, xz.y, 1);  // camera-relative world position
+    // Exact port of m0 vertex shader:
+    // x.z = q[2].w * f(x.yx, 8)  — FBM at (mesh.y, mesh.x) = (world.x, world.z)
+    // y   = x.yzxw                — world = (mesh.y, height, mesh.x, 1)
+    // Mesh XZ = world XZ (fixed world coordinates, camera moves through with view matrix)
+    float2 worldXZ = xz;
+    float height = u.q[2].w * fbm(worldXZ, 8, t0, s0);
+    float4 world = float4(xz.x, height, xz.y, 1);  // world position
 
     TerrainVert out;
     out.world = world;
@@ -124,47 +124,6 @@ fragment GBufferOut gbufferFrag(TerrainVert in [[stage_in]]) {
     GBufferOut out;
     out.worldPos = float4(in.world.xyz, 1.0);  // w=1 flags geometry hit
     out.color    = in.world;
-    return out;
-}
-
-// ────────────────────────────────────────────────────────────────────────────
-// PASS 1b — WATER VERTEX SHADER (m1)
-// Generates water surface world positions using cosine waves
-// ────────────────────────────────────────────────────────────────────────────
-vertex WaterVert waterVert(
-    uint vid [[vertex_id]],
-    constant float2* positions [[buffer(0)]],
-    constant Uniforms& u       [[buffer(1)]],
-    texture2d<float> t0        [[texture(0)]])
-{
-    constexpr sampler s0(address::repeat, filter::linear);
-    float2 x = positions[vid];
-    float2 o = u.q[0].xy + x.x * 0.37;
-    float3 c;
-    float t = u.q[3].w * u.q[0].z;
-
-    // Cosine wave synthesis (matches HLSL m1 exactly, += advances o by 0.1 each sample)
-    o += 0.1; c.x  = 16*cos(t * t0.sample(s0, o, level(0)).r + 3*t0.sample(s0, o+0.1, level(0)).r);
-    o += 0.1; c.x += 8*cos(t * t0.sample(s0, o, level(0)).r * 2 + 3*t0.sample(s0, o+0.1, level(0)).r);
-    o += 0.2;
-    o += 0.1; c.z  = 16*cos(t * t0.sample(s0, o, level(0)).r + 3*t0.sample(s0, o+0.1, level(0)).r);
-    o += 0.1; c.z += 8*cos(t * t0.sample(s0, o, level(0)).r * 2 + 3*t0.sample(s0, o+0.1, level(0)).r);
-
-    c.y = u.q[2].w * fbm(c.xz, 3, t0, s0) + u.q[1].x + u.q[1].y * x.x;
-
-    o += u.q[3].w * 0.5;
-    c.x += 0.002 * no(o+0.1, t0, s0).x;
-    c.y += 0.002 * no(o+0.2, t0, s0).x;
-    c.z += 0.002 * no(o+0.3, t0, s0).x;
-
-    // Make water position camera-relative (subtract camera world XZ)
-    // so it's consistent with the terrain G-buffer and the view matrix origin.
-    c.x -= u.q[4].x;
-    c.z -= u.q[4].z;
-
-    WaterVert out;
-    out.world = float4(c, 1);
-    out.pos   = u.v * float4(c, 1);
     return out;
 }
 
@@ -188,7 +147,7 @@ fragment float4 deferredFrag(
     texture2d<float> t0     [[texture(0)]],
     texture2d<float> t1     [[texture(1)]])
 {
-    constexpr sampler s0(address::repeat, filter::linear);
+    constexpr sampler s0(address::repeat, filter::nearest);
     constexpr sampler s1(address::clamp_to_edge, filter::linear);
 
     float2 x = in.uv;
@@ -219,40 +178,33 @@ fragment float4 deferredFrag(
           * exp(-u.q[5+(int)k].x*0.0002);
 
     if (d.w > 0.5) {
-        // d.xyz is camera-relative. Camera is at (0, q[4].y, 0) in local space.
-        float t = length(d.xyz - float3(0, u.q[4].y, 0));
+        // d.xyz = world-space position (terrain uses fixed world coords, camera moves via view matrix)
+        // Exact port of m3: float t=length(d.xyz-q[4].xyz)
+        float t = length(d.xyz - u.q[4].xyz);
         float w = u.q[1].w - d.y;   // water level - surface.y  (< 0 = above water = terrain)
 
-        // World XZ = camera-relative XZ + camera world XZ offset
-        float2 camXZ   = u.q[4].xz;
-        float2 worldXZ = d.xz + camXZ;
-
         if (w < 0) {
-            // ── TERRAIN ──────────────────────────────────────────────────
-            float3 n = cn(worldXZ, 0.001*t, 12 - log2(t), u, t0, s0);
-            float  h = fbm(3*worldXZ, 3, t0, s0);
-            float  r = no(666*worldXZ, t0, s0).x;
+            // ── TERRAIN — exact m3 port ───────────────────────────────
+            float3 n = cn(d.xz, 0.001*t, 12 - log2(t), u, t0, s0);
+            float  h = fbm(3*d.xz, 3, t0, s0);
+            float  r = no(666*d.xz, t0, s0).x;
 
             c = (0.1 + 0.75*u.q[2].x) * (0.8 + 0.2*r);
-            // Snow blend
             c = mix(c,
                     mix(float3(.8,.85,.9), float3(.45,.45,.2)*(0.8+0.2*r), u.q[2].x),
                     smoothstep(0.5 - 0.8*n.y, 1 - 1.1*n.y, h*0.15));
-            // Soil blend
             c = mix(c,
                     mix(float3(.37,.23,.08), float3(.42,.4,.2), u.q[2].x) * (0.5+0.5*r),
                     smoothstep(0, 1, 50*(n.y-1) + (h+u.q[2].x)/0.4));
-            // Lighting (pass world-space surface position for sky noise sample)
-            float3 worldSurfPos = float3(d.x + camXZ.x, d.y, d.z + camXZ.y);
-            c *= skyLight(worldSurfPos, n, cn(worldXZ, 0.001*t, 5, u, t0, s0), u, t0, s0);
+            // b(d, n, cn(d.xz,...)) — pass world position d
+            c *= skyLight(d.xyz, n, cn(d.xz, 0.001*t, 5, u, t0, s0), u, t0, s0);
 
         } else {
-            // ── WATER ────────────────────────────────────────────────────
+            // ── WATER — exact m3 port ─────────────────────────────────
+            // t=(q[1].w-q[4].y)/e.y; d=q[4]+e.xyzz*t
             t = (u.q[1].w - u.q[4].y) / e.y;
-            // Ray-plane hit in camera-relative space from camera eye (0, q[4].y, 0)
-            float3 camEye = float3(0, u.q[4].y, 0);
-            d.xyz = camEye + e * t;
-            float2 wXZ = d.xz + camXZ;  // world XZ of water hit
+            d.xyz = u.q[4].xyz + e * t;   // world position of water hit
+            float2 wXZ = d.xz;
             float3 n = normalize(cn(float2(512,32)*wXZ
                                     + saturate(w*60)*float2(u.q[3].w, 0),
                                     0.001*t, 4, u, t0, s0) * float3(1,6,1));
@@ -261,9 +213,8 @@ fragment float4 deferredFrag(
             c *= 0.3 + 0.7*u.q[2].x;
             c += pow(1 - dot(-e, n), 4)
                * (pow(saturate(dot(u.q[3].xyz, reflect(-e,n))), 32) * float3(.32,.31,.3) + 0.1);
-            float3 worldWaterPos = float3(d.x + camXZ.x, d.y, d.z + camXZ.y);
             c = mix(c,
-                    skyLight(worldWaterPos, n, n, u, t0, s0),
+                    skyLight(d.xyz, n, n, u, t0, s0),
                     smoothstep(1, 0,
                         u.q[2].x + w*60
                         - fbm(666*wXZ + saturate(w*60)*float2(u.q[3].w,0)*2, 5, t0, s0)) * 0.5);
@@ -289,7 +240,7 @@ fragment float4 postFrag(
     texture2d<float> t1     [[texture(1)]],   // G-buffer
     texture2d<float> t2     [[texture(2)]])   // scene color
 {
-    constexpr sampler s0(address::repeat, filter::linear);
+    constexpr sampler s0(address::repeat, filter::nearest);
     constexpr sampler s1(address::clamp_to_edge, filter::linear);
 
     float2 o = in.uv + 0.5/1280;
@@ -325,47 +276,6 @@ fragment float4 postFrag(
     c.x += 0.01 * t0.sample(s0, o + float2(0.1, 0)).r;
     c.y += 0.01 * t0.sample(s0, o + float2(0.2, 0)).r;
     c.z += 0.01 * t0.sample(s0, o + float2(0.3, 0)).r;
-
-    // ── BEACON glow (pulsating lighthouse, world pos in q[13]) ──────────────
-    {
-        // Beacon position: q[13].xyz = world XZ,Y.  Convert to camera-relative.
-        float3 beaconWorld = u.q[13].xyz;
-        float2 camXZ       = u.q[4].xz;
-        float3 beaconLocal = float3(beaconWorld.x - camXZ.x, beaconWorld.y, beaconWorld.z - camXZ.y);
-
-        float4 bClip = u.v * float4(beaconLocal, 1.0);
-        if (bClip.w > 0.01) {
-            float2 bNDC    = bClip.xy / bClip.w;
-            float2 bUV     = float2(0.5 + 0.5 * bNDC.x, 0.5 - 0.5 * bNDC.y);
-            float2 fragUV  = in.uv + 0.5/1280.0;
-            float  aspect  = u.resolution.x / u.resolution.y;
-            float2 delta   = (fragUV - bUV) * float2(aspect, 1.0);
-            float  dist2   = dot(delta, delta);
-
-            // Pulse at ~0.8 Hz (5.03 rad/s)
-            float pulse = 0.5 + 0.5 * sin(u.time * 5.03);
-            pulse = pulse * pulse;   // sharpen peaks
-
-            // Occlusion: beacon is occluded if G-buffer geometry is closer
-            float beaconDist = length(beaconLocal);
-            float4 gbAtB     = t1.sample(s1, bUV);
-            float  geomDist  = (gbAtB.w > 0.5) ? length(gbAtB.xyz - float3(0, u.q[4].y, 0)) : 1e6;
-            float  occlude   = smoothstep(0.0, 3.0, geomDist - beaconDist);
-
-            // Time-based fade in/out (beacon appears at ~70s)
-            float timeFade = smoothstep(65.0, 75.0, u.time) * smoothstep(190.0, 180.0, u.time);
-
-            // Radial glow
-            float glow = exp(-dist2 / 0.0025) * pulse * occlude * timeFade;
-
-            // On-screen check
-            if (bUV.x > 0.01 && bUV.x < 0.99 && bUV.y > 0.01 && bUV.y < 0.99) {
-                c += float3(1.0, 0.85, 0.4) * glow * 3.0;
-                // Wider soft halo
-                c += float3(0.6, 0.4, 0.1) * exp(-dist2 / 0.02) * pulse * occlude * timeFade * 0.5;
-            }
-        }
-    }
 
     return float4(c, 0);
 }

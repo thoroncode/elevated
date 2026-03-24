@@ -6,6 +6,7 @@ import Foundation
 import Metal
 import MetalKit
 import simd
+import CSynth
 
 // ─── Uniforms mirror of Shaders.metal struct ─────────────────────────────────
 struct Uniforms {
@@ -68,43 +69,24 @@ func makeTerrainMesh(device: MTLDevice, size: Int = 256, scale: Float = 64)
     return (vbuf, ibuf, indices.count)
 }
 
-/// Water mesh: flat grid at y=0, positioned around camera
-func makeWaterMesh(device: MTLDevice, size: Int = 64, scale: Float = 40)
-    -> (vbuf: MTLBuffer, ibuf: MTLBuffer, indexCount: Int)
-{
-    return makeTerrainMesh(device: device, size: size, scale: scale)
-}
-
-// ─── 256×256 Perlin hash noise texture ───────────────────────────────────────
+// ─── 256×256 noise texture — exact frandom() LCG from synth_core.nh ─────────
+// frandom(): seed = seed * 16307 + 17 (wrapping u32);
+//            return (int16)(seed >> 14) / 32768.0
+// D3DXFillTexture fills row-major (y outer, x inner) starting from seed = 0.
+// Original format D3DFMT_R16F; stored here as R32F for Metal.
 func makeNoiseTexture(device: MTLDevice) -> (MTLTexture, [Float]) {
     let size = 256
-    var perm = Array(0..<size)
-    // Fisher-Yates with fixed seed for reproducibility
-    var rng: UInt64 = 0x123456789ABCDEF0
-    func rand() -> Int {
-        rng = rng &* 6364136223846793005 &+ 1442695040888963407
-        return Int((rng >> 33) & 0x7FFFFFFF)
-    }
-    for i in stride(from: size-1, through: 1, by: -1) {
-        let j = rand() % (i+1)
-        perm.swapAt(i, j)
+    var seed: UInt32 = 0
+    func frandom() -> Float {
+        seed = seed &* 16307 &+ 17
+        let i16 = Int16(bitPattern: UInt16(truncatingIfNeeded: seed >> 14))
+        return Float(i16) / 32768.0
     }
 
-    // Gradient directions for Perlin noise
-    let grads: [SIMD2<Float>] = [
-        SIMD2(1,0), SIMD2(-1,0), SIMD2(0,1), SIMD2(0,-1),
-        SIMD2(0.707,0.707), SIMD2(-0.707,0.707), SIMD2(0.707,-0.707), SIMD2(-0.707,-0.707)
-    ]
-
-    var pixels = [Float](repeating: 0, count: size*size)
+    var pixels = [Float](repeating: 0, count: size * size)
     for y in 0..<size {
         for x in 0..<size {
-            let xi = x & 255, yi = y & 255
-            let g = grads[(perm[(xi + perm[yi]) & 255]) & 7]
-            let fx = Float(x)/Float(size), fy = Float(y)/Float(size)
-            // Simple value + gradient hash, normalized to [0,1]
-            let v = 0.5 + 0.5*(g.x * (fx - 0.5) + g.y * (fy - 0.5))
-            pixels[y*size+x] = max(0, min(1, v))
+            pixels[y * size + x] = frandom()
         }
     }
 
@@ -113,11 +95,40 @@ func makeNoiseTexture(device: MTLDevice) -> (MTLTexture, [Float]) {
     desc.usage = .shaderRead
     desc.storageMode = .shared
     let tex = device.makeTexture(descriptor: desc)!
-    tex.replace(region: MTLRegionMake2D(0,0,size,size),
+    tex.replace(region: MTLRegionMake2D(0, 0, size, size),
                 mipmapLevel: 0,
                 withBytes: pixels,
                 bytesPerRow: size * MemoryLayout<Float>.stride)
     return (tex, pixels)
+}
+
+// ─── Debug overlay ────────────────────────────────────────────────────────────
+/// NSTextField overlay shown in --debug mode. Lives above the Metal view.
+class DebugOverlay {
+    let label: NSTextField
+
+    init() {
+        label = NSTextField(frame: NSRect(x: 8, y: 8, width: 780, height: 200))
+        label.isEditable        = false
+        label.isSelectable      = false
+        label.isBezeled         = false
+        label.drawsBackground   = true
+        label.backgroundColor   = NSColor(calibratedWhite: 0, alpha: 0.55)
+        label.textColor         = NSColor(calibratedRed: 0.2, green: 1, blue: 0.3, alpha: 1)
+        label.font              = NSFont.monospacedSystemFont(ofSize: 11, weight: .regular)
+        label.maximumNumberOfLines = 0
+        label.cell?.wraps       = true
+    }
+
+    func install(in view: NSView) {
+        view.addSubview(label)
+    }
+
+    func update(_ text: String) {
+        DispatchQueue.main.async { [weak self] in
+            self?.label.stringValue = text
+        }
+    }
 }
 
 // ─── Renderer ─────────────────────────────────────────────────────────────────
@@ -149,9 +160,6 @@ class Renderer: NSObject, MTKViewDelegate {
     var terrainVBuf: MTLBuffer!
     var terrainIBuf: MTLBuffer!
     var terrainIndexCount: Int = 0
-    var waterVBuf: MTLBuffer!
-    var waterIBuf: MTLBuffer!
-    var waterIndexCount: Int = 0
 
     // Noise texture
     var noiseTex: MTLTexture!
@@ -161,12 +169,27 @@ class Renderer: NSObject, MTKViewDelegate {
     var startTime: Double = 0
     weak var view: MTKView?
 
+    // Debug / capture
+    let debugMode: Bool
+    let captureMode: Bool           // --capture: save one PNG per second to /tmp/elevated_cap/
+    var frameNumber: Int = 0
+    var lastCapturedSecond: Int = -1
+    var debugOverlay: DebugOverlay?
+
+    func installDebugOverlay(in view: NSView) {
+        let overlay = DebugOverlay()
+        overlay.install(in: view)
+        debugOverlay = overlay
+    }
+
     func start() {
         startTime = CACurrentMediaTime()
         view?.isPaused = false
     }
 
-    init(mtkView: MTKView) {
+    init(mtkView: MTKView, debug: Bool = false, capture: Bool = false) {
+        self.debugMode   = debug
+        self.captureMode = capture
         self.device   = mtkView.device!
         self.cmdQueue = device.makeCommandQueue()!
         super.init()
@@ -252,11 +275,11 @@ class Renderer: NSObject, MTKViewDelegate {
 
     // ── Meshes ─────────────────────────────────────────────────────────────
     func buildMeshes() {
-        let (vb, ib, ic) = makeTerrainMesh(device: device, size: 256, scale: 64)
+        // Original mesh: D3DXCreatePolygon(52.0f, 4) — square with ~52 unit radius.
+        // Camera XZ range: ±24. Fog exp(-0.042*t) hides edges beyond ~40 units.
+        // Use scale=104 (±52) to match original extent.
+        let (vb, ib, ic) = makeTerrainMesh(device: device, size: 256, scale: 104)
         terrainVBuf = vb; terrainIBuf = ib; terrainIndexCount = ic
-
-        let (wv, wi, wc) = makeWaterMesh(device: device, size: 64, scale: 40)
-        waterVBuf = wv; waterIBuf = wi; waterIndexCount = wc
     }
 
     // ── Initial uniforms ───────────────────────────────────────────────────
@@ -266,22 +289,14 @@ class Renderer: NSObject, MTKViewDelegate {
 
     // ── CPU noise helpers ──────────────────────────────────────────────────
 
-    // Bilinear sample of the 256×256 noise texture (tiling, [0,1] coords)
+    // Point (nearest-neighbour) sample of the 256×256 noise texture.
+    // D3D9 default sampler state is D3DTEXF_POINT — no bilinear blending.
+    // tex2D(t0, uv) returns the exact texel at floor(uv * 256) mod 256.
     private func sampleNoise(_ uv: SIMD2<Float>) -> Float {
         let size = 256
-        let uf = (uv.x - Foundation.floor(uv.x)) * Float(size)
-        let vf = (uv.y - Foundation.floor(uv.y)) * Float(size)
-        let x0 = Int(uf) & (size - 1)
-        let y0 = Int(vf) & (size - 1)
-        let x1 = (x0 + 1) & (size - 1)
-        let y1 = (y0 + 1) & (size - 1)
-        let fx = uf - Foundation.floor(uf)
-        let fy = vf - Foundation.floor(vf)
-        let a = noisePixels[y0 * size + x0]
-        let b = noisePixels[y0 * size + x1]
-        let c = noisePixels[y1 * size + x0]
-        let d = noisePixels[y1 * size + x1]
-        return a + (b - a) * fx + (c - a) * fy + (a - b - c + d) * fx * fy
+        let x = Int(Foundation.floor((uv.x - Foundation.floor(uv.x)) * Float(size))) & (size - 1)
+        let y = Int(Foundation.floor((uv.y - Foundation.floor(uv.y)) * Float(size))) & (size - 1)
+        return noisePixels[y * size + x]
     }
 
     // Perlin-style gradient noise — returns (value, grad.x, grad.y)
@@ -336,27 +351,34 @@ class Renderer: NSObject, MTKViewDelegate {
         var o = SIMD2<Float>(q0.x + xdot * 0.37, q0.y + xdot * 0.37)
         let tt = q3.w * q0.z
 
-        func sn(_ uv: SIMD2<Float>) -> Float { sampleNoise(uv) }
-
-        // c.x: 16*cos(t*s1+3*s2) + 8*cos(t*s3*2+3*s4)
-        o += SIMD2(repeating: 0.1)
-        let s1 = sn(o); let s2 = sn(o + SIMD2(repeating: 0.1))
-        o += SIMD2(repeating: 0.1)
-        let s3 = sn(o); let s4 = sn(o + SIMD2(repeating: 0.1))
+        // Exact port of m1 shader — each tex2D(t0, o+=.1) increments o then samples.
+        // c.x=16*cos(t*s1+3*s2)+8*cos(t*s3*2+3*s4)
+        o += SIMD2(repeating: 0.1); let s1 = sampleNoise(o)
+        o += SIMD2(repeating: 0.1); let s2 = sampleNoise(o)
+        o += SIMD2(repeating: 0.1); let s3 = sampleNoise(o)
+        o += SIMD2(repeating: 0.1); let s4 = sampleNoise(o)
         let cx = 16 * cos(tt * s1 + 3 * s2) + 8 * cos(tt * s3 * 2 + 3 * s4)
-        o += SIMD2(repeating: 0.2)
 
-        // c.z: same pattern, next 4 samples
-        o += SIMD2(repeating: 0.1)
-        let s5 = sn(o); let s6 = sn(o + SIMD2(repeating: 0.1))
-        o += SIMD2(repeating: 0.1)
-        let s7 = sn(o); let s8 = sn(o + SIMD2(repeating: 0.1))
+        // c.z=16*cos(t*s5+3*s6)+8*cos(t*s7*2+3*s8)
+        o += SIMD2(repeating: 0.1); let s5 = sampleNoise(o)
+        o += SIMD2(repeating: 0.1); let s6 = sampleNoise(o)
+        o += SIMD2(repeating: 0.1); let s7 = sampleNoise(o)
+        o += SIMD2(repeating: 0.1); let s8 = sampleNoise(o)
         let cz = 16 * cos(tt * s5 + 3 * s6) + 8 * cos(tt * s7 * 2 + 3 * s8)
 
         // c.y = terScale * fbm(cx,cz, 3 octaves) + camPosY + camTarY * xdot
-        let cy = q2.w * cpuFbm(SIMD2(cx, cz), octaves: 3) + q1.x + q1.y * xdot
+        var cx_ = cx
+        var cy   = q2.w * cpuFbm(SIMD2(cx, cz), octaves: 3) + q1.x + q1.y * xdot
+        var cz_  = cz
 
-        return SIMD3(cx, cy, cz)
+        // Jitter: o+=q[3].w*.5; c.x+=.002*no(o+=.1); c.y+=.002*no(o+=.1); c.z+=.002*no(o+=.1)
+        // Each no() call increments o by 0.1 separately; HLSL takes .x (value) of each float3 result.
+        o += SIMD2(repeating: q3.w * 0.5)
+        o += SIMD2(repeating: 0.1); cx_ += 0.002 * cpuNo(o).x
+        o += SIMD2(repeating: 0.1); cy  += 0.002 * cpuNo(o).x
+        o += SIMD2(repeating: 0.1); cz_ += 0.002 * cpuNo(o).x
+
+        return SIMD3(cx_, cy, cz_)
     }
 
     // ── Per-frame update ───────────────────────────────────────────────────
@@ -392,32 +414,130 @@ class Renderer: NSObject, MTKViewDelegate {
         uniforms.setQ(3, SIMD4(cos(sunAngle), 0.3125, sin(sunAngle), t))
 
         // q[4]: camera world position (m1 camera formula)
-        let camPos    = m1Camera(xdot: 0)
-        let camTarget = m1Camera(xdot: 1)
+        // idata.cpp comment: "x.x = 0 for cam  x.x = 1 for target"
+        // D3D9 VPOS on this hardware/driver gives integer pixel indices, not centres.
+        let camPos    = m1Camera(xdot: 0.0)
+        let camTarget = m1Camera(xdot: 1.0)
         uniforms.setQ(4, SIMD4(camPos.x, camPos.y, camPos.z, 1))
 
-        // q[5..12]: cloud band timer (instrument sync approximation)
-        let cloudTimer = t * 44100.0 * 0.03
-        for i in 5..<13 {
-            let base = Float(i - 5) * 1200 + 3000
-            uniforms.setQ(i, SIMD4(base + cloudTimer, 0, 0, 0))
+        // q[5..12]: instrument sync for visual light beams.
+        // Exact port of demo_deb.cpp DemoEffect() lines 184-200.
+        // Clamp to valid demo range [0, ELEVATED_TOTAL_SAMPLES] to avoid Int32 overflow
+        // (initUniforms() is called before start(), when t is large)
+        let syncPos = Int32(max(0, min(position, Int(ELEVATED_TOTAL_SAMPLES))))
+        var syncVals = [Float](repeating: 0, count: 8)
+        syncVals.withUnsafeMutableBufferPointer { ptr in
+            elevated_instrument_sync(syncPos, ptr.baseAddress!)
+        }
+        for i in 0..<8 {
+            uniforms.setQ(5 + i, SIMD4(syncVals[i], 0, 0, 0))
         }
 
-        // q[13]: beacon world position (lighthouse)
-        uniforms.setQ(13, SIMD4(6.0, 2.8, -8.0, 1.0))
-
-        // View matrix — camera-relative: eye at (0, camPos.y, 0), look toward camTarget
-        let lookDir = normalize(camTarget - camPos)
-        let roll = 0.3 * cos(t * camSpeed * 2)   // camera roll from m1 return value
+        // View matrix — exact port of constructMatrix() from demo_deb.cpp:
+        // D3DXMatrixLookAtLH(mat, pptr[0].xyz, pptr[1].xyz, up)
+        // up = {sin(roll), cos(roll), 0} where roll = pptr[0].w = .3*cos(t*2)
+        let roll = 0.3 * cos(t * camSpeed * 2)
         let up = SIMD3<Float>(sin(roll), cos(roll), 0)
-        let localEye    = SIMD3<Float>(0, camPos.y, 0)
-        let localTarget = localEye + lookDir * 20.0
 
-        let aspect = Float(size.width / size.height)
-        let proj = projectionMatrix(fovY: camFov, aspect: aspect, near: 0.03125, far: 256.0)
-        let view = lookAt(eye: localEye, center: localTarget, up: up)
+        let aspect = Float(size.width) / Float(size.height)
+        let proj = projectionMatrixLH(fovY: camFov, aspect: aspect, near: 0.03125, far: 256.0)
+        let view = lookAtLH(eye: camPos, center: camTarget, up: up)
         uniforms.v  = proj * view
         uniforms.vi = simd_inverse(uniforms.v)
+    }
+
+    // ── Frame capture ──────────────────────────────────────────────────────
+    // Saves the final drawable as /tmp/elevated_cap/cap_XXXX.png once per second.
+    func maybeCaptureFrame(drawable: CAMetalDrawable) {
+        guard captureMode else { return }
+        let sec = Int(uniforms.time)
+        guard sec != lastCapturedSecond, sec >= 0 else { return }
+        lastCapturedSecond = sec
+
+        let tex = drawable.texture
+        let w = tex.width, h = tex.height
+        let bpr = w * 4
+        var raw = [UInt8](repeating: 0, count: bpr * h)
+
+        // Blit drawable → shared buffer for CPU readback
+        guard let buf = device.makeBuffer(length: bpr * h, options: .storageModeShared),
+              let cmd = cmdQueue.makeCommandBuffer(),
+              let blit = cmd.makeBlitCommandEncoder() else { return }
+        blit.copy(from: tex, sourceSlice: 0, sourceLevel: 0,
+                  sourceOrigin: MTLOriginMake(0, 0, 0),
+                  sourceSize: MTLSizeMake(w, h, 1),
+                  to: buf, destinationOffset: 0,
+                  destinationBytesPerRow: bpr,
+                  destinationBytesPerImage: bpr * h)
+        blit.endEncoding()
+        cmd.commit()
+        cmd.waitUntilCompleted()
+
+        // bgra8 → rgba8
+        memcpy(&raw, buf.contents(), bpr * h)
+        for i in stride(from: 0, to: raw.count, by: 4) {
+            let b = raw[i]; raw[i] = raw[i+2]; raw[i+2] = b  // swap B↔R
+        }
+
+        // Write PNG
+        let dir = "/tmp/elevated_cap"
+        try? FileManager.default.createDirectory(atPath: dir,
+                                                  withIntermediateDirectories: true)
+        let path = "\(dir)/cap_\(String(format: "%04d", sec + 1)).png"
+        savePNG(pixels: raw, width: w, height: h, path: path)
+        if debugMode { print("  [capture] \(path)") }
+    }
+
+    private func savePNG(pixels: [UInt8], width: Int, height: Int, path: String) {
+        let bpr = width * 4
+        var mutable = pixels
+        let img: CGImage? = mutable.withUnsafeMutableBytes { ptr in
+            guard let ctx = CGContext(data: ptr.baseAddress,
+                                      width: width, height: height,
+                                      bitsPerComponent: 8, bytesPerRow: bpr,
+                                      space: CGColorSpaceCreateDeviceRGB(),
+                                      bitmapInfo: CGImageAlphaInfo.noneSkipLast.rawValue)
+            else { return nil }
+            return ctx.makeImage()
+        }
+        guard let img else { return }
+        let rep = NSBitmapImageRep(cgImage: img)
+        guard let data = rep.representation(using: .png, properties: [:]) else { return }
+        try? data.write(to: URL(fileURLWithPath: path))
+    }
+
+    // ── Debug output ───────────────────────────────────────────────────────
+    func emitDebug() {
+        let t    = uniforms.time
+        let q0   = uniforms.getQ(0)  // camSeedX, camSeedY, camSpeed, camFov
+        let q1   = uniforms.getQ(1)  // camPosY, camTarY, sunAngle, waterLevel
+        let q2   = uniforms.getQ(2)  // season, brightness, contrast, terScale
+
+        let camPos    = m1Camera(xdot: 0.0)
+        let camTarget = m1Camera(xdot: 1.0)
+
+        let msg = String(format:
+            "frame %6d  t=%7.3fs  row=%d\n" +
+            "camPos    %7.3f %7.3f %7.3f\n" +
+            "camTarget %7.3f %7.3f %7.3f\n" +
+            "camSpeed  %7.4f  camFov %6.4f rad (%5.1f°)\n" +
+            "terScale  %7.4f  season %5.3f\n" +
+            "sunAngle  %7.4f  waterLv %6.4f\n" +
+            "brightness%7.4f  contrast%6.4f",
+            frameNumber, t, Int(t * 44100) / 20840,
+            camPos.x, camPos.y, camPos.z,
+            camTarget.x, camTarget.y, camTarget.z,
+            q0.z, q0.w, q0.w * (180 / Float.pi),
+            q2.w, q2.x,
+            q1.z, q1.w,
+            q2.y, q2.z
+        )
+
+        // Console log every frame
+        print(msg)
+
+        // Screen overlay
+        debugOverlay?.update(msg)
     }
 
     // ── MTKViewDelegate ────────────────────────────────────────────────────
@@ -436,6 +556,8 @@ class Renderer: NSObject, MTKViewDelegate {
               let rpd = view.currentRenderPassDescriptor else { return }
 
         updateUniforms(size: view.drawableSize)
+        frameNumber += 1
+        if debugMode { emitDebug() }
         guard let cmd = cmdQueue.makeCommandBuffer() else { return }
 
         // ── Pass 1: G-buffer ──────────────────────────────────────────────
@@ -494,31 +616,38 @@ class Renderer: NSObject, MTKViewDelegate {
 
         cmd.present(drawable)
         cmd.commit()
+
+        maybeCaptureFrame(drawable: drawable)
     }
 }
 
 // ─── Math helpers ──────────────────────────────────────────────────────────────
-func lookAt(eye: SIMD3<Float>, center: SIMD3<Float>, up: SIMD3<Float>) -> simd_float4x4 {
-    let f = normalize(center - eye)
-    let r = normalize(cross(f, up))
-    let u = cross(r, f)
+// Left-handed lookAt matching D3DXMatrixLookAtLH.
+// D3DX produces a row-major matrix for row-vector pre-multiply; transposed here
+// to column-major for Metal's post-multiply convention (u.v * worldCol).
+func lookAtLH(eye: SIMD3<Float>, center: SIMD3<Float>, up: SIMD3<Float>) -> simd_float4x4 {
+    let z = normalize(center - eye)       // forward (+Z in LH)
+    let x = normalize(cross(up, z))       // right
+    let y = cross(z, x)                   // up (reorthogonalized)
     return simd_float4x4(columns: (
-        SIMD4(r.x, u.x, -f.x, 0),
-        SIMD4(r.y, u.y, -f.y, 0),
-        SIMD4(r.z, u.z, -f.z, 0),
-        SIMD4(-dot(r,eye), -dot(u,eye), dot(f,eye), 1)
+        SIMD4(x.x, y.x, z.x, 0),
+        SIMD4(x.y, y.y, z.y, 0),
+        SIMD4(x.z, y.z, z.z, 0),
+        SIMD4(-dot(x,eye), -dot(y,eye), -dot(z,eye), 1)
     ))
 }
 
-func projectionMatrix(fovY: Float, aspect: Float, near: Float, far: Float) -> simd_float4x4 {
-    let y = 1 / tan(fovY * 0.5)
+// Left-handed perspective matching D3DXMatrixPerspectiveFovLH.
+// D3D NDC z range is [0,1] (near=0, far=1), same as Metal — no remapping needed.
+func projectionMatrixLH(fovY: Float, aspect: Float, near: Float, far: Float) -> simd_float4x4 {
+    let y = 1 / tan(fovY * 0.5)           // cot(fovY/2)
     let x = y / aspect
-    let z = far / (near - far)
+    let z = far / (far - near)             // zf/(zf-zn)
     return simd_float4x4(columns: (
-        SIMD4(x,  0,  0,  0),
-        SIMD4(0,  y,  0,  0),
-        SIMD4(0,  0,  z, -1),
-        SIMD4(0,  0,  z*near, 0)
+        SIMD4(x, 0, 0, 0),
+        SIMD4(0, y, 0, 0),
+        SIMD4(0, 0, z, 1),
+        SIMD4(0, 0, -near * z, 0)
     ))
 }
 

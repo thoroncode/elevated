@@ -512,3 +512,27 @@ void elevated_generate_music(float *output) {
     free(param_mem_raw);
     free(stack);
 }
+
+/* ── Instrument sync (visual light beams) ──────────────────────────────────
+ * Exact port of DemoEffect() lines 184-200 from demo_deb.cpp.
+ * Channel 2 of sequence_data drives the 8 visual beams via note&7.
+ * q[5+i].x = d → exp(-d*0.0002): beam i brightness (0=bright,large=dim).
+ */
+void elevated_instrument_sync(int position, float *sync_out) {
+    int d = position;
+    for (int i = 0; i < 8; i++) {
+        sync_out[i] = (float)d;
+    }
+    int r = 0;
+    do {
+        int beat = r >> 4;
+        if (beat >= NUM_ROWS) break;
+        int pat_idx = (int)sequence_data[NUM_ROWS * 2 + beat];
+        int note    = (int)pattern_data[(pat_idx << 4) | (r & 0xF)];
+        if (note) {
+            sync_out[note & 7] = (float)d;
+        }
+        r++;
+        d -= MAX_NOTE_SAMPLES;
+    } while (d >= 0);
+}
