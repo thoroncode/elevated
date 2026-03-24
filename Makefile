@@ -19,7 +19,7 @@ help:
 	@echo "  all               Build release binary (default)"
 	@echo "  help              Show this help"
 	@echo "  build             Build release binary"
-	@echo "  run               Run demo"
+	@echo "  run               Run demo fullscreen with a 5s startup delay"
 	@echo "  debug             Run demo with debug overlay"
 	@echo "  app-icon          Regenerate app icon assets"
 	@echo "  app               Build Elevated.app bundle"
@@ -38,7 +38,7 @@ help:
 build:
 	swift build -c release --package-path ElevatedMac
 
-# Normal playback (same binary + resources as distribution)
+# Normal playback: fullscreen by default, with a 5s startup delay.
 run: app
 	$(APP_BIN)
 

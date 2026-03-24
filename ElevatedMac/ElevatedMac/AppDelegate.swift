@@ -6,6 +6,8 @@ import MetalKit
 import AVFoundation
 
 class AppDelegate: NSObject, NSApplicationDelegate {
+    private static let releaseStartupDelay: TimeInterval = 5
+
     var window: NSWindow!
     var renderer: Renderer!
     let synth = SynthPlayer()
@@ -14,12 +16,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var debugMenuItem: NSMenuItem?
     private var muteMenuItem: NSMenuItem?
     private var captureMode = false
+    private var launchTime: CFTimeInterval = 0
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let device = MTLCreateSystemDefaultDevice() else {
             fatalError("Metal is not available on this device")
         }
 
+        launchTime = CACurrentMediaTime()
         debugActive = CommandLine.arguments.contains("--debug")
         captureMode = CommandLine.arguments.contains("--capture")
 
@@ -30,11 +34,13 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         }
         let iconTime = argVal("--icon-at=").flatMap(Double.init)
         let iconOut  = argVal("--icon-out=") ?? "icon_source.png"
+        let normalPresentation = !debugActive && !captureMode && iconTime == nil
 
         let mtkView = MTKView(frame: NSRect(x: 0, y: 0, width: 1920, height: 1080), device: device)
         mtkView.preferredFramesPerSecond = 60
         mtkView.enableSetNeedsDisplay     = false
         mtkView.isPaused                  = false
+        mtkView.clearColor                = MTLClearColorMake(0, 0, 0, 1)
 
         renderer = Renderer(mtkView: mtkView, debug: debugActive || captureMode, capture: captureMode)
         mtkView.delegate = renderer
@@ -46,6 +52,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             defer: false)
         window.title = "Elevated — rgba/tbc (Metal port)"
         window.tabbingMode = .disallowed   // suppress "Show Tab Bar" menu item
+        window.backgroundColor = .black
         window.contentView = mtkView
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -60,6 +67,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         setupMenuBar()
         NSApp.activate(ignoringOtherApps: true)
+        if normalPresentation {
+            DispatchQueue.main.async { [weak self] in
+                self?.window.toggleFullScreen(nil)
+            }
+        }
 
         if let t = iconTime {
             // Icon mode: skip audio, start renderer directly, seek, capture one frame.
@@ -69,8 +81,12 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         } else {
             synth.synthesize { [weak self] ok in
                 guard let self, ok else { print("Synthesis failed"); return }
-                self.renderer.start()
-                self.synth.play()
+                let elapsed = CACurrentMediaTime() - self.launchTime
+                let delay = normalPresentation ? max(0, Self.releaseStartupDelay - elapsed) : 0
+                DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
+                    self.renderer.start()
+                    self.synth.play()
+                }
             }
         }
     }
