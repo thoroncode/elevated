@@ -41,9 +41,11 @@ app: build
 	    $(APP)/Contents/Info.plist
 	@codesign --force --deep --sign - $(APP)
 	@echo ""
-	@echo "  Double-click:  open $(APP)"
-	@echo "  Debug mode:    open $(APP) --args --debug"
-	@echo "  CLI direct:    $(APP_BIN) --debug"
+	@echo "  Built: $(CURDIR)/$(APP)"
+	@echo ""
+	@echo "  Copy to Desktop:  cp -r $(CURDIR)/$(APP) ~/Desktop/"
+	@echo "  Run normal:       open $(CURDIR)/$(APP)"
+	@echo "  Run debug:        open $(CURDIR)/$(APP) --args --debug"
 
 # Run and save one PNG per second to /tmp/elevated_cap/
 # Progress printed to console. Quit (Cmd-Q) after the demo ends (~215s).
