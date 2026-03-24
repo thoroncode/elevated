@@ -56,7 +56,12 @@ func makeTerrainMesh(device: MTLDevice, size: Int = 256, scale: Float = 64)
     for z in 0..<size-1 {
         for x in 0..<size-1 {
             let i = UInt32(z*size + x)
-            indices += [i, i+1, i+UInt32(size), i+1, i+UInt32(size)+1, i+UInt32(size)]
+            let row = UInt32(size)
+            if ((x + z) & 1) == 0 {
+                indices += [i, i+1, i+row, i+1, i+row+1, i+row]
+            } else {
+                indices += [i, i+1, i+row+1, i, i+row+1, i+row]
+            }
         }
     }
 
