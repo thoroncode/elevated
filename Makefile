@@ -37,13 +37,14 @@ help:
 build:
 	swift build -c release --package-path ElevatedMac
 
-# Normal playback
-run: build
-	$(BIN)
+# Normal playback (same binary + resources as distribution)
+run: app
+	$(APP_BIN)
 
 # Transport bar + debug overlay + console log
-debug: build
-	$(BIN) --debug
+# Runs the same binary + resource layout as the distribution (via Elevated.app)
+debug: app
+	$(APP_BIN) --debug
 
 # Regenerate the app icon from the demo at t=185.867s (00:03:05:52).
 # The result is committed to assets/ so this only needs to be run explicitly.
