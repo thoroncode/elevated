@@ -1,0 +1,55 @@
+# AGENTS
+
+This file defines the default workflow for human and AI contributors in this repository.
+
+## Git Worktree Policy
+
+If you are going to modify files, do not work in the main checkout and do not work on `main`.
+
+- Treat the main checkout as read-only integration space.
+- Read-only investigation on `main` is allowed.
+- Any task that edits files must use its own dedicated branch and its own dedicated git worktree.
+- Do not commit directly on `main`.
+- Merge validated task branches back to `main` from the integration checkout.
+
+## Branch Naming
+
+Use a branch prefix that matches the task:
+
+- `task/<name>` for general implementation work
+- `fix/<name>` for bug fixes
+- `exp/<name>` for experiments and visual comparisons
+
+Keep names short, concrete, and filesystem-friendly.
+
+## Standard Task Setup
+
+```bash
+cd /path/to/repo
+git switch main
+git pull --ff-only
+git worktree add ../repo-<task-name> -b task/<task-name> main
+cd ../repo-<task-name>
+```
+
+If a sibling directory is inconvenient, use another suitable location such as `/tmp`.
+
+## Merge And Cleanup
+
+After the task is validated:
+
+```bash
+cd /path/to/repo
+git switch main
+git merge --ff-only task/<task-name>
+git worktree remove ../repo-<task-name>
+git branch -d task/<task-name>
+```
+
+For experiments, keep the branch only as long as it still adds comparison value.
+
+## Safety Rules
+
+- Do not rewrite or delete someone else's in-progress work without explicit approval.
+- Do not use destructive git commands unless explicitly requested.
+- If multiple agents are working at once, each agent should use a separate worktree.
