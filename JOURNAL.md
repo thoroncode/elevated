@@ -252,6 +252,31 @@ Instrument sync confirmed working after full capture. Beams appear synced to mus
 
 **Code change in `Renderer.swift`**: `sceneColor` pixel format changed in both `buildPipelines` and `rebuildOffscreen`.
 
+### Build Versioning — Date+Time Stamp (2026-03-24)
+
+The app bundle uses a date+time versioning scheme that stamps itself at build time:
+
+| Key | Format | Example |
+|-----|--------|---------|
+| `CFBundleShortVersionString` | `YY.M.DD` | `26.3.24` |
+| `CFBundleVersion` | `HH.MM` | `18.33` |
+
+The About panel (`⌘+About Elevated`) shows **"Version 26.3.24 (18.33)"**.
+
+Both are valid macOS version formats (sequences of up to three non-negative integers). The short version is stamped per-day; the build number is stamped per-minute — so every `make app`/`zip`/`pkg` run produces a unique, human-readable version that encodes exactly when the binary was assembled.
+
+**Makefile implementation** — shell fragment inside the `app` target:
+```makefile
+shortver=$$(printf '%s.%d.%s' $$(date +%y) $$(date +%-m) $$(date +%d)); \
+buildver=$$(date +%H.%M); \
+/usr/libexec/PlistBuddy \
+    -c "Add :CFBundleShortVersionString string $$shortver" \
+    -c "Add :CFBundleVersion string $$buildver" \
+    ...
+```
+
+`%-m` strips the leading zero from the month (March → `3`, not `03`).
+
 ### Color/Tone Differences
 Our capture is slightly warmer/more orange-tinted at some timestamps vs the cooler blue reference. Likely a minor difference in sun direction or color computation. Low priority.
 
