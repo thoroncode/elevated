@@ -1,4 +1,4 @@
-.PHONY: all build run debug capture app icon pkg uninstall ref compare compare-range clean
+.PHONY: all build run debug capture app app-icon pkg uninstall ref compare compare-range clean
 
 BIN       = ElevatedMac/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -20,8 +20,9 @@ run: build
 debug: build
 	$(BIN) --debug
 
-# Render the app icon from the demo at t=185.867s (00:03:05:52) and build icon.icns
-icon: build
+# Regenerate the app icon from the demo at t=185.867s (00:03:05:52).
+# The result is committed to assets/ so this only needs to be run explicitly.
+app-icon: build
 	@mkdir -p assets
 	@echo "Rendering icon frame at t=$(ICON_TIME)s..."
 	@$(BIN) --icon-at=$(ICON_TIME) --icon-out=$(ICON_SRC)
@@ -46,7 +47,7 @@ icon: build
 #   Normal:  open Elevated.app
 #   Debug:   open Elevated.app --args --debug
 #   CLI:     Elevated.app/Contents/MacOS/ElevatedMac --debug
-app: build icon
+app: build
 	@echo "Assembling $(APP)..."
 	@rm -rf $(APP)
 	@mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
