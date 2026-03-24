@@ -334,10 +334,11 @@ class Renderer: NSObject, MTKViewDelegate {
 
     // ── Meshes ─────────────────────────────────────────────────────────────
     func buildMeshes() {
-        // Original mesh: D3DXCreatePolygon(52.0f, 4) — square with ~52 unit radius.
-        // Camera XZ range: ±24. Fog exp(-0.042*t) hides edges beyond ~40 units.
-        // Use scale=104 (±52) to match original extent.
-        let (vb, ib, ic) = makeTerrainMesh(device: device, size: 256, scale: 104)
+        // Original mesh: D3DXCreatePolygon(52.0f, 4) followed by
+        // D3DXTessellateNPatches(..., 512), which is substantially denser than
+        // the baseline 256x256 grid. Match the extent first, then increase
+        // density to test for water seams caused by coarse triangle interpolation.
+        let (vb, ib, ic) = makeTerrainMesh(device: device, size: 512, scale: 104)
         terrainVBuf = vb; terrainIBuf = ib; terrainIndexCount = ic
     }
 
