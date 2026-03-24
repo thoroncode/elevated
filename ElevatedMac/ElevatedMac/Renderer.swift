@@ -487,19 +487,29 @@ class Renderer: NSObject, MTKViewDelegate {
     }
 
     // ── Frame capture ──────────────────────────────────────────────────────
+
+    /// If set, the next rendered frame is saved to this path then the app exits.
+    var captureNextFramePath: String? = nil
+
     // Saves the final drawable as /tmp/elevated_cap/cap_XXXX.png once per second.
     func maybeCaptureFrame(drawable: CAMetalDrawable) {
         guard captureMode else { return }
         let sec = Int(uniforms.time)
         guard sec != lastCapturedSecond, sec >= 0 else { return }
         lastCapturedSecond = sec
+        let dir = "/tmp/elevated_cap"
+        try? FileManager.default.createDirectory(atPath: dir, withIntermediateDirectories: true)
+        let path = "\(dir)/cap_\(String(format: "%04d", sec + 1)).png"
+        saveDrawable(drawable, to: path)
+        if debugMode { print("  [capture] \(path)") }
+    }
 
+    // Reads back a drawable texture and saves it as a PNG.
+    func saveDrawable(_ drawable: CAMetalDrawable, to path: String) {
         let tex = drawable.texture
         let w = tex.width, h = tex.height
         let bpr = w * 4
         var raw = [UInt8](repeating: 0, count: bpr * h)
-
-        // Blit drawable → shared buffer for CPU readback
         guard let buf = device.makeBuffer(length: bpr * h, options: .storageModeShared),
               let cmd = cmdQueue.makeCommandBuffer(),
               let blit = cmd.makeBlitCommandEncoder() else { return }
@@ -512,20 +522,11 @@ class Renderer: NSObject, MTKViewDelegate {
         blit.endEncoding()
         cmd.commit()
         cmd.waitUntilCompleted()
-
-        // bgra8 → rgba8
         memcpy(&raw, buf.contents(), bpr * h)
         for i in stride(from: 0, to: raw.count, by: 4) {
             let b = raw[i]; raw[i] = raw[i+2]; raw[i+2] = b  // swap B↔R
         }
-
-        // Write PNG
-        let dir = "/tmp/elevated_cap"
-        try? FileManager.default.createDirectory(atPath: dir,
-                                                  withIntermediateDirectories: true)
-        let path = "\(dir)/cap_\(String(format: "%04d", sec + 1)).png"
         savePNG(pixels: raw, width: w, height: h, path: path)
-        if debugMode { print("  [capture] \(path)") }
     }
 
     private func savePNG(pixels: [UInt8], width: Int, height: Int, path: String) {
@@ -659,6 +660,14 @@ class Renderer: NSObject, MTKViewDelegate {
         cmd.commit()
 
         maybeCaptureFrame(drawable: drawable)
+
+        if let path = captureNextFramePath {
+            captureNextFramePath = nil
+            saveDrawable(drawable, to: path)
+            print("[icon] saved \(path)")
+            DispatchQueue.main.async { NSApplication.shared.terminate(nil) }
+        }
+
         onDraw?()
     }
 }

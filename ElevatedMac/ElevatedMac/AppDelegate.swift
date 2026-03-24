@@ -22,6 +22,14 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         debugActive = CommandLine.arguments.contains("--debug")
         captureMode = CommandLine.arguments.contains("--capture")
 
+        // --icon-at=T  renders one clean frame at time T, saves to --icon-out=path, exits
+        let args = CommandLine.arguments
+        func argVal(_ prefix: String) -> String? {
+            args.first(where: { $0.hasPrefix(prefix) }).map { String($0.dropFirst(prefix.count)) }
+        }
+        let iconTime = argVal("--icon-at=").flatMap(Double.init)
+        let iconOut  = argVal("--icon-out=") ?? "icon_source.png"
+
         let mtkView = MTKView(frame: NSRect(x: 0, y: 0, width: 1920, height: 1080), device: device)
         mtkView.preferredFramesPerSecond = 60
         mtkView.enableSetNeedsDisplay     = false
@@ -52,10 +60,17 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         setupMenuBar()
         NSApp.activate(ignoringOtherApps: true)
 
-        synth.synthesize { [weak self] ok in
-            guard let self, ok else { print("Synthesis failed"); return }
-            self.renderer.start()
-            self.synth.play()
+        if let t = iconTime {
+            // Icon mode: skip audio, start renderer directly, seek, capture one frame.
+            renderer.start()
+            renderer.seek(to: t)
+            renderer.captureNextFramePath = iconOut
+        } else {
+            synth.synthesize { [weak self] ok in
+                guard let self, ok else { print("Synthesis failed"); return }
+                self.renderer.start()
+                self.synth.play()
+            }
         }
     }
 
