@@ -11,6 +11,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     var window: NSWindow!
     var aboutWindow: NSWindow?
+    var helpWindow: NSWindow?
     var renderer: Renderer!
     let synth = SynthPlayer()
     private var transportBar: TransportBar!
@@ -108,6 +109,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         transportBar?.isHidden = !on
         debugMenuItem?.state = on ? .on : .off
         helpMenuItem?.isHidden = !on
+        if !on { helpWindow?.orderOut(nil) }
         refreshFullscreenCursorPolicy()
     }
 
@@ -203,6 +205,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         aboutWindow.makeKeyAndOrderFront(nil)
     }
 
+    @objc private func showHelpWindow() {
+        guard debugActive else { return }
+        if helpWindow == nil {
+            helpWindow = buildHelpWindow()
+        }
+        guard let helpWindow else { return }
+        helpWindow.center()
+        NSApp.activate(ignoringOtherApps: true)
+        helpWindow.makeKeyAndOrderFront(nil)
+    }
+
     // ── Menu bar ───────────────────────────────────────────────────────────
 
     private func setupMenuBar() {
@@ -277,38 +290,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         helpItem.submenu = helpMenu
         helpItem.isHidden = !debugActive
         helpMenuItem = helpItem
-
-        addHelpSection("Playback", to: helpMenu)
-        addHelpItem("Space  Play / Pause", to: helpMenu)
-        addHelpItem("Left / Right  Seek -5s / +5s", to: helpMenu)
-        addHelpItem("Shift+Left / Shift+Right  Seek -1f / +1f", to: helpMenu)
-        addHelpItem("Up / Down  Seek -60s / +60s", to: helpMenu)
-        addHelpItem(", / .  Step backward / forward when paused", to: helpMenu)
-        helpMenu.addItem(.separator())
-        addHelpSection("App", to: helpMenu)
-        addHelpItem("Cmd+D  Toggle debug overlay", to: helpMenu)
-        addHelpItem("Cmd+M  Mute", to: helpMenu)
-        addHelpItem("Ctrl+Cmd+F  Toggle full screen", to: helpMenu)
-        addHelpItem("Esc  Quit when in full screen", to: helpMenu)
-        addHelpItem("Cmd+Q  Quit Elevated", to: helpMenu)
+        let keysItem = NSMenuItem(title: "Keyboard Reference",
+                                  action: #selector(showHelpWindow),
+                                  keyEquivalent: "/")
+        keysItem.keyEquivalentModifierMask = [.command]
+        keysItem.target = self
+        helpMenu.addItem(keysItem)
 
         NSApp.mainMenu = mainMenu
-    }
-
-    private func addHelpSection(_ title: String, to menu: NSMenu) {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        item.attributedTitle = NSAttributedString(
-            string: title,
-            attributes: [.font: NSFont.boldSystemFont(ofSize: NSFont.systemFontSize)]
-        )
-        menu.addItem(item)
-    }
-
-    private func addHelpItem(_ title: String, to menu: NSMenu) {
-        let item = NSMenuItem(title: title, action: nil, keyEquivalent: "")
-        item.isEnabled = false
-        menu.addItem(item)
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
@@ -446,6 +435,64 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         return window
     }
 
+    private func buildHelpWindow() -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 420, height: 360),
+            styleMask: [.titled, .closable, .miniaturizable],
+            backing: .buffered,
+            defer: false)
+        window.title = "Elevated Debug Help"
+        window.tabbingMode = .disallowed
+        window.isReleasedWhenClosed = false
+
+        let content = NSView(frame: window.contentRect(forFrameRect: window.frame))
+        content.wantsLayer = true
+        content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        window.contentView = content
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .leading
+        stack.spacing = 8
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 26),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -26),
+            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -24),
+        ])
+
+        let titleLabel = NSTextField(labelWithString: "Keyboard Reference")
+        titleLabel.font = NSFont.systemFont(ofSize: 24, weight: .semibold)
+        stack.addArrangedSubview(titleLabel)
+
+        let subtitleLabel = NSTextField(labelWithString: "Debug-mode transport and app controls")
+        subtitleLabel.font = NSFont.systemFont(ofSize: 12)
+        subtitleLabel.textColor = .secondaryLabelColor
+        stack.addArrangedSubview(subtitleLabel)
+
+        addHelpSection("Playback", items: [
+            "Space              Play / Pause",
+            "Left / Right       Seek -5s / +5s",
+            "Shift+Left/Right   Seek -1f / +1f",
+            "Up / Down          Seek -60s / +60s",
+            ", / .              Step backward / forward when paused",
+        ], to: stack)
+
+        addHelpSection("App", items: [
+            "Cmd+D              Toggle debug overlay",
+            "Cmd+M              Mute",
+            "Cmd+/              Open this help window",
+            "Ctrl+Cmd+F         Toggle full screen",
+            "Esc                Quit when in full screen",
+            "Cmd+Q              Quit Elevated",
+        ], to: stack)
+
+        return window
+    }
+
     private func loadAboutText() -> String {
         let execURL = URL(fileURLWithPath: CommandLine.arguments[0])
         let candidates: [URL?] = [
@@ -469,6 +516,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         let short = info["CFBundleShortVersionString"] as? String ?? "?"
         let build = info["CFBundleVersion"] as? String ?? "?"
         return "Version \(short) (\(build))"
+    }
+
+    private func addHelpSection(_ title: String, items: [String], to stack: NSStackView) {
+        let titleLabel = NSTextField(labelWithString: title)
+        titleLabel.font = NSFont.systemFont(ofSize: 13, weight: .semibold)
+        stack.addArrangedSubview(titleLabel)
+
+        let bodyLabel = NSTextField(wrappingLabelWithString: items.joined(separator: "\n"))
+        bodyLabel.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
+        bodyLabel.lineBreakMode = .byWordWrapping
+        bodyLabel.maximumNumberOfLines = 0
+        stack.addArrangedSubview(bodyLabel)
     }
 }
 
