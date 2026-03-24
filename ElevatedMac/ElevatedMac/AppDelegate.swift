@@ -5,7 +5,7 @@ import Cocoa
 import MetalKit
 import AVFoundation
 
-class AppDelegate: NSObject, NSApplicationDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private static let releaseStartupDelay: TimeInterval = 5
 
     var window: NSWindow!
@@ -53,6 +53,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         window.title = "Elevated — rgba/tbc (Metal port)"
         window.tabbingMode = .disallowed   // suppress "Show Tab Bar" menu item
         window.backgroundColor = .black
+        window.delegate = self
         window.contentView = mtkView
         window.center()
         window.makeKeyAndOrderFront(nil)
@@ -242,6 +243,10 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+
+    func windowDidEnterFullScreen(_ notification: Notification) {
+        NSCursor.setHiddenUntilMouseMoves(true)
+    }
 }
 
 // ─── Transport bar overlay ─────────────────────────────────────────────────────
