@@ -1,4 +1,4 @@
-.PHONY: all help build run debug capture app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean
+.PHONY: all help build run debug capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean
 
 BIN       = ElevatedMac/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -28,6 +28,7 @@ help:
 	@echo "  pkg               Build Elevated.pkg installer"
 	@echo "  uninstall         Remove /Applications/Elevated.app"
 	@echo "  capture           Capture one PNG per second to /tmp/elevated_cap/"
+	@echo "  branch-frame      Capture one exact frame (use T=<sec> [BRANCHES='...'])"
 	@echo "  ref               Extract reference frames to /tmp/elevated_ref/"
 	@echo "  compare           Compare all matching reference/capture frames"
 	@echo "  compare-one       Compare one second (use T=<sec>)"
@@ -174,6 +175,14 @@ uninstall:
 capture: build
 	mkdir -p /tmp/elevated_cap
 	$(BIN) --capture
+
+# Capture one exact frame across branches using temporary git worktrees.
+# Example:
+#   make branch-frame T=81.383333
+#   make branch-frame T=81.383333 BRANCHES="main feature/foo" OUT_DIR=/tmp/elevated_branch_frames
+branch-frame:
+	@test -n "$(T)" || (echo "Usage: make branch-frame T=<seconds> [BRANCHES='main other-branch'] [OUT_DIR=/tmp/elevated_branch_frames]" && exit 1)
+	bash tools/capture_branches.sh --time "$(T)" --out "$(if $(OUT_DIR),$(OUT_DIR),/tmp/elevated_branch_frames)" $(BRANCHES)
 
 # Extract 1fps reference frames from elevated_8000.avi → /tmp/elevated_ref/
 ref:

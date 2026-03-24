@@ -19,7 +19,7 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 ### 3-Pass Metal Renderer
 
 **Pass 1 — G-buffer** (`terrainVert` + `gbufferFrag`):
-- Flat XZ grid (256×256, scale=104 units = ±52) displaced by FBM terrain height in vertex shader
+- Flat XZ grid (512×512, scale=104 units = ±52) displaced by FBM terrain height in vertex shader
 - Outputs world-space position to `gbufWorldPos` (rgba32float) — w=1.0 flags geometry hit
 
 **Pass 2 — Deferred shading** (`deferredFrag`):
@@ -49,7 +49,7 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 ### Camera Formula (m1 shader port)
 
 CPU-side `m1Camera(xdot:)` replicates the HLSL pixel shader that renders to a 2×1 D3D9 RT:
-- `xdot = VPOS.x`: 0.5 → camPos, 1.5 → camTarget
+- `xdot = VPOS.x`: 0 → camPos, 1 → camTarget
 - `o` starts at `(camSeedX + xdot*0.37, camSeedY + xdot*0.37)`
 - 8 noise texture samples → cx, cz (camera XZ path)
 - `cy = terScale * fbm3(cx,cz) + camPosY + camTarY * xdot`
@@ -165,7 +165,7 @@ The m3 pixel shader receives VP^{-1}, not VP. Our port handles this with `unifor
 
 ### Terrain Mesh — Original vs Port
 - **Original**: `D3DXCreatePolygon(52.0f, 4)` + `D3DXTessellateNPatches(512)` → diamond, ~1M triangles
-- **Port**: 256×256 regular grid, scale=104 (±52 units) — covers same area, different topology
+- **Port**: 512×512 regular grid, scale=104 (±52 units) — much closer density, but still different topology from the tessellated diamond
 
 ### Noise Texture
 - Format: D3DFMT_R16F (stored as R32F in Metal)
@@ -208,6 +208,32 @@ With `.front` culling: Metal culls CCW-in-framebuffer = CW-in-NDC = what D3D9 al
 
 ---
 
+## Fix 6: Water Seam — Raise Terrain Grid Density to 512 (2026-03-24)
+
+**Problem**: A hard diagonal seam appeared in reflective water around `00:01:21`, visible as a straight-edged slab cutting across the scene. Earlier hypotheses about camera extraction, inverse-VP reconstruction, and post-processing were falsified by exact frame captures and source-side camera probing.
+
+**Root cause**: The port used a `256×256` regular grid for terrain while the original D3D9 demo used `D3DXCreatePolygon(52.0f, 4)` followed by `D3DXTessellateNPatches(..., 512)`. The coarse grid produced large triangle interpolation regions in the G-buffer, which then showed up as a straight seam in the water shading path.
+
+**Evidence**:
+- Original source: `D3DXTessellateNPatches(COMHandles.mesh, NULL, 512, false, &COMHandles.mesh, NULL);`
+- `main` (256 grid) reproduces the seam
+- `512` and `1024` grid experiment branches both remove the obvious slab artifact
+- Exact frame capture at `t=81.383333` confirms `512` and `1024` are much closer to each other than either is to broken `main`
+
+**Fix**: Increase the terrain grid density in `Renderer.buildMeshes()` from `256` to `512`.
+
+**Why 512, not 1024**:
+- `512` matches the original source
+- `1024` only produced a comparatively small additional change
+- `512` is cheaper and already fixes the visible bug
+
+**Code change in `Renderer.swift`**:
+```swift
+let (vb, ib, ic) = makeTerrainMesh(device: device, size: 512, scale: 104)
+```
+
+---
+
 ## Demo Timing (Exact, from Sync Data)
 
 All times computed from `row = position / 20840`, `position = t × 44100`.
@@ -236,13 +262,13 @@ The original AVI at 3:35=215s sits between the visual blackout (211.71s) and aud
 ### Camera Path — Minor Residual Drift
 After the xdot fix, the camera is broadly correct — mountains are visible at all key timestamps and composition is close. Remaining drift is subtle: slightly different framing at specific moments (e.g. t=136). Likely sources:
 
-1. Terrain mesh topology differences (diamond vs grid) cause slightly different normal interpolation and perceived shape at some XZ positions
+1. Terrain mesh topology differences (tessellated diamond vs regular grid) still cause slightly different normal interpolation and perceived shape at some XZ positions
 2. Minor FBM float precision differences between HLSL and MSL (hard to eliminate without the original GPU pipeline)
 
 ### Light Beams — Verified Working (2026-03-24)
 Instrument sync confirmed working after full capture. Beams appear synced to music at t=132-136. Light beam at t=132 appears ~1 frame early in reference vs our port — likely a ≤1-step offset in the sync scan. Functionally correct.
 
-### Fix 6: Fade from Black — Scene Color Buffer LDR (2026-03-24)
+### Fix 7: Fade from Black — Scene Color Buffer LDR (2026-03-24)
 
 **Problem**: With `sceneColor` as `rgba16Float` (HDR), the sun halo term could push sky pixels to ~1.55 linear. After `pow(1.55, 0.45) × 1.17 − 1.0 ≈ 0.42`, these pixels were visible even at brightness=−1.0, so the fade from black leaked bright sky at t=0.
 
@@ -251,6 +277,24 @@ Instrument sync confirmed working after full capture. Beams appear synced to mus
 **Why this matches D3D9**: The original demo used an A8R8G8B8 (8-bit UNORM) intermediate render target — exactly LDR. Our earlier `rgba16Float` choice added HDR that the original never had, breaking the fade math.
 
 **Code change in `Renderer.swift`**: `sceneColor` pixel format changed in both `buildPipelines` and `rebuildOffscreen`.
+
+### Tooling: Exact Cross-Branch Frame Capture (2026-03-24)
+
+Added `tools/capture_branches.sh` plus `make branch-frame` for deterministic image comparisons across branches using temporary `git worktree`s.
+
+Purpose:
+- render the exact same timestamp on multiple branches
+- avoid manual branch switching and pause/seek drift
+- keep the current checkout untouched
+
+Example:
+```sh
+make branch-frame T=81.383333 BRANCHES="main feature/foo feature/bar"
+```
+
+Outputs:
+- PNGs in `/tmp/elevated_branch_frames/`
+- `frame_<time>_summary.txt` with branch, commit, and SHA-256 per capture
 
 ### Build Versioning — Date+Time Stamp (2026-03-24)
 
