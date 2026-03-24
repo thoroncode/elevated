@@ -23,7 +23,7 @@ help:
 	@echo "  debug             Run demo with debug overlay"
 	@echo "  app-icon          Regenerate app icon assets"
 	@echo "  app               Build Elevated.app bundle"
-	@echo "  zip               Zip Elevated.app to ~/Desktop/Elevated.zip"
+	@echo "  zip               Zip Elevated.app to ~/Desktop/Elevated-YY.M.DD.zip"
 	@echo "  src-distribution  Create source zip in dist/"
 	@echo "  pkg               Build Elevated.pkg installer"
 	@echo "  uninstall         Remove /Applications/Elevated.app"
@@ -105,11 +105,14 @@ app: build
 	@echo "  Run normal:       open $(CURDIR)/$(APP)"
 	@echo "  Run debug:        open $(CURDIR)/$(APP) --args --debug"
 
-# Zip Elevated.app and drop it on the Desktop — ready to send via Slack/email
+# Zip Elevated.app and drop it on the Desktop with the stamped short version
+# in the filename, e.g. Elevated-26.3.24.zip.
 zip: app
-	@echo "Zipping to ~/Desktop/Elevated.zip..."
-	@cd $(dir $(APP)) && zip -qr ~/Desktop/Elevated.zip $(notdir $(APP))
-	@echo "  ~/Desktop/Elevated.zip — ready to send"
+	@shortver=$$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' $(APP)/Contents/Info.plist); \
+	 zipname=Elevated-$$shortver.zip; \
+	 echo "Zipping to ~/Desktop/$$zipname..."; \
+	 cd $(dir $(APP)) && zip -qr "$$HOME/Desktop/$$zipname" $(notdir $(APP)); \
+	 echo "  $$HOME/Desktop/$$zipname — ready to send"
 
 # Build a source distribution archive from tracked files in the current working tree.
 # Output: dist/elevated-src-YYYYMMDD-HHMMSS.zip
