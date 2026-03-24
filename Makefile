@@ -1,21 +1,26 @@
-.PHONY: all run debug capture ref compare compare-range clean
+.PHONY: all build run debug capture ref compare compare-range clean
 
 BIN = ElevatedMac/.build/release/ElevatedMac
 
-all:
+all: build
+
+build:
 	swift build -c release --package-path ElevatedMac
 
 # Normal playback
-run: all
+run: build
 	$(BIN)
 
-# Live playback with on-screen debug overlay + console log
-debug: all
+# Same binary, debug flag enables transport bar + overlay
+# $(BIN) --debug   (or just run the binary directly with --debug)
+
+# Transport bar + debug overlay + console log
+debug: build
 	$(BIN) --debug
 
 # Run and save one PNG per second to /tmp/elevated_cap/
 # Progress printed to console. Quit (Cmd-Q) after the demo ends (~215s).
-capture: all
+capture: build
 	mkdir -p /tmp/elevated_cap
 	$(BIN) --capture
 
