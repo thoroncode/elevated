@@ -56,7 +56,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             styleMask: [.titled, .closable, .resizable, .miniaturizable],
             backing: .buffered,
             defer: false)
-        window.title = "Elevated — rgba/tbc (Metal port)"
+        window.title = "Elevated"
         window.tabbingMode = .disallowed   // suppress "Show Tab Bar" menu item
         window.backgroundColor = .black
         window.delegate = self
