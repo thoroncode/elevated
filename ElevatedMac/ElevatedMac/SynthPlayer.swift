@@ -85,6 +85,11 @@ class SynthPlayer {
 
     private(set) var isPaused = false
 
+    var isMuted: Bool {
+        get { engine.mainMixerNode.outputVolume == 0 }
+        set { engine.mainMixerNode.outputVolume = newValue ? 0 : 1 }
+    }
+
     func pause() {
         guard !isPaused else { return }
         player.pause()

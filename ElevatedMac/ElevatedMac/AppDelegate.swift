@@ -12,6 +12,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     private var transportBar: TransportBar!
     private var debugActive = false
     private var debugMenuItem: NSMenuItem?
+    private var muteMenuItem: NSMenuItem?
     private var captureMode = false
 
     func applicationDidFinishLaunching(_ notification: Notification) {
@@ -86,6 +87,11 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
     @objc private func toggleDebug() {
         setDebugActive(!debugActive)
+    }
+
+    @objc private func toggleMute() {
+        synth.isMuted.toggle()
+        muteMenuItem?.state = synth.isMuted ? .on : .off
     }
 
     // ── Transport bar ──────────────────────────────────────────────────────
@@ -179,6 +185,20 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         appMenu.addItem(NSMenuItem(title: "Quit Elevated",
                                    action: #selector(NSApplication.terminate(_:)),
                                    keyEquivalent: "q"))
+
+        // ── Audio menu ──
+        let audioItem = NSMenuItem()
+        mainMenu.addItem(audioItem)
+        let audioMenu = NSMenu(title: "Audio")
+        audioItem.submenu = audioMenu
+
+        let muteItem = NSMenuItem(title: "Mute",
+                                  action: #selector(toggleMute),
+                                  keyEquivalent: "m")
+        muteItem.keyEquivalentModifierMask = [.command]
+        muteItem.target = self
+        audioMenu.addItem(muteItem)
+        muteMenuItem = muteItem
 
         // ── View menu ──
         let viewItem = NSMenuItem()
