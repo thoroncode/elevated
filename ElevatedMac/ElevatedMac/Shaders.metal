@@ -182,8 +182,11 @@ fragment float4 deferredFrag(
         // Exact port of m3: float t=length(d.xyz-q[4].xyz)
         float t = length(d.xyz - u.q[4].xyz);
         float w = u.q[1].w - d.y;   // water level - surface.y  (< 0 = above water = terrain)
+        // Water reflection path is only valid when the view ray intersects the
+        // water plane in front of the camera (downward ray in this coordinate system).
+        bool useWater = (w >= 0.0) && (e.y < -0.001);
 
-        if (w < 0) {
+        if (!useWater) {
             // ── TERRAIN — exact m3 port ───────────────────────────────
             float3 n = cn(d.xz, 0.001*t, 12 - log2(t), u, t0, s0);
             float  h = fbm(3*d.xz, 3, t0, s0);
