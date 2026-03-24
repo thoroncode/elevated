@@ -242,8 +242,15 @@ After the xdot fix, the camera is broadly correct — mountains are visible at a
 ### Light Beams — Verified Working (2026-03-24)
 Instrument sync confirmed working after full capture. Beams appear synced to music at t=132-136. Light beam at t=132 appears ~1 frame early in reference vs our port — likely a ≤1-step offset in the sync scan. Functionally correct.
 
-### Fade from Black at Start — Partial
-The `imgBrightness` sync track correctly sets brightness to -1.0 at t=0 and linearly fades to 0.0 over 3.78 seconds. Most of the sky is black. However, the sun halo term (`pow(saturate(dot(e, sunDir)), 16) * float3(.4,.3,.1)`) pushes sky color to ~1.55 linear near the sun direction, which after gamma × contrast gives ~0.43 output — visible even at brightness=-1. Whether the camera faces the sun at t=0 determines if the leak is noticeable. The original D3D9 demo has the same math, so if the original showed a clean fade from black, the camera must face away from the sun at t=0.
+### Fix 6: Fade from Black — Scene Color Buffer LDR (2026-03-24)
+
+**Problem**: With `sceneColor` as `rgba16Float` (HDR), the sun halo term could push sky pixels to ~1.55 linear. After `pow(1.55, 0.45) × 1.17 − 1.0 ≈ 0.42`, these pixels were visible even at brightness=−1.0, so the fade from black leaked bright sky at t=0.
+
+**Fix**: Change `sceneColor` from `rgba16Float` to `bgra8Unorm`. The deferred pass now clamps to [0,1] before the post-pass reads it. Maximum possible output at brightness=−1.0 is `pow(1.0, 0.45) × 1.17 − 1.0 = 0.17`, which is dark enough that the fade appears clean.
+
+**Why this matches D3D9**: The original demo used an A8R8G8B8 (8-bit UNORM) intermediate render target — exactly LDR. Our earlier `rgba16Float` choice added HDR that the original never had, breaking the fade math.
+
+**Code change in `Renderer.swift`**: `sceneColor` pixel format changed in both `buildPipelines` and `rebuildOffscreen`.
 
 ### Color/Tone Differences
 Our capture is slightly warmer/more orange-tinted at some timestamps vs the cooler blue reference. Likely a minor difference in sun direction or color computation. Low priority.
