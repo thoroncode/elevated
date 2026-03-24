@@ -40,9 +40,6 @@ class AppDelegate: NSObject, NSApplicationDelegate {
 
         if debugMode {
             renderer.installDebugOverlay(in: mtkView)
-        }
-
-        if !captureMode {
             installTransportBar(in: mtkView)
             installKeyHandler()
         }
