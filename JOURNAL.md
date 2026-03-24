@@ -183,6 +183,54 @@ const float up[3] = { sinf(pptr->w), cosf(pptr->w), 0.0f };
 
 ---
 
+## Fix 5: Back-Face Culling Direction (2026-03-24)
+
+**Problem**: Added `enc.setCullMode(.back)` to fix terrain-from-below, but this caused "mangled" terrain — flat horizontal slabs cutting through the scene.
+
+**Root cause**: Metal and D3D9 have opposite handedness for front-face determination after the viewport Y-flip.
+
+- D3D9 default `D3DCULL_CCW`: culls CCW triangles in screen space (Y-down) = CW in NDC (Y-up).
+  → D3D9 renders triangles that are **CCW in NDC (Y-up)** = CW in screen (Y-down).
+- Metal `.setCullMode(.back)` + default `.counterClockwise` front face: culls CW in framebuffer (Y-down) = CCW in NDC (Y-up).
+  → Metal with `.back` renders triangles that are **CW in NDC (Y-up)** = CCW in framebuffer.
+
+Our terrain mesh top-surface triangles are **CCW in NDC** (correct, matches D3D9 front face). With `.back` culling in Metal, these get culled as "back faces." Only the undersides (CW in NDC) are rendered — exactly backwards.
+
+**Fix in `Renderer.swift`** (G-buffer encoder):
+```swift
+// Before (wrong — culls terrain tops):
+enc.setCullMode(.back)
+// After (correct — matches D3D9 D3DCULL_CCW):
+enc.setCullMode(.front)
+```
+
+With `.front` culling: Metal culls CCW-in-framebuffer = CW-in-NDC = what D3D9 also culls. Both show terrain tops, hide bottoms.
+
+---
+
+## Demo Timing (Exact, from Sync Data)
+
+All times computed from `row = position / 20840`, `position = t × 44100`.
+
+| Event | Row | Time (s) | SMPTE (60fps) |
+|-------|-----|----------|---------------|
+| Fade from black starts | 0 | 0.000 | 00:00:00:00 |
+| Fade from black ends | 8 | 3.778 | 00:00:03:47 |
+| Fade to black starts | 424 | 200.37 | 00:03:20:22 |
+| Screen fully black | 448 | 211.71 | 00:03:31:43 |
+| Audio ends | — | 216.97 | 00:03:36:58 |
+
+The dark ending has two phases:
+- **Fade** (rows 424→448): 11.34 seconds — `imgBrightness` linearly goes 100→0 (`brightness` goes -0.22→-1.0)
+- **Pure black tail** (row 448→audio end): 5.26 seconds — brightness stays at -1.0
+- **Total dark period**: 16.6 seconds (user guessed "~15 seconds" — close)
+
+The original AVI at 3:35=215s sits between the visual blackout (211.71s) and audio end (216.97s), suggesting the AVI was trimmed ~4s after the screen went black.
+
+**Code change**: All `217.0` hardcodes replaced with `kDemoDuration = Double(ELEVATED_TOTAL_SAMPLES) / 44100.0 = 216.967s`. Computed constant eliminates drift.
+
+---
+
 ## Known Remaining Issues (as of 2026-03-24)
 
 ### Camera Path — Minor Residual Drift
@@ -193,6 +241,9 @@ After the xdot fix, the camera is broadly correct — mountains are visible at a
 
 ### Light Beams — Verified Working (2026-03-24)
 Instrument sync confirmed working after full capture. Beams appear synced to music at t=132-136. Light beam at t=132 appears ~1 frame early in reference vs our port — likely a ≤1-step offset in the sync scan. Functionally correct.
+
+### Fade from Black at Start — Partial
+The `imgBrightness` sync track correctly sets brightness to -1.0 at t=0 and linearly fades to 0.0 over 3.78 seconds. Most of the sky is black. However, the sun halo term (`pow(saturate(dot(e, sunDir)), 16) * float3(.4,.3,.1)`) pushes sky color to ~1.55 linear near the sun direction, which after gamma × contrast gives ~0.43 output — visible even at brightness=-1. Whether the camera faces the sun at t=0 determines if the leak is noticeable. The original D3D9 demo has the same math, so if the original showed a clean fade from black, the camera must face away from the sun at t=0.
 
 ### Color/Tone Differences
 Our capture is slightly warmer/more orange-tinted at some timestamps vs the cooler blue reference. Likely a minor difference in sun direction or color computation. Low priority.

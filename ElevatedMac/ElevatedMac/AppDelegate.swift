@@ -124,7 +124,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func seekBy(_ delta: Double) {
-        let t = max(0, min(renderer.currentTime + delta, 217.0))
+        let t = max(0, min(renderer.currentTime + delta, kDemoDuration))
         renderer.seek(to: t)
         synth.seek(to: t)
     }
@@ -239,7 +239,7 @@ class TransportBar: NSView {
     private let timeLabel    = makeMonoLabel(width: 110, align: .left)
     private let remainLabel  = makeMonoLabel(width: 120, align: .right)
     private let slider       = SeekSlider()
-    private let totalDuration = 217.0
+    private let totalDuration = kDemoDuration
 
     override init(frame: NSRect) {
         super.init(frame: frame)

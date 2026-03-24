@@ -136,6 +136,12 @@ class DebugOverlay {
     }
 }
 
+// ─── Demo duration (exact, derived from audio sample count) ──────────────────
+// ELEVATED_TOTAL_SAMPLES = 9568256, sampleRate = 44100 Hz → 216.967s
+// Fade-to-black starts row 424 → t=200.37s; fully black row 448 → t=211.71s
+// Pure black tail: 211.71s→216.97s (5.26s). Total dark ending: 16.6s.
+let kDemoDuration: Double = Double(ELEVATED_TOTAL_SAMPLES) / 44100.0
+
 // ─── Renderer ─────────────────────────────────────────────────────────────────
 class Renderer: NSObject, MTKViewDelegate {
     let device: MTLDevice
@@ -194,7 +200,7 @@ class Renderer: NSObject, MTKViewDelegate {
     var currentTime: Double {
         guard startTime > 0 else { return 0 }
         let t = isPaused ? pauseTime : CACurrentMediaTime() - startTime
-        return max(0, min(t, 217.0))
+        return max(0, min(t, kDemoDuration))
     }
 
     func start() {
@@ -215,7 +221,7 @@ class Renderer: NSObject, MTKViewDelegate {
     }
 
     func seek(to time: Double) {
-        let t = max(0, min(time, 217.0))
+        let t = max(0, min(time, kDemoDuration))
         startTime = CACurrentMediaTime() - t
         if isPaused { pauseTime = t }
     }
@@ -250,10 +256,23 @@ class Renderer: NSObject, MTKViewDelegate {
     func buildPipelines(mtkView: MTKView) {
         let lib: MTLLibrary
         do {
-            // SPM copies .metal as a resource; compile it at runtime
-            guard let srcURL = Bundle.module.url(forResource: "Shaders", withExtension: "metal"),
-                  let src = try? String(contentsOf: srcURL, encoding: .utf8) else {
-                fatalError("Shaders.metal not found in bundle")
+            // Load Shaders.metal portably:
+            //   .app bundle  → Bundle.main (Contents/Resources/Shaders.metal)
+            //   CLI build    → ElevatedMac_ElevatedMac.bundle next to the executable
+            let srcURL: URL? = {
+                if let u = Bundle.main.url(forResource: "Shaders", withExtension: "metal") {
+                    return u
+                }
+                let execDir = URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0])
+                    .deletingLastPathComponent()
+                let candidates = [
+                    execDir.appendingPathComponent("ElevatedMac_ElevatedMac.bundle/Shaders.metal"),
+                    execDir.appendingPathComponent("Shaders.metal"),
+                ]
+                return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
+            }()
+            guard let srcURL, let src = try? String(contentsOf: srcURL, encoding: .utf8) else {
+                fatalError("Shaders.metal not found (checked Bundle.main and path next to binary)")
             }
             let opts = MTLCompileOptions()
             opts.languageVersion = .version3_0
@@ -589,7 +608,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
     func draw(in view: MTKView) {
         let t = currentTime
-        if t >= 217.0 && !isPaused && !debugMode {
+        if t >= kDemoDuration && !isPaused && !debugMode {
             NSApplication.shared.terminate(nil)
             return
         }
@@ -619,7 +638,7 @@ class Renderer: NSObject, MTKViewDelegate {
         var uCopy = uniforms
         if let enc = cmd.makeRenderCommandEncoder(descriptor: gbRPD) {
             enc.setRenderPipelineState(gbufferPSO)
-            enc.setCullMode(.back)   // hide terrain underside when camera dips below mesh
+            enc.setCullMode(.front)  // match D3D9 D3DCULL_CCW: cull CCW-in-screen = CW-in-NDC
             enc.setDepthStencilState(depthState)
             enc.setVertexBuffer(terrainVBuf, offset: 0, index: 0)
             enc.setVertexBytes(&uCopy, length: MemoryLayout<Uniforms>.size, index: 1)

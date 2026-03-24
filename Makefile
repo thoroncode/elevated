@@ -1,4 +1,4 @@
-.PHONY: all build run debug capture app app-icon pkg zip uninstall ref compare compare-range clean
+.PHONY: all help build run debug capture app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean
 
 BIN       = ElevatedMac/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -6,8 +6,33 @@ APP_BIN   = $(APP)/Contents/MacOS/ElevatedMac
 ICON_TIME = 185.867
 ICON_SRC  = assets/icon_source.png
 ICON_ICNS = assets/icon.icns
+DIST_DIR  = dist
+SRC_DIST_NAME ?= elevated-src-$(shell date +%Y%m%d-%H%M%S)
+SRC_DIST_ARCHIVE = $(DIST_DIR)/$(SRC_DIST_NAME).zip
+SRC_DIST_OPTIONAL_FILES = LICENSE
+SRC_DIST_EXCLUDE_FILES = elevated_music.wav
 
 all: build
+
+help:
+	@echo "Available targets:"
+	@echo "  all               Build release binary (default)"
+	@echo "  help              Show this help"
+	@echo "  build             Build release binary"
+	@echo "  run               Run demo"
+	@echo "  debug             Run demo with debug overlay"
+	@echo "  app-icon          Regenerate app icon assets"
+	@echo "  app               Build Elevated.app bundle"
+	@echo "  zip               Zip Elevated.app to ~/Desktop/Elevated.zip"
+	@echo "  src-distribution  Create source zip in dist/"
+	@echo "  pkg               Build Elevated.pkg installer"
+	@echo "  uninstall         Remove /Applications/Elevated.app"
+	@echo "  capture           Capture one PNG per second to /tmp/elevated_cap/"
+	@echo "  ref               Extract reference frames to /tmp/elevated_ref/"
+	@echo "  compare           Compare all matching reference/capture frames"
+	@echo "  compare-one       Compare one second (use T=<sec>)"
+	@echo "  compare-range     Compare range (use T0=<sec> T1=<sec>)"
+	@echo "  clean             Clean Swift build artifacts and temp frame dirs"
 
 build:
 	swift build -c release --package-path ElevatedMac
@@ -52,7 +77,7 @@ app: build
 	@rm -rf $(APP)
 	@mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	@cp $(BIN) $(APP)/Contents/MacOS/
-	@cp -r ElevatedMac/.build/release/ElevatedMac_ElevatedMac.bundle \
+	@cp ElevatedMac/.build/release/ElevatedMac_ElevatedMac.bundle/Shaders.metal \
 	        $(APP)/Contents/Resources/
 	@cp $(ICON_ICNS) $(APP)/Contents/Resources/
 	@/usr/libexec/PlistBuddy \
@@ -80,6 +105,40 @@ zip: app
 	@echo "Zipping to ~/Desktop/Elevated.zip..."
 	@cd $(dir $(APP)) && zip -qr ~/Desktop/Elevated.zip $(notdir $(APP))
 	@echo "  ~/Desktop/Elevated.zip — ready to send"
+
+# Build a source distribution archive from tracked files in the current working tree.
+# Output: dist/elevated-src-YYYYMMDD-HHMMSS.zip
+src-distribution:
+	@mkdir -p $(DIST_DIR)
+	@tmpdir=$$(mktemp -d /tmp/elevated-srcdist.XXXXXX); \
+	    trap 'rm -rf "$$tmpdir"' EXIT HUP INT TERM; \
+	    mkdir -p "$$tmpdir/$(SRC_DIST_NAME)"; \
+	    git ls-files | while IFS= read -r path; do \
+	        skip=0; \
+	        for excluded in $(SRC_DIST_EXCLUDE_FILES); do \
+	            if [ "$$path" = "$$excluded" ]; then \
+	                skip=1; \
+	                break; \
+	            fi; \
+	        done; \
+	        if [ "$$skip" -eq 1 ]; then \
+	            continue; \
+	        fi; \
+	        mkdir -p "$$tmpdir/$(SRC_DIST_NAME)/$$(dirname "$$path")"; \
+	        cp "$$path" "$$tmpdir/$(SRC_DIST_NAME)/$$path"; \
+	    done; \
+	    for path in $(SRC_DIST_OPTIONAL_FILES); do \
+	        if [ -f "$$path" ]; then \
+	            mkdir -p "$$tmpdir/$(SRC_DIST_NAME)/$$(dirname "$$path")"; \
+	            cp "$$path" "$$tmpdir/$(SRC_DIST_NAME)/$$path"; \
+	        fi; \
+	    done; \
+	    (cd "$$tmpdir" && zip -qr "$(CURDIR)/$(SRC_DIST_ARCHIVE)" "$(SRC_DIST_NAME)"); \
+	    echo ""; \
+	    echo "  Source archive: $(CURDIR)/$(SRC_DIST_ARCHIVE)"; \
+	    echo "  Extract and build:"; \
+	    echo "    unzip $(CURDIR)/$(SRC_DIST_ARCHIVE) -d /tmp"; \
+	    echo "    make -C /tmp/$(SRC_DIST_NAME) build"
 
 # Build a macOS .pkg installer — installs Elevated.app to /Applications
 # Always cleans Swift build artifacts first to guarantee a fresh binary.
