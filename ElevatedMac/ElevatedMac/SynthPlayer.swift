@@ -83,6 +83,42 @@ class SynthPlayer {
         print("[SynthPlayer] Playback started")
     }
 
+    private(set) var isPaused = false
+
+    func pause() {
+        guard !isPaused else { return }
+        player.pause()
+        isPaused = true
+    }
+
+    func resume() {
+        guard isPaused else { return }
+        player.play()
+        isPaused = false
+    }
+
+    /// Seek to time (seconds). Preserves paused/playing state.
+    /// AVAudioPlayerNode has no frame-offset API for PCMBuffer, so we copy the
+    /// remaining slice (~76 MB max) — fast enough for interactive seeking.
+    func seek(to time: Double) {
+        guard let src = buffer else { return }
+        let startFrame = Int(max(0, min(time * Self.sampleRate, Double(Self.totalSamples) - 1)))
+        let remaining  = Int(Self.totalSamples) - startFrame
+        guard remaining > 0 else { return }
+
+        let fmt = src.format
+        guard let slice = AVAudioPCMBuffer(pcmFormat: fmt,
+                                           frameCapacity: AVAudioFrameCount(remaining)) else { return }
+        slice.frameLength = AVAudioFrameCount(remaining)
+        for ch in 0..<Int(fmt.channelCount) {
+            slice.floatChannelData![ch].update(from: src.floatChannelData![ch].advanced(by: startFrame),
+                                               count: remaining)
+        }
+        player.stop()
+        player.scheduleBuffer(slice, at: nil, options: [], completionHandler: nil)
+        if !isPaused { player.play() }
+    }
+
     /// Current playback position in seconds.
     var currentTime: Double {
         guard let nodeTime = player.lastRenderTime,

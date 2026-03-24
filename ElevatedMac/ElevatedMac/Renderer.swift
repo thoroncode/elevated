@@ -167,6 +167,9 @@ class Renderer: NSObject, MTKViewDelegate {
 
     // Time
     var startTime: Double = 0
+    private(set) var isPaused = false
+    private var pauseTime: Double = 0
+    var onDraw: (() -> Void)?
     weak var view: MTKView?
 
     // Debug / capture
@@ -182,9 +185,41 @@ class Renderer: NSObject, MTKViewDelegate {
         debugOverlay = overlay
     }
 
+    // ── Playback time ──────────────────────────────────────────────────────
+    var currentTime: Double {
+        guard startTime > 0 else { return 0 }
+        let t = isPaused ? pauseTime : CACurrentMediaTime() - startTime
+        return max(0, min(t, 217.0))
+    }
+
     func start() {
         startTime = CACurrentMediaTime()
         view?.isPaused = false
+    }
+
+    func pause() {
+        guard !isPaused, startTime > 0 else { return }
+        pauseTime = CACurrentMediaTime() - startTime
+        isPaused = true
+    }
+
+    func resume() {
+        guard isPaused else { return }
+        startTime = CACurrentMediaTime() - pauseTime
+        isPaused = false
+    }
+
+    func seek(to time: Double) {
+        let t = max(0, min(time, 217.0))
+        startTime = CACurrentMediaTime() - t
+        if isPaused { pauseTime = t }
+    }
+
+    /// SMPTE-style timecode string: HH:MM:SS:FF at 60 fps.
+    static func timecode(_ t: Double, fps: Int = 60) -> String {
+        let tf = Int(max(0, t) * Double(fps))
+        return String(format: "%02d:%02d:%02d:%02d",
+                      tf / fps / 3600, tf / fps / 60 % 60, tf / fps % 60, tf % fps)
     }
 
     init(mtkView: MTKView, debug: Bool = false, capture: Bool = false) {
@@ -383,7 +418,7 @@ class Renderer: NSObject, MTKViewDelegate {
 
     // ── Per-frame update ───────────────────────────────────────────────────
     func updateUniforms(size: CGSize) {
-        let t = Float(CACurrentMediaTime() - startTime)
+        let t = Float(currentTime)
         uniforms.time = t
         uniforms.resolution = SIMD2(Float(size.width), Float(size.height))
 
@@ -516,15 +551,16 @@ class Renderer: NSObject, MTKViewDelegate {
         let camPos    = m1Camera(xdot: 0.0)
         let camTarget = m1Camera(xdot: 1.0)
 
+        let tc = Renderer.timecode(Double(t))
         let msg = String(format:
-            "frame %6d  t=%7.3fs  row=%d\n" +
+            "frame %6d  %@  row=%d\n" +
             "camPos    %7.3f %7.3f %7.3f\n" +
             "camTarget %7.3f %7.3f %7.3f\n" +
             "camSpeed  %7.4f  camFov %6.4f rad (%5.1f°)\n" +
             "terScale  %7.4f  season %5.3f\n" +
             "sunAngle  %7.4f  waterLv %6.4f\n" +
             "brightness%7.4f  contrast%6.4f",
-            frameNumber, t, Int(t * 44100) / 20840,
+            frameNumber, tc, Int(t * 44100) / 20840,
             camPos.x, camPos.y, camPos.z,
             camTarget.x, camTarget.y, camTarget.z,
             q0.z, q0.w, q0.w * (180 / Float.pi),
@@ -546,8 +582,8 @@ class Renderer: NSObject, MTKViewDelegate {
     }
 
     func draw(in view: MTKView) {
-        let t = CACurrentMediaTime() - startTime
-        if t >= 217.5 {
+        let t = currentTime
+        if t >= 217.0 && !isPaused {
             NSApplication.shared.terminate(nil)
             return
         }
@@ -618,6 +654,7 @@ class Renderer: NSObject, MTKViewDelegate {
         cmd.commit()
 
         maybeCaptureFrame(drawable: drawable)
+        onDraw?()
     }
 }
 
