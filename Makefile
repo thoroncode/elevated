@@ -1,4 +1,4 @@
-.PHONY: all build run debug capture app icon ref compare compare-range clean
+.PHONY: all build run debug capture app icon pkg ref compare compare-range clean
 
 BIN       = ElevatedMac/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -73,6 +73,20 @@ app: build icon
 	@echo "  Copy to Desktop:  cp -r $(CURDIR)/$(APP) ~/Desktop/"
 	@echo "  Run normal:       open $(CURDIR)/$(APP)"
 	@echo "  Run debug:        open $(CURDIR)/$(APP) --args --debug"
+
+# Build a macOS .pkg installer — installs Elevated.app to /Applications
+# The recipient double-clicks it and follows the standard installer wizard.
+pkg: app
+	@echo "Building Elevated.pkg..."
+	@pkgbuild \
+	    --install-location /Applications \
+	    --component $(APP) \
+	    --identifier org.rgba.elevated \
+	    --version 1.0 \
+	    Elevated.pkg
+	@echo ""
+	@echo "  Installer: $(CURDIR)/Elevated.pkg"
+	@echo "  Send this file — recipient double-clicks to install to /Applications"
 
 # Run and save one PNG per second to /tmp/elevated_cap/
 # Progress printed to console. Quit (Cmd-Q) after the demo ends (~215s).
