@@ -40,7 +40,7 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 |-------|---------|---------------|
 | q[0]  | camSeedX, camSeedY, camSpeed, camFov | /256, /256, /4096, /96 |
 | q[1]  | camPosY, camTarY, sunAngle, waterLevel | /64, (raw-128)/4, /32, (raw-192)/128 |
-| q[2]  | season, brightness, contrast, terScale | /256, (raw-128)/128, /128, /128 |
+| q[2]  | season, brightness, contrast, terScale | /256, (raw-128)/128, /128, (raw-128)/128 |
 | q[3]  | sunDir.x, sunDir.y=0.3125, sunDir.z, time | cos/sin(sunAngle) |
 | q[4]  | camPos.xyz from m1Camera, w=1 | world-space float3 |
 | q[5..12] | instrument sync for 8 light beams | samples since last note |
@@ -267,7 +267,10 @@ The original AVI at 3:35=215s sits between the visual blackout (211.71s) and aud
 
 ---
 
-## Known Remaining Issues (as of 2026-03-24)
+## Known Remaining Issues (as of 2026-03-25)
+
+### terScale Formula — Resolved (2026-03-25)
+Confirmed `(raw-128)/128` by hardware capture. See Parallels section above.
 
 ### Camera Path — Minor Residual Drift
 After the xdot fix, the camera is broadly correct — mountains are visible at all key timestamps and composition is close. Remaining drift is subtle: slightly different framing at specific moments (e.g. t=136). Likely sources:
@@ -345,21 +348,91 @@ Our capture is slightly warmer/more orange-tinted at some timestamps vs the cool
 | `ElevatedMac/ElevatedMac/Sync.swift` | Rocket-sync track data (all 12 params) |
 | `ElevatedMac/CSynth/synth.c` | C port of synth.asm (music synthesis + instrument sync) |
 | `ElevatedMac/CSynth/include/synth.h` | CSynth public API |
-| `tools/d3d9proxy/d3d9_proxy.c` | D3D9 vtable proxy for Wine (incomplete — see below) |
+| `tools/d3d9log/d3d9log.c` | D3D9 shader-constant logger DLL (Parallels, KERNEL32-only, vtable entry patch) |
 | `tools/extract_ref.sh` | Extract 1fps frames from elevated_8000.avi → /tmp/elevated_ref/ |
 | `tools/compare.sh` | Side-by-side comparison with ffmpeg hstack |
 | `Makefile` | `make run/debug/capture/ref/compare` |
 
 ---
 
-## Wine D3D9 Extraction Attempt (Blocked)
+## Wine D3D9 Extraction Attempt (Blocked — Superseded by Parallels)
 
 Tried to extract ground-truth camera data from `elevated_1920_1080.exe` under Wine by replacing `d3d9.dll` with a vtable-patching proxy. The existing `~/.wine/drive_c/windows/system32/d3d9.dll` is a **custom 12KB stub** (`d3d9_stub.c`) that:
 1. Intercepts D3D9 and provides a **fake device** (no GPU rendering)
 2. Dumps `d3d_code.bin` and `synth_code.bin` from the exe
 3. The demo's m1 shader never runs (no real pixel shader execution)
 
-**Conclusion**: Ground-truth camera extraction via Wine is not viable without replacing the d3d9 stub with a real GPU implementation. Option would be running under Windows or using a proper D3D9 → Vulkan/Metal translation layer.
+**Conclusion**: Ground-truth extraction via Wine is not viable. Superseded by the Parallels approach below.
+
+---
+
+## Ground-Truth Extraction via Parallels D3D9 Logging DLL (2026-03-25)
+
+### Motivation
+
+The terScale formula in the port — `(raw-128)/128` vs `raw/128` — could not be confirmed from source comments alone. The only way to get definitive ground truth was to capture the actual shader constant values (`q[0..4]`) from the original `elevated_1920_1080.exe` running under real Direct3D9.
+
+### Setup
+
+`elevated_1920_1080.exe` runs natively in a Parallels Windows VM. The Mac `~/Desktop` is mounted as the Windows Desktop (Parallels shared folder), so files dropped there are immediately visible on both sides.
+
+The demo is a Crinkler-packed executable, which means:
+- No PE import table — Crinkler resolves all imports at runtime via `LoadLibraryA` / `GetProcAddress`
+- `d3d9.dll` is loaded from the **executable's directory** first (standard Windows DLL search order)
+- Placing a custom `d3d9.dll` next to the exe is sufficient to intercept all D3D9 calls
+
+### DLL Implementation (`tools/d3d9log/d3d9log.c`)
+
+A 32-bit Windows DLL cross-compiled on Mac with `i686-w64-mingw32-gcc`. Key design decisions:
+
+**Vtable entry patching (not pointer replacement)**: The original design replaced `d3d->lpVtbl` with a heap-allocated copy. This crashed inside `IDirect3D9::CreateDevice` — the D3D9 runtime apparently validates that the vtable pointer still points into its own module's read-only memory. The correct technique:
+
+```c
+// Make the real vtable temporarily writable, patch the entry directly
+IDirect3D9Vtbl *vt = d3d->lpVtbl;
+DWORD old;
+VirtualProtect(vt, sizeof(IDirect3D9Vtbl), PAGE_READWRITE, &old);
+orig_CreateDevice = vt->CreateDevice;
+vt->CreateDevice  = hook_CreateDevice;
+VirtualProtect(vt, sizeof(IDirect3D9Vtbl), old, &old);
+```
+
+`d3d->lpVtbl` is never changed — D3D9's internal validation sees the same pointer as always.
+
+**No CRT dependency**: The MinGW-w64 toolchain defaults to UCRT (`api-ms-win-crt-*`), which may not be present in minimal VMs. Built with `-nostdlib`, providing `_DllMainCRTStartup` manually and using only KERNEL32 + a dynamically-loaded `msvcrt.dll` for `sprintf` (float formatting). The resulting DLL imports only `KERNEL32.dll`.
+
+**File I/O**: `CreateFileA` / `WriteFile` / `CloseHandle` — no stdio. The CSV and debug log are written next to the exe (= Windows Desktop = Mac `~/Desktop`).
+
+**Launching from Mac**: `open ~/Desktop/elevated_1920_1080.exe` triggers Parallels to run the exe, no manual Windows interaction needed.
+
+### Results — `elevated_q.csv`
+
+~12,700 frames (~7 minutes) captured. The `q[2].w` column (terScale) confirmed the formula by direct comparison:
+
+| Sync row | Raw value | `(raw-128)/128` | Captured `q[2].w` |
+|----------|-----------|-----------------|-------------------|
+| 0        | 200       | **0.562500**    | 0.562500 ✓        |
+| 26       | 140       | **0.093750**    | 0.093750 ✓        |
+| 120      | 255       | **0.992188**    | 0.992188 ✓        |
+
+All three match exactly. **The formula `(raw-128)/128` is confirmed 100% correct.**
+
+The alternative `raw/128` (which would map raw=200 → 1.5625, raw=140 → 1.09375) does not appear anywhere in the capture — ruling it out completely.
+
+### Negative terScale — Intentional Effect at t≈2:35
+
+Row 328 has raw=20 → terScale = `(20-128)/128 = −0.84375`. This runs from t≈155s to t≈170s. The negative value inverts the terrain height (mountains become valleys), producing a dramatic visual inversion. This is intentional demo effect — not a bug in the formula or the port.
+
+The "broken terrain slabs" seen previously at t=2:00 were caused by testing the wrong `raw/128` formula (which gave terScale≈2 and drove the camera underground), not by the negative-terScale region.
+
+### Status After Confirmation
+
+`Renderer.swift:475` already contains the correct formula:
+```swift
+let terScale = (syncParam(position, Sync.terScale) - 128.0) / 128.0
+```
+
+No code change required. The formula is now proven correct by hardware capture from the original exe.
 
 ---
 
