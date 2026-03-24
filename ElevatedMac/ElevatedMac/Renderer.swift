@@ -462,11 +462,12 @@ class Renderer: NSObject, MTKViewDelegate {
         let waterLevel = (syncParam(position, Sync.terWaterLevel) - 192.0) / 128.0
         uniforms.setQ(1, SIMD4(camPosY, camTarY, sunAngle, waterLevel))
 
-        // q[2]: season/256, (brightness-128)/128, contrast/128, (terScale-128)/128
+        // q[2]: season/256, (brightness-128)/128, contrast/128, terScale/128
+        // terScale is a positive height multiplier (like contrast) — range [0, ~2], NOT centred at 128.
         let season     = syncParam(position, Sync.terSeason)    / 256.0
         let brightness = (syncParam(position, Sync.imgBrightness) - 128.0) / 128.0
         let contrast   = syncParam(position, Sync.imgContrast)  / 128.0
-        let terScale   = (syncParam(position, Sync.terScale) - 128.0) / 128.0
+        let terScale   = syncParam(position, Sync.terScale) / 128.0
         uniforms.setQ(2, SIMD4(season, brightness, contrast, terScale))
 
         // q[3]: sun direction + time

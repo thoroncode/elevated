@@ -40,7 +40,7 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 |-------|---------|---------------|
 | q[0]  | camSeedX, camSeedY, camSpeed, camFov | /256, /256, /4096, /96 |
 | q[1]  | camPosY, camTarY, sunAngle, waterLevel | /64, (raw-128)/4, /32, (raw-192)/128 |
-| q[2]  | season, brightness, contrast, terScale | /256, (raw-128)/128, /128, (raw-128)/128 |
+| q[2]  | season, brightness, contrast, terScale | /256, (raw-128)/128, /128, /128 |
 | q[3]  | sunDir.x, sunDir.y=0.3125, sunDir.z, time | cos/sin(sunAngle) |
 | q[4]  | camPos.xyz from m1Camera, w=1 | world-space float3 |
 | q[5..12] | instrument sync for 8 light beams | samples since last note |
