@@ -75,8 +75,10 @@ app: build icon
 	@echo "  Run debug:        open $(CURDIR)/$(APP) --args --debug"
 
 # Build a macOS .pkg installer — installs Elevated.app to /Applications
-# The recipient double-clicks it and follows the standard installer wizard.
-pkg: app
+# Always cleans Swift build artifacts first to guarantee a fresh binary.
+pkg:
+	@swift package --package-path ElevatedMac clean
+	@$(MAKE) app
 	@echo "Building Elevated.pkg..."
 	@pkgbuild \
 	    --install-location /Applications \
