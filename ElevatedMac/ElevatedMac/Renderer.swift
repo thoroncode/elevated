@@ -425,11 +425,9 @@ class Renderer: NSObject, MTKViewDelegate {
         o += SIMD2(repeating: 0.1); let s8 = sampleNoise(o)
         let cz = 16 * cos(tt * s5 + 3 * s6) + 8 * cos(tt * s7 * 2 + 3 * s8)
 
-        // c.y = terScale * fbm(cx,cz, 8 octaves) + camPosY + camTarY * xdot
-        // Using 8 octaves (matching terrain shader) so camera never clips underground.
-        // Original HLSL used 3 octaves, but that underestimates fine-detail terrain height.
+        // c.y = terScale * fbm(cx,cz, 3 octaves) + camPosY + camTarY * xdot
         var cx_ = cx
-        var cy   = q2.w * cpuFbm(SIMD2(cx, cz), octaves: 8) + q1.x + q1.y * xdot
+        var cy   = q2.w * cpuFbm(SIMD2(cx, cz), octaves: 3) + q1.x + q1.y * xdot
         var cz_  = cz
 
         // Jitter: o+=q[3].w*.5; c.x+=.002*no(o+=.1); c.y+=.002*no(o+=.1); c.z+=.002*no(o+=.1)
@@ -464,12 +462,11 @@ class Renderer: NSObject, MTKViewDelegate {
         let waterLevel = (syncParam(position, Sync.terWaterLevel) - 192.0) / 128.0
         uniforms.setQ(1, SIMD4(camPosY, camTarY, sunAngle, waterLevel))
 
-        // q[2]: season/256, (brightness-128)/128, contrast/128, terScale/128
-        // terScale is unsigned: raw/128, range [0, ~2]. NOT centred at 128 (value=20 at row 328).
+        // q[2]: season/256, (brightness-128)/128, contrast/128, (terScale-128)/128
         let season     = syncParam(position, Sync.terSeason)    / 256.0
         let brightness = (syncParam(position, Sync.imgBrightness) - 128.0) / 128.0
         let contrast   = syncParam(position, Sync.imgContrast)  / 128.0
-        let terScale   = syncParam(position, Sync.terScale) / 128.0
+        let terScale   = (syncParam(position, Sync.terScale) - 128.0) / 128.0
         uniforms.setQ(2, SIMD4(season, brightness, contrast, terScale))
 
         // q[3]: sun direction + time
