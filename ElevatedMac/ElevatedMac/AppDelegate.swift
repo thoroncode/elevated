@@ -36,6 +36,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             backing: .buffered,
             defer: false)
         window.title = "Elevated — rgba/tbc (Metal port)"
+        window.tabbingMode = .disallowed   // suppress "Show Tab Bar" menu item
         window.contentView = mtkView
         window.center()
         window.makeKeyAndOrderFront(nil)
