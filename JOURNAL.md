@@ -368,6 +368,32 @@ Capture frames: `/tmp/elevated_cap/cap_XXXX.png` (1920×1080, scaled to 1280×72
 
 ---
 
+## GitHub Migration (2026-03-24)
+
+The repository was published to a dedicated private GitHub remote:
+
+- `git@github.com:thoroncode/elevated.git`
+
+The local repository is configured to keep project-specific GitHub settings inside `.git/config`:
+
+- repo-local commit name: `Petri Koistinen`
+- repo-local visible commit address: `thoron@iki.fi`
+- repo-local SSH command selects the dedicated key for this repository
+
+The private key is kept outside the repository under `~/.ssh/`. No credential material is stored in tracked files.
+
+Normal workflow:
+
+```bash
+git add ...
+git commit -m "..."
+git push
+```
+
+This keeps authorship stable for this project while leaving other repositories on the machine free to use different Git identities.
+
+---
+
 ## Key Visual Timestamps to Verify
 
 | Time | Expected | Status |
