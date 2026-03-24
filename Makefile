@@ -1,6 +1,8 @@
-.PHONY: all build run debug capture ref compare compare-range clean
+.PHONY: all build run debug capture app ref compare compare-range clean
 
 BIN = ElevatedMac/.build/release/ElevatedMac
+APP = Elevated.app
+APP_BIN = $(APP)/Contents/MacOS/ElevatedMac
 
 all: build
 
@@ -11,12 +13,37 @@ build:
 run: build
 	$(BIN)
 
-# Same binary, debug flag enables transport bar + overlay
-# $(BIN) --debug   (or just run the binary directly with --debug)
-
 # Transport bar + debug overlay + console log
 debug: build
 	$(BIN) --debug
+
+# Build a self-contained Elevated.app bundle (double-clickable, drag to Applications)
+#   Normal:  open Elevated.app
+#   Debug:   open Elevated.app --args --debug
+#   CLI:     Elevated.app/Contents/MacOS/ElevatedMac --debug
+app: build
+	@echo "Assembling $(APP)..."
+	@rm -rf $(APP)
+	@mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
+	@cp $(BIN) $(APP)/Contents/MacOS/
+	@cp -r ElevatedMac/.build/release/ElevatedMac_ElevatedMac.bundle \
+	        $(APP)/Contents/Resources/
+	@/usr/libexec/PlistBuddy \
+	    -c "Add :CFBundleName           string Elevated" \
+	    -c "Add :CFBundleIdentifier     string org.rgba.elevated" \
+	    -c "Add :CFBundleVersion        string 1.0" \
+	    -c "Add :CFBundleShortVersionString string 1.0" \
+	    -c "Add :CFBundleExecutable     string ElevatedMac" \
+	    -c "Add :CFBundlePackageType    string APPL" \
+	    -c "Add :NSPrincipalClass       string NSApplication" \
+	    -c "Add :NSHighResolutionCapable bool true" \
+	    -c "Add :LSMinimumSystemVersion string 13.0" \
+	    $(APP)/Contents/Info.plist
+	@codesign --force --deep --sign - $(APP)
+	@echo ""
+	@echo "  Double-click:  open $(APP)"
+	@echo "  Debug mode:    open $(APP) --args --debug"
+	@echo "  CLI direct:    $(APP_BIN) --debug"
 
 # Run and save one PNG per second to /tmp/elevated_cap/
 # Progress printed to console. Quit (Cmd-Q) after the demo ends (~215s).
