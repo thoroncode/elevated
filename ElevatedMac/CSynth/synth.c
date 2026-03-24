@@ -1,7 +1,7 @@
 /*
  * synth.c  —  C port of the Elevated (rgba/tbc, 2009) synthesizer.
  *
- * Source: ~/Downloads/mtt_iq_Elevated/ (MIT-licensed release by iq/Puryx/Mentor)
+ * Source: ~/Downloads/mtt_iq_Elevated/ (upstream source release by iq/Puryx/Mentor)
  * Ported from: src/synth.asm + src/synth_core.nh + src/music.asm
  *
  * Goal: perceptually correct output (not bit-perfect).
@@ -69,7 +69,7 @@ float osc_wave(float phase, float phase_shift, uint8_t type) {
 /* ────────────────────────────────────────────────────────────────────────── */
 
 /* NOTE: pattern_data, sequence_data, machine_tree_data are copied verbatim
- * from src/music.asm (MIT-licensed source by iq/Puryx/Mentor).           */
+ * from src/music.asm (upstream source by iq/Puryx/Mentor).               */
 static const uint8_t pattern_data[] = {
 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,61,0,0,0,0,0,0,0,61,0,0,0,
 0,0,61,0,0,0,0,0,61,127,61,127,0,0,0,0,60,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,

@@ -82,6 +82,7 @@ app: build
 	@cp ElevatedMac/.build/release/ElevatedMac_ElevatedMac.bundle/Shaders.metal \
 	        $(APP)/Contents/Resources/
 	@cp $(ICON_ICNS) $(APP)/Contents/Resources/
+	@cp LICENSE $(APP)/Contents/Resources/
 	@shortver=$$(printf '%s.%d.%s' $$(date +%y) $$(date +%-m) $$(date +%d)); \
 	 buildver=$$(date +%H.%M); \
 	 /usr/libexec/PlistBuddy \

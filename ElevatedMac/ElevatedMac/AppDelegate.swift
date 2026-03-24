@@ -10,6 +10,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private static let fullscreenCursorIdleDelay: TimeInterval = 0.1
 
     var window: NSWindow!
+    var aboutWindow: NSWindow?
     var renderer: Renderer!
     let synth = SynthPlayer()
     private var transportBar: TransportBar!
@@ -190,6 +191,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
     }
 
+    @objc private func showAboutWindow() {
+        if aboutWindow == nil {
+            aboutWindow = buildAboutWindow()
+        }
+        guard let aboutWindow else { return }
+        aboutWindow.center()
+        NSApp.activate(ignoringOtherApps: true)
+        aboutWindow.makeKeyAndOrderFront(nil)
+    }
+
     // ── Menu bar ───────────────────────────────────────────────────────────
 
     private func setupMenuBar() {
@@ -202,7 +213,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         appItem.submenu = appMenu
 
         appMenu.addItem(NSMenuItem(title: "About Elevated",
-                                   action: #selector(NSApplication.orderFrontStandardAboutPanel(_:)),
+                                   action: #selector(showAboutWindow),
                                    keyEquivalent: ""))
         appMenu.addItem(.separator())
         appMenu.addItem(NSMenuItem(title: "Hide Elevated",
@@ -334,6 +345,90 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     func windowWillExitFullScreen(_ notification: Notification) {
         fullscreenCursorActive = false
         deactivateFullscreenCursorPolicy()
+    }
+
+    private func buildAboutWindow() -> NSWindow {
+        let window = NSWindow(
+            contentRect: NSRect(x: 0, y: 0, width: 460, height: 390),
+            styleMask: [.titled, .closable],
+            backing: .buffered,
+            defer: false)
+        window.title = "About Elevated"
+        window.tabbingMode = .disallowed
+        window.isReleasedWhenClosed = false
+
+        let content = NSView(frame: window.contentRect(forFrameRect: window.frame))
+        content.wantsLayer = true
+        content.layer?.backgroundColor = NSColor.windowBackgroundColor.cgColor
+        window.contentView = content
+
+        let stack = NSStackView()
+        stack.orientation = .vertical
+        stack.alignment = .centerX
+        stack.spacing = 10
+        stack.translatesAutoresizingMaskIntoConstraints = false
+        content.addSubview(stack)
+
+        NSLayoutConstraint.activate([
+            stack.leadingAnchor.constraint(equalTo: content.leadingAnchor, constant: 28),
+            stack.trailingAnchor.constraint(equalTo: content.trailingAnchor, constant: -28),
+            stack.topAnchor.constraint(equalTo: content.topAnchor, constant: 24),
+            stack.bottomAnchor.constraint(lessThanOrEqualTo: content.bottomAnchor, constant: -24),
+        ])
+
+        let iconView = NSImageView()
+        iconView.image = NSApp.applicationIconImage
+        iconView.imageScaling = .scaleProportionallyUpOrDown
+        iconView.translatesAutoresizingMaskIntoConstraints = false
+        iconView.widthAnchor.constraint(equalToConstant: 64).isActive = true
+        iconView.heightAnchor.constraint(equalToConstant: 64).isActive = true
+        stack.addArrangedSubview(iconView)
+
+        let titleLabel = NSTextField(labelWithString: "Elevated")
+        titleLabel.font = NSFont.systemFont(ofSize: 28, weight: .semibold)
+        titleLabel.alignment = .center
+        stack.addArrangedSubview(titleLabel)
+
+        let bodyLabel = NSTextField(wrappingLabelWithString: loadAboutText())
+        bodyLabel.font = NSFont.systemFont(ofSize: 13)
+        bodyLabel.alignment = .center
+        bodyLabel.lineBreakMode = .byWordWrapping
+        bodyLabel.maximumNumberOfLines = 0
+        bodyLabel.preferredMaxLayoutWidth = 380
+        stack.addArrangedSubview(bodyLabel)
+
+        let versionLabel = NSTextField(labelWithString: aboutVersionString())
+        versionLabel.font = NSFont.systemFont(ofSize: 12)
+        versionLabel.textColor = .secondaryLabelColor
+        versionLabel.alignment = .center
+        stack.addArrangedSubview(versionLabel)
+
+        return window
+    }
+
+    private func loadAboutText() -> String {
+        let execURL = URL(fileURLWithPath: CommandLine.arguments[0])
+        let candidates: [URL?] = [
+            Bundle.main.url(forResource: "LICENSE", withExtension: nil),
+            Bundle.main.resourceURL?.appendingPathComponent("LICENSE"),
+            execURL.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Resources/LICENSE"),
+            execURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("LICENSE"),
+        ]
+
+        for url in candidates.compactMap({ $0 }) {
+            if let text = try? String(contentsOf: url, encoding: .utf8) {
+                return text.trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+        }
+
+        return "LICENSE not found."
+    }
+
+    private func aboutVersionString() -> String {
+        let info = Bundle.main.infoDictionary ?? [:]
+        let short = info["CFBundleShortVersionString"] as? String ?? "?"
+        let build = info["CFBundleVersion"] as? String ?? "?"
+        return "Version \(short) (\(build))"
     }
 }
 

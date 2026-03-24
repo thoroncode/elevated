@@ -10,7 +10,7 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 **Original**: `elevated_1920_1080.exe` — Direct3D9, HLSL shaders, x86 assembly synth.
 **Port**: `ElevatedMac/` — Metal 3-pass renderer, Swift CPU logic, C synth port.
 **Reference**: `elevated_8000.avi` — high-quality AVI of the original running natively.
-**Source**: `~/Downloads/mtt_iq_Elevated/` — MIT-licensed release by iq/Puryx/Mentor.
+**Source**: `~/Downloads/mtt_iq_Elevated/` — upstream source release by iq/Puryx/Mentor.
 
 ---
 
