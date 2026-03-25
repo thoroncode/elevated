@@ -31,6 +31,9 @@ public class ViewController: UIViewController {
 
         renderer = Renderer(mtkView: mtkView, debug: false, capture: false)
         mtkView.delegate = renderer
+        renderer.onDemoEnd = {
+            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { exit(0) }
+        }
 
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
         view.addGestureRecognizer(tap)

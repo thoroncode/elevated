@@ -190,6 +190,7 @@ public class Renderer: NSObject, MTKViewDelegate {
     public private(set) var isPaused = false
     private var pauseTime: Double = 0
     public var onDraw: (() -> Void)?
+    public var onDemoEnd: (() -> Void)?
     public weak var view: MTKView?
 
     // Debug / capture
@@ -626,6 +627,7 @@ public class Renderer: NSObject, MTKViewDelegate {
             NSApplication.shared.terminate(nil)
 #else
             pause()
+            onDemoEnd?()
 #endif
             return
         }

@@ -1,4 +1,4 @@
-# Elevated Mac Port — Development Journal
+# Elevated — Development Journal
 
 A log of discoveries, fixes, and decisions for future agent sessions.
 
@@ -8,7 +8,8 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 
 **Goal**: Pixel-perfect Metal/Swift port of the Elevated 4KB intro (rgba/tbc, Breakpoint 2009).
 **Original**: `elevated_1920_1080.exe` — Direct3D9, HLSL shaders, x86 assembly synth.
-**Port**: `ElevatedMac/` — Metal 3-pass renderer, Swift CPU logic, C synth port.
+**macOS port**: `elevated/ElevatedMac/` — Metal 3-pass renderer, Swift CPU logic, C synth port.
+**iPadOS port**: `elevated/ElevatedIOS/` + `ElevatedIOS.xcodeproj` — fullscreen landscape playback.
 **Reference**: `elevated_8000.avi` — high-quality AVI of the original running natively.
 **Source**: `~/Downloads/mtt_iq_Elevated/` — upstream source release by iq/Puryx/Mentor.
 
@@ -486,3 +487,71 @@ This keeps authorship stable for this project while leaving other repositories o
 | 0:17 | Dramatic mountain shot | **Fixed** — very close match |
 | 0:48 | Mountains | **Fixed** — nearly identical |
 | 1:32-1:37 | **Light beams synced to music** | **Fixed** — beams visible and music-synced |
+
+---
+
+## iPadOS Port (2026-03-25)
+
+### Architecture
+
+Package restructured into three targets inside `elevated/`:
+
+| Target | Platform | Contents |
+|--------|----------|----------|
+| `CSynth` | macOS + iOS | C synth, `-march=native` macOS only |
+| `ElevatedCore` | macOS + iOS | Renderer, Sync, SynthPlayer, Shaders.metal — all `public` |
+| `ElevatedMac` | macOS | AppDelegate, main.swift — AppKit, debug/transport/menus |
+| `ElevatedIOS` | iOS | AppDelegate, ViewController — UIKit, `#if canImport(UIKit)` |
+
+iOS app shell: `ElevatedIOS.xcodeproj` + `App/main.swift` + `App/Info.plist`.
+iPad-only (TARGETED_DEVICE_FAMILY=2), landscape-locked, iPadOS 26.0 deployment target.
+
+### macOS-specific code in ElevatedCore (`#if os(macOS)`)
+
+- `DebugOverlay` class (NSTextField, NSColor, NSFont, NSView)
+- `debugOverlay` property + `installDebugOverlay(in:)`
+- `captureNextFramePath`, `maybeCaptureFrame`, `saveDrawable`, `savePNG` (NSBitmapImageRep)
+- `emitDebug()` call in `draw()`
+- `NSApplication.shared.terminate(nil)` — replaced with `pause()` on iOS
+
+### Metal Library Loading (critical — three build configurations)
+
+Xcode compiles `Shaders.metal` to `default.metallib` inside `elevated_ElevatedCore.bundle`.
+The CLI `swift build` keeps it as source in the same bundle. `Renderer.buildPipelines` tries:
+
+1. `Bundle.module.url(forResource: "default", withExtension: "metallib")` — **Xcode iOS/Mac builds**
+2. `device.makeDefaultLibrary()` — **Mac .app via Makefile** (Shaders.metal copied to Contents/Resources)
+3. `Bundle.module` / `Bundle.main` source + `device.makeLibrary(source:)` — **Mac CLI `swift build`**
+
+If you skip step 1 and only try source compilation, the iOS build crashes with `EXC_BREAKPOINT`
+in `buildPipelines` because the `.metal` source isn't in the bundle — only the compiled `.metallib` is.
+
+### AVAudioSession (iOS only)
+
+Must call before any playback:
+```swift
+try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+try AVAudioSession.sharedInstance().setActive(true)
+```
+Done in `ViewController.activateAudioSession()` before synthesis starts.
+
+### Build commands
+
+```bash
+# macOS
+swift build -c release --package-path elevated --product ElevatedMac
+
+# iOS simulator (resolve once, then build)
+xcodebuild -project ElevatedIOS.xcodeproj -resolvePackageDependencies
+xcodebuild -project ElevatedIOS.xcodeproj -scheme Elevated \
+    -destination "id=<SIMULATOR_UDID>" -configuration Debug build
+
+# Install + launch on simulator
+xcrun simctl install <UDID> path/to/Elevated.app </dev/null
+xcrun simctl launch <UDID> org.rgba.elevated </dev/null
+
+# Physical iPad (after pairing in Xcode)
+xcrun devicectl device install app --device <UDID> Elevated.app
+xcrun devicectl device process launch --device <UDID> org.rgba.elevated
+```
+
