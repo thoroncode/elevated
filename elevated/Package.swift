@@ -2,8 +2,8 @@
 import PackageDescription
 
 let package = Package(
-    name: "ElevatedMac",
-    platforms: [.macOS(.v13)],
+    name: "elevated",
+    platforms: [.macOS(.v13), .iOS(.v16)],
     targets: [
         .target(
             name: "CSynth",

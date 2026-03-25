@@ -1,6 +1,6 @@
 .PHONY: all help build run debug capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean
 
-BIN       = ElevatedMac/.build/release/ElevatedMac
+BIN       = elevated/.build/release/ElevatedMac
 APP       = Elevated.app
 APP_BIN   = $(APP)/Contents/MacOS/ElevatedMac
 ICON_TIME = 185.867
@@ -36,7 +36,7 @@ help:
 	@echo "  clean             Clean Swift build artifacts and temp frame dirs"
 
 build:
-	swift build -c release --package-path ElevatedMac
+	swift build -c release --package-path elevated
 
 # Normal playback: fullscreen by default, with a 5s startup delay.
 run: app
@@ -79,7 +79,7 @@ app: build
 	@rm -rf $(APP)
 	@mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	@cp $(BIN) $(APP)/Contents/MacOS/
-	@cp ElevatedMac/.build/release/ElevatedMac_ElevatedMac.bundle/Shaders.metal \
+	@cp elevated/.build/release/elevated_ElevatedMac.bundle/Shaders.metal \
 	        $(APP)/Contents/Resources/
 	@cp $(ICON_ICNS) $(APP)/Contents/Resources/
 	@cp LICENSE $(APP)/Contents/Resources/
@@ -151,7 +151,7 @@ src-distribution:
 # Build a macOS .pkg installer — installs Elevated.app to /Applications
 # Always cleans Swift build artifacts first to guarantee a fresh binary.
 pkg:
-	@swift package --package-path ElevatedMac clean
+	@swift package --package-path elevated clean
 	@$(MAKE) app
 	@echo "Building Elevated.pkg..."
 	@rm -rf /tmp/elevated_pkg_stage && cp -r $(APP) /tmp/elevated_pkg_stage
@@ -205,5 +205,5 @@ compare-range:
 	bash tools/compare.sh $(T0) $(T1)
 
 clean:
-	swift package --package-path ElevatedMac clean
+	swift package --package-path elevated clean
 	rm -rf /tmp/elevated_ref /tmp/elevated_cap /tmp/elevated_cmp

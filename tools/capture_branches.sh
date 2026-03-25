@@ -110,7 +110,7 @@ for branch in "${branches[@]}"; do
     worktrees+=("$wt")
 
     make -C "$wt" build >/dev/null
-    "$wt"/ElevatedMac/.build/release/ElevatedMac --icon-at="$time_arg" --icon-out="$out_png" >/dev/null
+    "$wt"/elevated/.build/release/ElevatedMac --icon-at="$time_arg" --icon-out="$out_png" >/dev/null
 
     sha=$(shasum -a 256 "$out_png" | awk '{print $1}')
     printf '%s %s %s\n' "$branch" "$commit" "$sha" | tee -a "$summary_file"

@@ -263,7 +263,7 @@ class Renderer: NSObject, MTKViewDelegate {
         do {
             // Load Shaders.metal portably:
             //   .app bundle  → Bundle.main (Contents/Resources/Shaders.metal)
-            //   CLI build    → ElevatedMac_ElevatedMac.bundle next to the executable
+            //   CLI build    → elevated_ElevatedMac.bundle next to the executable
             let srcURL: URL? = {
                 if let u = Bundle.main.url(forResource: "Shaders", withExtension: "metal") {
                     return u
@@ -271,7 +271,7 @@ class Renderer: NSObject, MTKViewDelegate {
                 let execDir = URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0])
                     .deletingLastPathComponent()
                 let candidates = [
-                    execDir.appendingPathComponent("ElevatedMac_ElevatedMac.bundle/Shaders.metal"),
+                    execDir.appendingPathComponent("elevated_ElevatedMac.bundle/Shaders.metal"),
                     execDir.appendingPathComponent("Shaders.metal"),
                 ]
                 return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
