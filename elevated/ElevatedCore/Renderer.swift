@@ -267,29 +267,29 @@ public class Renderer: NSObject, MTKViewDelegate {
     func buildPipelines(mtkView: MTKView) {
         let lib: MTLLibrary
         do {
-            // Load Shaders.metal portably:
-            //   .app bundle  → Bundle.main (Contents/Resources/Shaders.metal)
-            //   CLI build    → elevated_ElevatedMac.bundle next to the executable
-            let srcURL: URL? = {
-                if let u = Bundle.main.url(forResource: "Shaders", withExtension: "metal") {
-                    return u
+            // Load the Metal library portably across three build configurations:
+            //   Xcode build (iOS + Mac): .process("Shaders.metal") compiles to
+            //     default.metallib inside elevated_ElevatedCore.bundle — load it directly.
+            //   Mac .app (Makefile): Shaders.metal copied to Contents/Resources/ —
+            //     device.makeDefaultLibrary() finds it there.
+            //   Mac CLI (swift build): Shaders.metal source in elevated_ElevatedCore.bundle —
+            //     compile at runtime.
+            if let metallibURL = Bundle.module.url(forResource: "default", withExtension: "metallib") {
+                lib = try device.makeLibrary(URL: metallibURL)
+            } else if let defaultLib = device.makeDefaultLibrary() {
+                lib = defaultLib
+            } else {
+                let srcURL = Bundle.module.url(forResource: "Shaders", withExtension: "metal")
+                           ?? Bundle.main.url(forResource: "Shaders", withExtension: "metal")
+                guard let srcURL, let src = try? String(contentsOf: srcURL, encoding: .utf8) else {
+                    fatalError("Metal library not found (checked module bundle and Bundle.main)")
                 }
-                let execDir = URL(fileURLWithPath: ProcessInfo.processInfo.arguments[0])
-                    .deletingLastPathComponent()
-                let candidates = [
-                    execDir.appendingPathComponent("elevated_ElevatedMac.bundle/Shaders.metal"),
-                    execDir.appendingPathComponent("Shaders.metal"),
-                ]
-                return candidates.first { FileManager.default.fileExists(atPath: $0.path) }
-            }()
-            guard let srcURL, let src = try? String(contentsOf: srcURL, encoding: .utf8) else {
-                fatalError("Shaders.metal not found (checked Bundle.main and path next to binary)")
+                let opts = MTLCompileOptions()
+                opts.languageVersion = .version3_0
+                lib = try device.makeLibrary(source: src, options: opts)
             }
-            let opts = MTLCompileOptions()
-            opts.languageVersion = .version3_0
-            lib = try device.makeLibrary(source: src, options: opts)
         } catch {
-            fatalError("Metal shader compile error: \(error)")
+            fatalError("Metal library error: \(error)")
         }
 
         let gbufDesc = MTLRenderPipelineDescriptor()

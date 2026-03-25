@@ -79,7 +79,7 @@ app: build
 	@rm -rf $(APP)
 	@mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	@cp $(BIN) $(APP)/Contents/MacOS/
-	@cp elevated/.build/release/elevated_ElevatedMac.bundle/Shaders.metal \
+	@cp elevated/.build/release/elevated_ElevatedCore.bundle/Shaders.metal \
 	        $(APP)/Contents/Resources/
 	@cp $(ICON_ICNS) $(APP)/Contents/Resources/
 	@cp LICENSE $(APP)/Contents/Resources/

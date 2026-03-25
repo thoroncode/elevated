@@ -4,6 +4,10 @@ import PackageDescription
 let package = Package(
     name: "elevated",
     platforms: [.macOS(.v13), .iOS("26.0")],
+    products: [
+        .library(name: "ElevatedCore", targets: ["ElevatedCore"]),
+        .library(name: "ElevatedIOS",  targets: ["ElevatedIOS"]),
+    ],
     targets: [
         // ── C synth (shared) ──────────────────────────────────────────────
         .target(
