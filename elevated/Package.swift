@@ -3,38 +3,66 @@ import PackageDescription
 
 let package = Package(
     name: "elevated",
-    platforms: [.macOS(.v13), .iOS(.v16)],
+    platforms: [.macOS(.v13), .iOS("26.0")],
     targets: [
+        // ── C synth (shared) ──────────────────────────────────────────────
         .target(
             name: "CSynth",
             path: "CSynth",
             publicHeadersPath: "include",
             cSettings: [
-                .unsafeFlags(["-O3", "-ffast-math", "-march=native"])
+                .unsafeFlags(["-O3", "-ffast-math", "-march=native"], .when(platforms: [.macOS])),
+                .unsafeFlags(["-O3", "-ffast-math"],                  .when(platforms: [.iOS])),
             ],
             linkerSettings: [
                 .linkedFramework("Accelerate")
             ]
         ),
-        .executableTarget(
-            name: "ElevatedMac",
+
+        // ── Shared Metal renderer + sync + audio (macOS + iOS) ────────────
+        .target(
+            name: "ElevatedCore",
             dependencies: ["CSynth"],
-            path: "ElevatedMac",
+            path: "ElevatedCore",
             resources: [
                 .process("Shaders.metal")
             ],
             swiftSettings: [
                 .unsafeFlags(["-framework", "Metal",
                               "-framework", "MetalKit",
-                              "-framework", "Cocoa",
                               "-framework", "AVFoundation"])
             ],
             linkerSettings: [
                 .linkedFramework("Metal"),
                 .linkedFramework("MetalKit"),
-                .linkedFramework("Cocoa"),
                 .linkedFramework("AVFoundation"),
             ]
-        )
+        ),
+
+        // ── macOS app (AppKit, debug overlay, transport bar) ──────────────
+        .executableTarget(
+            name: "ElevatedMac",
+            dependencies: ["ElevatedCore"],
+            path: "ElevatedMac",
+            swiftSettings: [
+                .unsafeFlags(["-framework", "Cocoa"])
+            ],
+            linkerSettings: [
+                .linkedFramework("Cocoa"),
+            ]
+        ),
+
+        // ── iPadOS app (UIKit, fullscreen playback) ───────────────────────
+        .target(
+            name: "ElevatedIOS",
+            dependencies: ["ElevatedCore"],
+            path: "ElevatedIOS",
+            swiftSettings: [
+                .unsafeFlags(["-framework", "UIKit"])
+            ],
+            linkerSettings: [
+                .linkedFramework("UIKit"),
+            ]
+        ),
     ]
 )

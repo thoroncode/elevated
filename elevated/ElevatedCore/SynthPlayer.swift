@@ -5,7 +5,7 @@ import Foundation
 import AVFoundation
 import CSynth
 
-class SynthPlayer {
+public class SynthPlayer {
     static let sampleRate: Double = 44100
     static let totalSamples: AVAudioFrameCount = AVAudioFrameCount(ELEVATED_TOTAL_SAMPLES)
 
@@ -13,9 +13,11 @@ class SynthPlayer {
     private let player   = AVAudioPlayerNode()
     private var buffer: AVAudioPCMBuffer?
 
+    public init() {}
+
     /// Synthesize and enqueue the audio.  Runs synthesis on a background thread;
     /// calls completion(success) on the main thread when done.
-    func synthesize(completion: @escaping (Bool) -> Void) {
+    public func synthesize(completion: @escaping (Bool) -> Void) {
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
 
@@ -38,7 +40,7 @@ class SynthPlayer {
             let t0 = Date()
             elevated_generate_music(flat)
             let elapsed = -t0.timeIntervalSinceNow
-            print("[SynthPlayer] Synthesis done in \(String(format: "%.1f", elapsed))s")
+            print("[SynthPlayer] Synthesis done in \(String(format: "%.1f", elapsed))s)")
 
             // De-interleave flat [L,R,L,R,…] → AVAudioPCMBuffer (non-interleaved)
             guard let L = buf.floatChannelData?[0],
@@ -64,7 +66,7 @@ class SynthPlayer {
         }
     }
 
-    func play() {
+    public func play() {
         guard let buffer = buffer else { return }
 
         let fmt = buffer.format
@@ -83,20 +85,20 @@ class SynthPlayer {
         print("[SynthPlayer] Playback started")
     }
 
-    private(set) var isPaused = false
+    public private(set) var isPaused = false
 
-    var isMuted: Bool {
+    public var isMuted: Bool {
         get { engine.mainMixerNode.outputVolume == 0 }
         set { engine.mainMixerNode.outputVolume = newValue ? 0 : 1 }
     }
 
-    func pause() {
+    public func pause() {
         guard !isPaused else { return }
         player.pause()
         isPaused = true
     }
 
-    func resume() {
+    public func resume() {
         guard isPaused else { return }
         player.play()
         isPaused = false
@@ -105,7 +107,7 @@ class SynthPlayer {
     /// Seek to time (seconds). Preserves paused/playing state.
     /// AVAudioPlayerNode has no frame-offset API for PCMBuffer, so we copy the
     /// remaining slice (~76 MB max) — fast enough for interactive seeking.
-    func seek(to time: Double) {
+    public func seek(to time: Double) {
         guard let src = buffer else { return }
         let startFrame = Int(max(0, min(time * Self.sampleRate, Double(Self.totalSamples) - 1)))
         let remaining  = Int(Self.totalSamples) - startFrame
@@ -125,7 +127,7 @@ class SynthPlayer {
     }
 
     /// Current playback position in seconds.
-    var currentTime: Double {
+    public var currentTime: Double {
         guard let nodeTime = player.lastRenderTime,
               let playerTime = player.playerTime(forNodeTime: nodeTime) else { return 0 }
         return Double(playerTime.sampleTime) / Self.sampleRate

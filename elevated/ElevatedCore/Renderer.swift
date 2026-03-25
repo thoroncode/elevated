@@ -107,9 +107,12 @@ func makeNoiseTexture(device: MTLDevice) -> (MTLTexture, [Float]) {
     return (tex, pixels)
 }
 
-// ─── Debug overlay ────────────────────────────────────────────────────────────
+// ─── Debug overlay (macOS only) ───────────────────────────────────────────────
+#if os(macOS)
+import AppKit
+
 /// NSTextField overlay shown in --debug mode. Lives above the Metal view.
-class DebugOverlay {
+public class DebugOverlay {
     let label: NSTextField
 
     init() {
@@ -125,30 +128,31 @@ class DebugOverlay {
         label.cell?.wraps       = true
     }
 
-    var isHidden: Bool {
+    public var isHidden: Bool {
         get { label.isHidden }
         set { label.isHidden = newValue }
     }
 
-    func install(in view: NSView) {
+    public func install(in view: NSView) {
         view.addSubview(label)
     }
 
-    func update(_ text: String) {
+    public func update(_ text: String) {
         DispatchQueue.main.async { [weak self] in
             self?.label.stringValue = text
         }
     }
 }
+#endif
 
 // ─── Demo duration (exact, derived from audio sample count) ──────────────────
 // ELEVATED_TOTAL_SAMPLES = 9568256, sampleRate = 44100 Hz → 216.967s
 // Fade-to-black starts row 424 → t=200.37s; fully black row 448 → t=211.71s
 // Pure black tail: 211.71s→216.97s (5.26s). Total dark ending: 16.6s.
-let kDemoDuration: Double = Double(ELEVATED_TOTAL_SAMPLES) / 44100.0
+public let kDemoDuration: Double = Double(ELEVATED_TOTAL_SAMPLES) / 44100.0
 
 // ─── Renderer ─────────────────────────────────────────────────────────────────
-class Renderer: NSObject, MTKViewDelegate {
+public class Renderer: NSObject, MTKViewDelegate {
     let device: MTLDevice
     let cmdQueue: MTLCommandQueue
     var uniforms = Uniforms(
@@ -182,63 +186,65 @@ class Renderer: NSObject, MTKViewDelegate {
     var noisePixels: [Float] = []
 
     // Time
-    var startTime: Double = 0
-    private(set) var isPaused = false
+    public var startTime: Double = 0
+    public private(set) var isPaused = false
     private var pauseTime: Double = 0
-    var onDraw: (() -> Void)?
-    weak var view: MTKView?
+    public var onDraw: (() -> Void)?
+    public weak var view: MTKView?
 
     // Debug / capture
-    var debugMode: Bool
-    let captureMode: Bool           // --capture: save one PNG per second to /tmp/elevated_cap/
-    var frameNumber: Int = 0
-    var lastCapturedSecond: Int = -1
-    var debugOverlay: DebugOverlay?
+    public var debugMode: Bool
+    public let captureMode: Bool    // --capture: save one PNG per second to /tmp/elevated_cap/
+    public var frameNumber: Int = 0
+    public var lastCapturedSecond: Int = -1
+#if os(macOS)
+    public var debugOverlay: DebugOverlay?
 
-    func installDebugOverlay(in view: NSView) {
+    public func installDebugOverlay(in view: NSView) {
         let overlay = DebugOverlay()
         overlay.install(in: view)
         debugOverlay = overlay
     }
+#endif
 
     // ── Playback time ──────────────────────────────────────────────────────
-    var currentTime: Double {
+    public var currentTime: Double {
         guard startTime > 0 else { return 0 }
         let t = isPaused ? pauseTime : CACurrentMediaTime() - startTime
         return max(0, min(t, kDemoDuration))
     }
 
-    func start() {
+    public func start() {
         startTime = CACurrentMediaTime()
         view?.isPaused = false
     }
 
-    func pause() {
+    public func pause() {
         guard !isPaused, startTime > 0 else { return }
         pauseTime = CACurrentMediaTime() - startTime
         isPaused = true
     }
 
-    func resume() {
+    public func resume() {
         guard isPaused else { return }
         startTime = CACurrentMediaTime() - pauseTime
         isPaused = false
     }
 
-    func seek(to time: Double) {
+    public func seek(to time: Double) {
         let t = max(0, min(time, kDemoDuration))
         startTime = CACurrentMediaTime() - t
         if isPaused { pauseTime = t }
     }
 
     /// SMPTE-style timecode string: HH:MM:SS:FF at 60 fps.
-    static func timecode(_ t: Double, fps: Int = 60) -> String {
+    public static func timecode(_ t: Double, fps: Int = 60) -> String {
         let tf = Int(max(0, t) * Double(fps))
         return String(format: "%02d:%02d:%02d:%02d",
                       tf / fps / 3600, tf / fps / 60 % 60, tf / fps % 60, tf % fps)
     }
 
-    init(mtkView: MTKView, debug: Bool = false, capture: Bool = false) {
+    public init(mtkView: MTKView, debug: Bool = false, capture: Bool = false) {
         self.debugMode   = debug
         self.captureMode = capture
         self.device   = mtkView.device!
@@ -511,10 +517,10 @@ class Renderer: NSObject, MTKViewDelegate {
         uniforms.vi = simd_inverse(uniforms.v)
     }
 
-    // ── Frame capture ──────────────────────────────────────────────────────
-
+    // ── Frame capture (macOS only) ─────────────────────────────────────────
+#if os(macOS)
     /// If set, the next rendered frame is saved to this path then the app exits.
-    var captureNextFramePath: String? = nil
+    public var captureNextFramePath: String? = nil
 
     // Saves the final drawable as /tmp/elevated_cap/cap_XXXX.png once per second.
     func maybeCaptureFrame(drawable: CAMetalDrawable) {
@@ -530,7 +536,7 @@ class Renderer: NSObject, MTKViewDelegate {
     }
 
     // Reads back a drawable texture and saves it as a PNG.
-    func saveDrawable(_ drawable: CAMetalDrawable, to path: String) {
+    public func saveDrawable(_ drawable: CAMetalDrawable, to path: String) {
         let tex = drawable.texture
         let w = tex.width, h = tex.height
         let bpr = w * 4
@@ -606,16 +612,21 @@ class Renderer: NSObject, MTKViewDelegate {
         // Screen overlay
         debugOverlay?.update(msg)
     }
+#endif
 
     // ── MTKViewDelegate ────────────────────────────────────────────────────
-    func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
+    public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         rebuildOffscreen(size: size)
     }
 
-    func draw(in view: MTKView) {
+    public func draw(in view: MTKView) {
         let t = currentTime
         if t >= kDemoDuration && !isPaused && !debugMode {
+#if os(macOS)
             NSApplication.shared.terminate(nil)
+#else
+            pause()
+#endif
             return
         }
 
@@ -624,7 +635,9 @@ class Renderer: NSObject, MTKViewDelegate {
 
         updateUniforms(size: view.drawableSize)
         frameNumber += 1
+#if os(macOS)
         if debugMode { emitDebug() }
+#endif
         guard let cmd = cmdQueue.makeCommandBuffer() else { return }
 
         // ── Pass 1: G-buffer ──────────────────────────────────────────────
@@ -685,6 +698,7 @@ class Renderer: NSObject, MTKViewDelegate {
         cmd.present(drawable)
         cmd.commit()
 
+#if os(macOS)
         maybeCaptureFrame(drawable: drawable)
 
         if let path = captureNextFramePath {
@@ -693,6 +707,7 @@ class Renderer: NSObject, MTKViewDelegate {
             print("[icon] saved \(path)")
             DispatchQueue.main.async { NSApplication.shared.terminate(nil) }
         }
+#endif
 
         onDraw?()
     }

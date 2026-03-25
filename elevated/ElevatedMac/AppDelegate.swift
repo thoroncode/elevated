@@ -4,6 +4,7 @@
 import Cocoa
 import MetalKit
 import AVFoundation
+import ElevatedCore
 
 class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private static let releaseStartupDelay: TimeInterval = 5

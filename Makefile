@@ -36,7 +36,7 @@ help:
 	@echo "  clean             Clean Swift build artifacts and temp frame dirs"
 
 build:
-	swift build -c release --package-path elevated
+	swift build -c release --package-path elevated --product ElevatedMac
 
 # Normal playback: fullscreen by default, with a 5s startup delay.
 run: app
