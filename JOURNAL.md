@@ -551,7 +551,32 @@ xcrun simctl install <UDID> path/to/Elevated.app </dev/null
 xcrun simctl launch <UDID> org.rgba.elevated </dev/null
 
 # Physical iPad (after pairing in Xcode)
-xcrun devicectl device install app --device <UDID> Elevated.app
+xcodebuild -project ElevatedIOS.xcodeproj -scheme Elevated \
+    -destination "platform=iOS,name=pk-ipad" -configuration Debug \
+    -allowProvisioningUpdates build
+xcrun devicectl device install app --device <UDID> path/to/Elevated.app
 xcrun devicectl device process launch --device <UDID> org.rgba.elevated
 ```
+
+**Note:** First run on a physical device requires trusting the developer profile:
+Settings → General → VPN & Device Management → [your Apple ID] → Trust.
+With a free Apple ID the profile expires after 7 days and the app must be reinstalled.
+
+### End-of-demo behaviour (iOS)
+
+On macOS the app calls `NSApplication.shared.terminate(nil)` when the demo ends.
+On iOS: the renderer pauses on the last frame, then `Renderer.onDemoEnd` fires and
+`ViewController` calls `exit(0)` after a 5-second hold.
+
+### App icon
+
+`App/Assets.xcassets/AppIcon.appiconset/icon_1024.png` — 1024×1024 resized from
+`assets/icon_source.png` (the same frame used for the macOS `.icns`).
+Xcode picks it up via `ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon` in the target
+build settings.
+
+### Status — confirmed working
+
+- iPad Pro 13-inch M5 (iPadOS 26.2 simulator) — synthesis ~1.1 s, full playback, exits after show
+- iPad Pro 12.9-inch 6th gen / iPad14,6 (physical device, iPadOS 26.x) — full playback confirmed
 
