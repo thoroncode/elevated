@@ -1,4 +1,4 @@
-.PHONY: all help build run debug capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-size 4k-shaders 4k-run 4k-clean
+.PHONY: all help build run debug capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-size 4k-shaders 4k-tables 4k-run 4k-clean
 
 BIN       = elevated/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -39,6 +39,7 @@ help:
 	@echo "  4k                Build size-optimized binary (ObjC + inline shaders)"
 	@echo "  4k-report         Build and print the detailed 4K size report"
 	@echo "  4k-shaders        Regenerate shaders.h from Shaders.metal"
+	@echo "  4k-tables         Regenerate packed synth tables"
 	@echo "  4k-size           Alias for 4k-report"
 	@echo "  4k-run            Build and run the 4K version"
 	@echo "  4k-clean          Clean 4K build artifacts"
@@ -231,6 +232,9 @@ clean:
 
 4k-shaders:
 	$(MAKE) -C elevated4k shaders
+
+4k-tables:
+	$(MAKE) -C elevated4k tables
 
 4k-size:
 	$(MAKE) -C elevated4k size

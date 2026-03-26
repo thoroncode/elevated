@@ -53,9 +53,12 @@ LDFLAGS = \
 SRCS    = main.m $(SYNTH_DIR)/synth.c
 SHADERS = ../elevated/ElevatedCore/Shaders.metal
 SHADER_TOOL = strip_shaders.py
+TABLE_SRC = $(SYNTH_DIR)/music_tables_raw.h
+TABLE_HDR = $(SYNTH_DIR)/music_tables_packed.h
+TABLE_TOOL = pack_synth_tables.py
 REPORT  = report_binary.py
 
-.PHONY: all size report run shaders clean
+.PHONY: all size report run shaders tables clean
 
 all: $(STRIPPED)
 
@@ -63,6 +66,8 @@ all: $(STRIPPED)
 # The resulting C string is what gets compiled at runtime via
 # [MTLDevice newLibraryWithSource:options:error:].
 shaders: shaders.h
+
+tables: $(TABLE_HDR)
 
 shaders.h: $(SHADERS) $(SHADER_TOOL)
 	@echo "Generating shaders.h from $(SHADERS) (comments stripped)..."
@@ -73,10 +78,15 @@ shaders.h: $(SHADERS) $(SHADER_TOOL)
 	@printf '    ;\n' >> shaders.h
 	@echo "  shaders.h written ($$(wc -c < shaders.h) bytes)"
 
+$(TABLE_HDR): $(TABLE_SRC) $(TABLE_TOOL)
+	@echo "Packing synth tables from $(TABLE_SRC)..."
+	@python3 $(TABLE_TOOL) $(TABLE_SRC) $(TABLE_HDR)
+	@echo "  $(TABLE_HDR) written ($$(wc -c < $(TABLE_HDR)) bytes)"
+
 $(OUTDIR):
 	@mkdir -p $(OUTDIR)
 
-$(BIN): $(SRCS) shaders.h | $(OUTDIR)
+$(BIN): $(SRCS) shaders.h $(TABLE_HDR) | $(OUTDIR)
 	$(CC) $(CFLAGS) $(LDFLAGS) $(SRCS) -o $(BIN)
 
 $(STRIPPED): $(BIN)

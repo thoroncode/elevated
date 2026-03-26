@@ -12,11 +12,11 @@ from pathlib import Path
 KNOWN_CONST_SYMBOLS = [
     "_kSyncData",
     "_kMSLSource",
-    "_machine_tree_data",
+    "_kMachineTreeDataPacked",
     "_ENV_STOP",
     "_ENV_NORMAL",
-    "_sequence_data",
-    "_pattern_data",
+    "_kSequenceDataPacked",
+    "_kPatternDataPacked",
 ]
 
 PRESSURE_SECTIONS = {
@@ -114,17 +114,23 @@ def parse_segment_layout(path: Path) -> list[dict]:
     return segments
 
 
-def parse_symbols(path: Path) -> dict[str, int]:
-    symbols = {}
+def parse_symbols(path: Path) -> tuple[dict[str, tuple[int, str]], list[tuple[int, str, str]]]:
+    by_name = {}
+    by_addr = []
     for line in run("nm", "-nm", str(path)).splitlines():
         parts = line.split()
-        if not parts:
+        if len(parts) < 4:
             continue
         head = parts[0]
         if not all(ch in "0123456789abcdefABCDEF" for ch in head):
             continue
-        symbols[parts[-1]] = int(head, 16)
-    return symbols
+        section = parts[1].strip("()")
+        name = parts[-1]
+        addr = int(head, 16)
+        by_name[name] = (addr, section)
+        by_addr.append((addr, section, name))
+    by_addr.sort()
+    return by_name, by_addr
 
 
 def file_backed_sections(segments: list[dict]) -> list[tuple[str, str, int]]:
@@ -169,7 +175,7 @@ def main() -> int:
 
     file_size = stripped.stat().st_size
     segments = parse_segment_layout(stripped)
-    symbols = parse_symbols(unstripped)
+    symbols, symbol_rows = parse_symbols(unstripped)
     section_rows = file_backed_sections(segments)
     string_rows = strings_output(stripped)
 
@@ -181,14 +187,18 @@ def main() -> int:
     known_blobs = []
     if text_const:
         const_end = text_const["addr"] + text_const["size"]
-        for idx, name in enumerate(KNOWN_CONST_SYMBOLS):
-            start = symbols.get(name)
-            if start is None:
+        for name in KNOWN_CONST_SYMBOLS:
+            info = symbols.get(name)
+            if info is None:
                 continue
-            if idx + 1 < len(KNOWN_CONST_SYMBOLS):
-                end = symbols.get(KNOWN_CONST_SYMBOLS[idx + 1], const_end)
-            else:
-                end = const_end
+            start, section = info
+            if section != "__TEXT,__const":
+                continue
+            end = const_end
+            for addr, row_section, _ in symbol_rows:
+                if row_section == "__TEXT,__const" and addr > start:
+                    end = addr
+                    break
             known_blobs.append((name, max(0, end - start)))
 
     linkedit = segment_by_name(segments, "__LINKEDIT")
