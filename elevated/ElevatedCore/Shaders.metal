@@ -7,7 +7,7 @@
 using namespace metal;
 
 // ─── Uniform layout (matches HLSL q[16] + v) ────────────────────────────────
-struct Uniforms {
+struct U {
     float4 q[16];
     float4x4 v;       // view-projection matrix
     float4x4 vi;      // inverse view-projection matrix (for ray reconstruction)
@@ -17,19 +17,19 @@ struct Uniforms {
 };
 
 // ─── G-buffer pixel output ───────────────────────────────────────────────────
-struct GBufferOut {
-    float4 worldPos [[color(0)]];  // xyz=world pos, w=1 if hit
+struct O {
+    float4 w [[color(0)]];  // xyz=world pos, w=1 if hit
 };
 
 // ─── Vertex shader outputs ───────────────────────────────────────────────────
-struct TerrainVert {
-    float4 pos   [[position]];
-    float4 world;              // world-space position
+struct V {
+    float4 p [[position]];
+    float4 w;  // world-space position
 };
 
-struct PostVert {
-    float4 pos [[position]];
-    float2 uv;
+struct P {
+    float4 p [[position]];
+    float2 u;
 };
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -69,7 +69,7 @@ float fbm(float2 p, float o, texture2d<float> t0, sampler s0) {
 }
 
 // cn(p, e, o) — terrain normal via finite differences
-float3 cn(float2 p, float e, float o, constant Uniforms& u,
+float3 cn(float2 p, float e, float o, constant U& u,
           texture2d<float> t0, sampler s0) {
     float a = fbm(p, o, t0, s0);
     return normalize(float3(
@@ -80,7 +80,7 @@ float3 cn(float2 p, float e, float o, constant Uniforms& u,
 }
 
 // b(p, c, d) — sky/diffuse light contribution
-float3 skyLight(float3 p, float3 c, float3 d, constant Uniforms& u,
+float3 sl(float3 p, float3 c, float3 d, constant U& u,
                 texture2d<float> t0, sampler s0) {
     float a = dot(d, u.q[3].xyz);
     float bv = mix(a, dot(c, u.q[3].xyz), 0.5 + 0.5*u.q[2].x);
@@ -92,63 +92,62 @@ float3 skyLight(float3 p, float3 c, float3 d, constant Uniforms& u,
 // PASS 1 — TERRAIN VERTEX SHADER (m0)
 // Displaces a flat mesh by terrain height
 // ────────────────────────────────────────────────────────────────────────────
-vertex TerrainVert terrainVert(
-    uint vid [[vertex_id]],
-    constant float2* positions [[buffer(0)]],
-    constant Uniforms& u       [[buffer(1)]],
+vertex V a(
+    uint i [[vertex_id]],
+    constant float2* p [[buffer(0)]],
+    constant U& u [[buffer(1)]],
     texture2d<float> t0        [[texture(0)]])
 {
     constexpr sampler s0(address::repeat, filter::nearest);
-    float2 xz = positions[vid];
+    float2 xz = p[i];
 
     // Exact port of m0 vertex shader:
     // x.z = q[2].w * f(x.yx, 8)  — FBM at (mesh.y, mesh.x) = (world.x, world.z)
     // y   = x.yzxw                — world = (mesh.y, height, mesh.x, 1)
     // Mesh XZ = world XZ (fixed world coordinates, camera moves through with view matrix)
-    float2 worldXZ = xz;
-    float height = u.q[2].w * fbm(worldXZ, 8, t0, s0);
-    float4 world = float4(xz.x, height, xz.y, 1);  // world position
+    float h = u.q[2].w * fbm(xz, 8, t0, s0);
+    float4 w = float4(xz.x, h, xz.y, 1);  // world position
 
-    TerrainVert out;
-    out.world = world;
-    out.pos   = u.v * world;
-    return out;
+    V r;
+    r.w = w;
+    r.p = u.v * w;
+    return r;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // PASS 1 — TERRAIN / WATER FRAGMENT SHADER (m2 pass-through → writes G-buffer)
 // Stores world position + hit flag into G-buffer
 // ────────────────────────────────────────────────────────────────────────────
-fragment GBufferOut gbufferFrag(TerrainVert in [[stage_in]]) {
-    GBufferOut out;
-    out.worldPos = float4(in.world.xyz, 1.0);  // w=1 flags geometry hit
-    return out;
+fragment O b(V i [[stage_in]]) {
+    O r;
+    r.w = float4(i.w.xyz, 1.0);  // w=1 flags geometry hit
+    return r;
 }
 
 // ────────────────────────────────────────────────────────────────────────────
 // PASS 2 — DEFERRED SHADING (m3)
 // Full-screen quad reads G-buffer, shades terrain + sky + water + fog
 // ────────────────────────────────────────────────────────────────────────────
-vertex PostVert fullscreenVert(uint vid [[vertex_id]]) {
+vertex P c(uint i [[vertex_id]]) {
     // Triangle that covers clip space: vids 0,1,2
     float2 pos[3] = { float2(-1,-1), float2(3,-1), float2(-1,3) };
     float2 uv [3] = { float2(0,1),   float2(2,1),  float2(0,-1) };
-    PostVert out;
-    out.pos = float4(pos[vid], 0, 1);
-    out.uv  = uv[vid];
-    return out;
+    P r;
+    r.p = float4(pos[i], 0, 1);
+    r.u = uv[i];
+    return r;
 }
 
-fragment float4 deferredFrag(
-    PostVert in [[stage_in]],
-    constant Uniforms& u    [[buffer(0)]],
+fragment float4 d(
+    P i [[stage_in]],
+    constant U& u [[buffer(0)]],
     texture2d<float> t0     [[texture(0)]],
     texture2d<float> t1     [[texture(1)]])
 {
     constexpr sampler s0(address::repeat, filter::nearest);
     constexpr sampler s1(address::clamp_to_edge, filter::linear);
 
-    float2 x = in.uv;
+    float2 x = i.u;
     float2 o = x + 0.5/1280;
     float4 d = t1.sample(s1, o);  // G-buffer world pos
 
@@ -193,7 +192,7 @@ fragment float4 deferredFrag(
                     mix(float3(.37,.23,.08), float3(.42,.4,.2), u.q[2].x) * (0.5+0.5*r),
                     smoothstep(0, 1, 50*(n.y-1) + (h+u.q[2].x)/0.4));
             // b(d, n, cn(d.xz,...)) — pass world position d
-            c *= skyLight(d.xyz, n, cn(d.xz, 0.001*t, 5, u, t0, s0), u, t0, s0);
+            c *= sl(d.xyz, n, cn(d.xz, 0.001*t, 5, u, t0, s0), u, t0, s0);
 
         } else {
             // ── WATER — exact m3 port ─────────────────────────────────
@@ -210,7 +209,7 @@ fragment float4 deferredFrag(
             c += pow(1 - dot(-e, n), 4)
                * (pow(saturate(dot(u.q[3].xyz, reflect(-e,n))), 32) * float3(.32,.31,.3) + 0.1);
             c = mix(c,
-                    skyLight(d.xyz, n, n, u, t0, s0),
+                    sl(d.xyz, n, n, u, t0, s0),
                     smoothstep(1, 0,
                         u.q[2].x + w*60
                         - fbm(666*wXZ + saturate(w*60)*float2(u.q[3].w,0)*2, 5, t0, s0)) * 0.5);
@@ -229,9 +228,9 @@ fragment float4 deferredFrag(
 // PASS 3 — POST-PROCESSING (m4)
 // Motion blur, gamma, vignette, chromatic aberration, film grain
 // ────────────────────────────────────────────────────────────────────────────
-fragment float4 postFrag(
-    PostVert in [[stage_in]],
-    constant Uniforms& u    [[buffer(0)]],
+fragment float4 e(
+    P i [[stage_in]],
+    constant U& u [[buffer(0)]],
     texture2d<float> t0     [[texture(0)]],   // noise texture
     texture2d<float> t1     [[texture(1)]],   // G-buffer
     texture2d<float> t2     [[texture(2)]])   // scene color
@@ -239,7 +238,7 @@ fragment float4 postFrag(
     constexpr sampler s0(address::repeat, filter::nearest);
     constexpr sampler s1(address::clamp_to_edge, filter::linear);
 
-    float2 o = in.uv + 0.5/1280;
+    float2 o = i.u + 0.5/1280;
     float4 d = t1.sample(s1, o);
     float3 c = t2.sample(s1, o).rgb;
 

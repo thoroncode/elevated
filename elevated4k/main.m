@@ -383,23 +383,23 @@ static BOOL buildPipelines(void) {
     MTLRenderPipelineDescriptor *d;
 
     d = [MTLRenderPipelineDescriptor new];
-    d.vertexFunction   = [lib newFunctionWithName:@"terrainVert"];
-    d.fragmentFunction = [lib newFunctionWithName:@"gbufferFrag"];
+    d.vertexFunction   = [lib newFunctionWithName:@"a"];
+    d.fragmentFunction = [lib newFunctionWithName:@"b"];
     d.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA32Float;
     d.depthAttachmentPixelFormat      = MTLPixelFormatDepth32Float;
     gGbufPSO = [gDevice newRenderPipelineStateWithDescriptor:d error:NULL];
     if (!gGbufPSO) { return NO; }
 
     d = [MTLRenderPipelineDescriptor new];
-    d.vertexFunction   = [lib newFunctionWithName:@"fullscreenVert"];
-    d.fragmentFunction = [lib newFunctionWithName:@"deferredFrag"];
+    d.vertexFunction   = [lib newFunctionWithName:@"c"];
+    d.fragmentFunction = [lib newFunctionWithName:@"d"];
     d.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
     gDeferredPSO = [gDevice newRenderPipelineStateWithDescriptor:d error:NULL];
     if (!gDeferredPSO) { return NO; }
 
     d = [MTLRenderPipelineDescriptor new];
-    d.vertexFunction   = [lib newFunctionWithName:@"fullscreenVert"];
-    d.fragmentFunction = [lib newFunctionWithName:@"postFrag"];
+    d.vertexFunction   = [lib newFunctionWithName:@"c"];
+    d.fragmentFunction = [lib newFunctionWithName:@"e"];
     d.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
     gPostPSO = [gDevice newRenderPipelineStateWithDescriptor:d error:NULL];
     if (!gPostPSO) { return NO; }

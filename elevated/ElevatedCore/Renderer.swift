@@ -293,21 +293,21 @@ public class Renderer: NSObject, MTKViewDelegate {
         }
 
         let gbufDesc = MTLRenderPipelineDescriptor()
-        gbufDesc.vertexFunction   = lib.makeFunction(name: "terrainVert")
-        gbufDesc.fragmentFunction = lib.makeFunction(name: "gbufferFrag")
+        gbufDesc.vertexFunction   = lib.makeFunction(name: "a")
+        gbufDesc.fragmentFunction = lib.makeFunction(name: "b")
         gbufDesc.colorAttachments[0].pixelFormat = .rgba32Float  // worldPos
         gbufDesc.depthAttachmentPixelFormat = .depth32Float
         gbufferPSO = try! device.makeRenderPipelineState(descriptor: gbufDesc)
 
         let deferredDesc = MTLRenderPipelineDescriptor()
-        deferredDesc.vertexFunction   = lib.makeFunction(name: "fullscreenVert")
-        deferredDesc.fragmentFunction = lib.makeFunction(name: "deferredFrag")
+        deferredDesc.vertexFunction   = lib.makeFunction(name: "c")
+        deferredDesc.fragmentFunction = lib.makeFunction(name: "d")
         deferredDesc.colorAttachments[0].pixelFormat = .bgra8Unorm
         deferredPSO = try! device.makeRenderPipelineState(descriptor: deferredDesc)
 
         let postDesc = MTLRenderPipelineDescriptor()
-        postDesc.vertexFunction   = lib.makeFunction(name: "fullscreenVert")
-        postDesc.fragmentFunction = lib.makeFunction(name: "postFrag")
+        postDesc.vertexFunction   = lib.makeFunction(name: "c")
+        postDesc.fragmentFunction = lib.makeFunction(name: "e")
         postDesc.colorAttachments[0].pixelFormat = mtkView.colorPixelFormat
         postPSO = try! device.makeRenderPipelineState(descriptor: postDesc)
 
