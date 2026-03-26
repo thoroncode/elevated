@@ -33,7 +33,7 @@ help:
 	@echo "  compare           Compare all matching reference/capture frames"
 	@echo "  compare-one       Compare one second (use T=<sec>)"
 	@echo "  compare-range     Compare range (use T0=<sec> T1=<sec>)"
-	@echo "  clean             Clean Swift build artifacts and temp frame dirs"
+	@echo "  clean             Clean Swift, 4K build artifacts, and temp frame dirs"
 	@echo ""
 	@echo "4K size-optimized build (elevated4k/ — ObjC, no Swift runtime):"
 	@echo "  4k                Build size-optimized binary (ObjC + inline shaders)"
@@ -214,6 +214,7 @@ compare-range:
 
 clean:
 	swift package --package-path elevated clean
+	$(MAKE) -C elevated4k clean
 	rm -rf /tmp/elevated_ref /tmp/elevated_cap /tmp/elevated_cmp
 
 # ── 4K size-optimized build (elevated4k/) ─────────────────────────────────────
