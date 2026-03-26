@@ -57,8 +57,9 @@ TABLE_SRC = $(SYNTH_DIR)/music_tables_raw.h
 TABLE_HDR = $(SYNTH_DIR)/music_tables_packed.h
 TABLE_TOOL = pack_synth_tables.py
 REPORT  = report_binary.py
+SHADER_COMPARE = compare_shader_formats.py
 
-.PHONY: all size report review run shaders tables clean
+.PHONY: all size report review shader-compare run shaders tables clean
 
 all: $(STRIPPED)
 
@@ -105,6 +106,9 @@ review: report
 	@echo
 	@echo "=== Stripped Binary Hexdump ==="
 	@hexdump -C $(STRIPPED)
+
+shader-compare: shaders.h $(SHADER_COMPARE)
+	@python3 $(SHADER_COMPARE)
 
 size: report
 
