@@ -82,7 +82,20 @@ float osc_wave(float phase, float phase_shift, uint8_t type) {
 static uint8_t pattern_data[PATTERN_DATA_LEN];
 static uint8_t sequence_data[SEQUENCE_DATA_LEN];
 static uint8_t machine_tree_data[MACHINE_TREE_DATA_LEN];
+static float synth_stack[(size_t)(MAX_STACK_HEIGHT + 1) * STACK_FLOATS];
+static uint8_t synth_param_mem[1114112 * 4] __attribute__((aligned(64)));
+static uint8_t synth_machine_tree[MACHINE_TREE_DATA_LEN];
 static uint8_t music_tables_ready = 0;
+
+static __attribute__((noinline)) void zero_bytes(uint8_t *dst, size_t count) {
+    volatile uint8_t *p = (volatile uint8_t *)dst;
+    while (count--) *p++ = 0;
+}
+
+static __attribute__((noinline)) void zero_floats(float *dst, size_t count) {
+    volatile float *p = (volatile float *)dst;
+    while (count--) *p++ = 0.0f;
+}
 
 static void unpack_music_table(const uint8_t *src, uint8_t *dst, size_t len) {
     size_t out = 0;
@@ -90,7 +103,7 @@ static void unpack_music_table(const uint8_t *src, uint8_t *dst, size_t len) {
         uint8_t ctrl = *src++;
         size_t count = (size_t)(ctrl & 0x7F) + 1;
         if (ctrl & 0x80) {
-            memset(dst + out, 0, count);
+            zero_bytes(dst + out, count);
         } else {
             memcpy(dst + out, src, count);
             src += count;
@@ -112,7 +125,7 @@ static void machine_synth(float **pedi, const uint8_t **pesi, int *pedx) {
     /* push one stack frame */
     *pedi += STACK_SAMPLES * 2;
     float *base = *pedi;
-    memset(base, 0, STACK_FLOATS * sizeof(float));
+    zero_floats(base, STACK_FLOATS);
 
     const uint8_t *instr = *pesi;
     const uint32_t *ui = (const uint32_t *)(const void *)instr;
@@ -358,23 +371,12 @@ static void machine_mixer(float **pedi, const uint8_t *params) {
 void elevated_generate_music(float *output) {
     prepare_tables();
 
-    /* Allocate (MAX_STACK_HEIGHT+1) stack slots.
-     * edi starts one slot BELOW output (slot 0 = pre-buffer).
-     * output is at slot 1 (= &stack[STACK_FLOATS]).             */
-    size_t total_floats = (size_t)(MAX_STACK_HEIGHT + 1) * STACK_FLOATS;
-    float *stack = (float *)calloc(total_floats, sizeof(float));
-    if (!stack) return;
-
-    /* param_memory: zero-initialised, ~4.25 MB */
-    size_t pm_bytes = 1114112 * 4 + 16;   /* TOTAL_PARAM_WORDS * 4 + alignment */
-    uint8_t *param_mem_raw = (uint8_t *)calloc(pm_bytes, 1);
-    if (!param_mem_raw) { free(stack); return; }
-    /* 64-byte align (matches original BSS align=64) */
-    uint8_t *pm = (uint8_t *)(((uintptr_t)param_mem_raw + 63) & ~(uintptr_t)63);
-
-    /* mutable copy of machine_tree (machines modify their params in-place) */
-    uint8_t *mt = (uint8_t *)malloc(sizeof(machine_tree_data));
-    if (!mt) { free(param_mem_raw); free(stack); return; }
+    /* Reuse large zero-fill scratch instead of importing heap helpers. */
+    float *stack = synth_stack;
+    uint8_t *pm = synth_param_mem;
+    uint8_t *mt = synth_machine_tree;
+    zero_floats(stack, (size_t)(MAX_STACK_HEIGHT + 1) * STACK_FLOATS);
+    zero_bytes(pm, sizeof(synth_param_mem));
     memcpy(mt, machine_tree_data, sizeof(machine_tree_data));
 
     rng_seed = 0;
@@ -413,9 +415,6 @@ void elevated_generate_music(float *output) {
      * Copy to caller's output buffer.                                */
     float *result = stack + STACK_FLOATS;
     memcpy(output, result, STACK_FLOATS * sizeof(float));
-    free(mt);
-    free(param_mem_raw);
-    free(stack);
 }
 
 /* ── Instrument sync (visual light beams) ──────────────────────────────────

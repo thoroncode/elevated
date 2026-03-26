@@ -159,7 +159,7 @@ static const int kSyncOffset[12] = {0,28,34,49,69,89,105,129,142,150,173,194};
 
 // ── Audio ─────────────────────────────────────────────────────────────────────
 
-static float          *gAudioBuf   = NULL;
+static float           gAudioBuf[ELEVATED_TOTAL_SAMPLES * 2];
 static _Atomic uint32_t gAudioPos  = 0;
 static AudioUnit        gAudioUnit;
 
@@ -196,11 +196,33 @@ static void startAudioUnit(void) {
 }
 
 static void generateAudio(void) {
-    gAudioBuf = malloc(ELEVATED_TOTAL_SAMPLES * 2 * sizeof(float));
     elevated_generate_music(gAudioBuf);
 }
 
 // ── Math helpers ──────────────────────────────────────────────────────────────
+
+static inline float trig_wrap_unit(float x) {
+    x *= 0.31830988618f;
+    return x - floorf(x * 0.5f + 0.5f) * 2.0f;
+}
+
+static inline float fast_sinpif(float x) {
+    float u  = 3.14159265f * x;
+    float u2 = u * u;
+    float r  = 2.75573e-6f;
+    r = r * u2 - 1.98413e-4f;
+    r = r * u2 + 8.33333e-3f;
+    r = r * u2 - 1.66667e-1f;
+    return u * (r * u2 + 1.0f);
+}
+
+static inline float fast_sin(float x) {
+    return fast_sinpif(trig_wrap_unit(x));
+}
+
+static inline float fast_cos(float x) {
+    return fast_sinpif(trig_wrap_unit(x + 1.57079633f));
+}
 
 static simd_float4x4 lookAtLH(simd_float3 eye, simd_float3 center, simd_float3 up, simd_float4x4 *invOut) {
     simd_float3 z = simd_normalize(center - eye);
@@ -223,7 +245,8 @@ static simd_float4x4 lookAtLH(simd_float3 eye, simd_float3 center, simd_float3 u
 }
 
 static simd_float4x4 projLH(float fovY, float aspect, float near, float far, simd_float4x4 *invOut) {
-    float y = 1.0f / tanf(fovY * 0.5f);
+    float h = fovY * 0.5f;
+    float y = fast_cos(h) / fast_sin(h);
     float x = y / aspect;
     float z = far / (far - near);
     if (invOut) {
@@ -242,6 +265,8 @@ static simd_float4x4 projLH(float fovY, float aspect, float near, float far, sim
 // ── CPU noise (matches shader no() / fbm() exactly) ──────────────────────────
 
 static float gNoisePixels[256*256];
+static simd_float2 gTerrainVerts[1024*1024];
+static uint32_t gTerrainIndices[(1023*1023*2)*3];
 
 static float sampleNoise(float ux, float uy) {
     int x = (int)floorf((ux - floorf(ux)) * 256.0f) & 255;
@@ -297,9 +322,9 @@ static simd_float3 m1Camera(Uniforms *u, float xdot) {
 
 #define SNXT(ox,oy) ({ ox+=0.1f; oy+=0.1f; sampleNoise(ox,oy); })
     float s1=SNXT(ox,oy), s2=SNXT(ox,oy), s3=SNXT(ox,oy), s4=SNXT(ox,oy);
-    float cx = 16*cosf(tt*s1 + 3*s2) + 8*cosf(tt*s3*2 + 3*s4);
+    float cx = 16*fast_cos(tt*s1 + 3*s2) + 8*fast_cos(tt*s3*2 + 3*s4);
     float s5=SNXT(ox,oy), s6=SNXT(ox,oy), s7=SNXT(ox,oy), s8=SNXT(ox,oy);
-    float cz = 16*cosf(tt*s5 + 3*s6) + 8*cosf(tt*s7*2 + 3*s8);
+    float cz = 16*fast_cos(tt*s5 + 3*s6) + 8*fast_cos(tt*s7*2 + 3*s8);
 #undef SNXT
 
     float cy = terScale * cpuFbm(cx, cz, 3) + camPosY + camTarY * xdot;
@@ -334,7 +359,7 @@ static void updateUniforms(Uniforms *u, CGSize sz) {
     float terScale   = (SYNC(pos, TR_TERSCALE) - 128.0f) / 128.0f;
     u->q[2] = (simd_float4){season, brightness, contrast, terScale};
 
-    u->q[3] = (simd_float4){cosf(sunAngle), 0.3125f, sinf(sunAngle), t};
+    u->q[3] = (simd_float4){fast_cos(sunAngle), 0.3125f, fast_sin(sunAngle), t};
 
     simd_float3 camPos    = m1Camera(u, 0.0f);
     simd_float3 camTarget = m1Camera(u, 1.0f);
@@ -345,8 +370,8 @@ static void updateUniforms(Uniforms *u, CGSize sz) {
     elevated_instrument_sync(syncPos, syncVals);
     for (int i=0; i<8; i++) u->q[5+i] = (simd_float4){syncVals[i],0,0,0};
 
-    float roll   = 0.3f * cosf(t * camSpeed * 2.0f);
-    simd_float3 up = {sinf(roll), cosf(roll), 0};
+    float roll   = 0.3f * fast_cos(t * camSpeed * 2.0f);
+    simd_float3 up = {fast_sin(roll), fast_cos(roll), 0};
     float aspect = (float)sz.width / (float)sz.height;
     simd_float4x4 invProj, invView;
     simd_float4x4 proj = projLH(camFov, aspect, 0.03125f, 256.0f, &invProj);
@@ -472,11 +497,9 @@ static void buildGeometry(void) {
         int size = 1024; float scale = 104.0f;
         int nverts = size * size;
         int ntris  = (size-1)*(size-1)*2;
-        simd_float2 *verts   = malloc(nverts * sizeof(simd_float2));
-        uint32_t    *indices = malloc(ntris * 3 * sizeof(uint32_t));
         for (int z=0; z<size; z++)
             for (int x=0; x<size; x++) {
-                verts[z*size+x] = (simd_float2){
+                gTerrainVerts[z*size+x] = (simd_float2){
                     ((float)x/(size-1) - 0.5f) * scale,
                     ((float)z/(size-1) - 0.5f) * scale
                 };
@@ -486,19 +509,18 @@ static void buildGeometry(void) {
             for (int x=0; x<size-1; x++) {
                 uint32_t i = z*size+x, r = size;
                 if (((x+z)&1)==0) {
-                    indices[idx++]=i; indices[idx++]=i+1;   indices[idx++]=i+r;
-                    indices[idx++]=i+1; indices[idx++]=i+r+1; indices[idx++]=i+r;
+                    gTerrainIndices[idx++]=i; gTerrainIndices[idx++]=i+1;   gTerrainIndices[idx++]=i+r;
+                    gTerrainIndices[idx++]=i+1; gTerrainIndices[idx++]=i+r+1; gTerrainIndices[idx++]=i+r;
                 } else {
-                    indices[idx++]=i;   indices[idx++]=i+1;   indices[idx++]=i+r+1;
-                    indices[idx++]=i;   indices[idx++]=i+r+1; indices[idx++]=i+r;
+                    gTerrainIndices[idx++]=i;   gTerrainIndices[idx++]=i+1;   gTerrainIndices[idx++]=i+r+1;
+                    gTerrainIndices[idx++]=i;   gTerrainIndices[idx++]=i+r+1; gTerrainIndices[idx++]=i+r;
                 }
         }
         gTerrainIndexCount = idx;
         gTerrainVBuf = M3(id, gDevice, "newBufferWithBytes:length:options:",
-            const void *, verts, NSUInteger, nverts*sizeof(simd_float2), NSUInteger, MTLResourceStorageModeShared);
+            const void *, gTerrainVerts, NSUInteger, nverts*sizeof(simd_float2), NSUInteger, MTLResourceStorageModeShared);
         gTerrainIBuf = M3(id, gDevice, "newBufferWithBytes:length:options:",
-            const void *, indices, NSUInteger, idx*sizeof(uint32_t), NSUInteger, MTLResourceStorageModeShared);
-        free(verts); free(indices);
+            const void *, gTerrainIndices, NSUInteger, idx*sizeof(uint32_t), NSUInteger, MTLResourceStorageModeShared);
     }
 }
 
