@@ -6,6 +6,10 @@
 #include <metal_stdlib>
 using namespace metal;
 
+using T = texture2d<float>;
+constexpr sampler s0(address::repeat, filter::nearest);
+constexpr sampler s1(address::clamp_to_edge, filter::linear);
+
 // ─── Uniform layout (matches HLSL q[16] + v) ────────────────────────────────
 struct U {
     float4 q[16];
@@ -38,7 +42,7 @@ struct P {
 
 // no(p) — smooth Perlin noise, returns float3(value, gradient.xy)
 // Translated from HLSL: tex2Dlod samples a 256x256 hash texture
-float3 no(float2 p, texture2d<float> t0, sampler s0) {
+float3 no(float2 p, T t0) {
     float2 f = fract(p);
     float2 u = f*f*f*(f*(f*6-15)+10);  // quintic smoothstep
     float a = t0.sample(s0, (floor(p)+float2(0,0))/256, level(0)).r;
@@ -52,12 +56,12 @@ float3 no(float2 p, texture2d<float> t0, sampler s0) {
 }
 
 // f(p, o) — FBM terrain, o octaves, domain rotation + derivative damping
-float fbm(float2 p, float o, texture2d<float> t0, sampler s0) {
+float fbm(float2 p, float o, T t0) {
     float2 d = 0;
     float a = 0;
     float bv = 3;
     for (float i = 0; i < o; i++) {
-        float3 n = no(0.25*p, t0, s0);
+        float3 n = no(0.25*p, t0);
         d += n.yz;
         a += (bv *= 0.5) * n.x / (1 + dot(d, d));
         // HLSL float2x2(a,b,c,d) is row-major; MSL is column-major.
@@ -70,21 +74,21 @@ float fbm(float2 p, float o, texture2d<float> t0, sampler s0) {
 
 // cn(p, e, o) — terrain normal via finite differences
 float3 cn(float2 p, float e, float o, constant U& u,
-          texture2d<float> t0, sampler s0) {
-    float a = fbm(p, o, t0, s0);
+          T t0) {
+    float a = fbm(p, o, t0);
     return normalize(float3(
-        u.q[2].w*(a - fbm(p+float2(e,0), o, t0, s0)),
+        u.q[2].w*(a - fbm(p+float2(e,0), o, t0)),
         e,
-        u.q[2].w*(a - fbm(p+float2(0,e), o, t0, s0))
+        u.q[2].w*(a - fbm(p+float2(0,e), o, t0))
     ));
 }
 
 // b(p, c, d) — sky/diffuse light contribution
 float3 sl(float3 p, float3 c, float3 d, constant U& u,
-                texture2d<float> t0, sampler s0) {
+          T t0) {
     float a = dot(d, u.q[3].xyz);
     float bv = mix(a, dot(c, u.q[3].xyz), 0.5 + 0.5*u.q[2].x);
-    return float3(.13,.18,.22)*(c.y + 0.25*saturate(-bv) - 0.1*no(1024*p.xz, t0, s0).y)
+    return float3(.13,.18,.22)*(c.y + 0.25*saturate(-bv) - 0.1*no(1024*p.xz, t0).y)
          + float3(1.4,1,.7)*saturate(bv)*saturate(2*a);
 }
 
@@ -96,16 +100,15 @@ vertex V a(
     uint i [[vertex_id]],
     constant float2* p [[buffer(0)]],
     constant U& u [[buffer(1)]],
-    texture2d<float> t0        [[texture(0)]])
+    T t0 [[texture(0)]])
 {
-    constexpr sampler s0(address::repeat, filter::nearest);
     float2 xz = p[i];
 
     // Exact port of m0 vertex shader:
     // x.z = q[2].w * f(x.yx, 8)  — FBM at (mesh.y, mesh.x) = (world.x, world.z)
     // y   = x.yzxw                — world = (mesh.y, height, mesh.x, 1)
     // Mesh XZ = world XZ (fixed world coordinates, camera moves through with view matrix)
-    float h = u.q[2].w * fbm(xz, 8, t0, s0);
+    float h = u.q[2].w * fbm(xz, 8, t0);
     float4 w = float4(xz.x, h, xz.y, 1);  // world position
 
     V r;
@@ -129,24 +132,19 @@ fragment O b(V i [[stage_in]]) {
 // Full-screen quad reads G-buffer, shades terrain + sky + water + fog
 // ────────────────────────────────────────────────────────────────────────────
 vertex P c(uint i [[vertex_id]]) {
-    // Triangle that covers clip space: vids 0,1,2
-    float2 pos[3] = { float2(-1,-1), float2(3,-1), float2(-1,3) };
-    float2 uv [3] = { float2(0,1),   float2(2,1),  float2(0,-1) };
+    float2 uv = float2((i << 1) & 2, i & 2);
     P r;
-    r.p = float4(pos[i], 0, 1);
-    r.u = uv[i];
+    r.p = float4(uv * 2 + float2(-1, -1), 0, 1);
+    r.u = float2(uv.x, 1 - uv.y);
     return r;
 }
 
 fragment float4 d(
     P i [[stage_in]],
     constant U& u [[buffer(0)]],
-    texture2d<float> t0     [[texture(0)]],
-    texture2d<float> t1     [[texture(1)]])
+    T t0 [[texture(0)]],
+    T t1 [[texture(1)]])
 {
-    constexpr sampler s0(address::repeat, filter::nearest);
-    constexpr sampler s1(address::clamp_to_edge, filter::linear);
-
     float2 x = i.u;
     float2 o = x + 0.5/1280;
     float4 d = t1.sample(s1, o);  // G-buffer world pos
@@ -164,7 +162,7 @@ fragment float4 d(
 
     // Sky base colour
     float3 c = float3(.55,.65,.75)
-        + 0.1 * fbm(s + u.q[3].w*0.2, 10, t0, s0)
+        + 0.1 * fbm(s + u.q[3].w*0.2, 10, t0)
         + 0.5 * pow(1-ey, 8)
         + pow(saturate(dot(e, u.q[3].xyz)), 16) * float3(.4,.3,.1)
         + float4(1+0.4*k, 2, 3+0.5*k, 0).xyz
@@ -180,9 +178,9 @@ fragment float4 d(
 
         if (w < 0) {
             // ── TERRAIN — exact m3 port ───────────────────────────────
-            float3 n = cn(d.xz, 0.001*t, 12 - log2(t), u, t0, s0);
-            float  h = fbm(3*d.xz, 3, t0, s0);
-            float  r = no(666*d.xz, t0, s0).x;
+            float3 n = cn(d.xz, 0.001*t, 12 - log2(t), u, t0);
+            float  h = fbm(3*d.xz, 3, t0);
+            float  r = no(666*d.xz, t0).x;
 
             c = (0.1 + 0.75*u.q[2].x) * (0.8 + 0.2*r);
             c = mix(c,
@@ -192,7 +190,7 @@ fragment float4 d(
                     mix(float3(.37,.23,.08), float3(.42,.4,.2), u.q[2].x) * (0.5+0.5*r),
                     smoothstep(0, 1, 50*(n.y-1) + (h+u.q[2].x)/0.4));
             // b(d, n, cn(d.xz,...)) — pass world position d
-            c *= sl(d.xyz, n, cn(d.xz, 0.001*t, 5, u, t0, s0), u, t0, s0);
+            c *= sl(d.xyz, n, cn(d.xz, 0.001*t, 5, u, t0), u, t0);
 
         } else {
             // ── WATER — exact m3 port ─────────────────────────────────
@@ -202,17 +200,17 @@ fragment float4 d(
             float2 wXZ = d.xz;
             float3 n = normalize(cn(float2(512,32)*wXZ
                                     + saturate(w*60)*float2(u.q[3].w, 0),
-                                    0.001*t, 4, u, t0, s0) * float3(1,6,1));
+                                    0.001*t, 4, u, t0) * float3(1,6,1));
 
             c = 0.12 * (float3(.4,1,1) - float3(.2,.6,.4)*saturate(w*16));
             c *= 0.3 + 0.7*u.q[2].x;
             c += pow(1 - dot(-e, n), 4)
                * (pow(saturate(dot(u.q[3].xyz, reflect(-e,n))), 32) * float3(.32,.31,.3) + 0.1);
             c = mix(c,
-                    sl(d.xyz, n, n, u, t0, s0),
+                    sl(d.xyz, n, n, u, t0),
                     smoothstep(1, 0,
                         u.q[2].x + w*60
-                        - fbm(666*wXZ + saturate(w*60)*float2(u.q[3].w,0)*2, 5, t0, s0)) * 0.5);
+                        - fbm(666*wXZ + saturate(w*60)*float2(u.q[3].w,0)*2, 5, t0)) * 0.5);
         }
 
         c *= 0.7 + 0.3*smoothstep(0, 1, 256*abs(w));
@@ -231,13 +229,10 @@ fragment float4 d(
 fragment float4 e(
     P i [[stage_in]],
     constant U& u [[buffer(0)]],
-    texture2d<float> t0     [[texture(0)]],   // noise texture
-    texture2d<float> t1     [[texture(1)]],   // G-buffer
-    texture2d<float> t2     [[texture(2)]])   // scene color
+    T t0 [[texture(0)]],   // noise texture
+    T t1 [[texture(1)]],   // G-buffer
+    T t2 [[texture(2)]])   // scene color
 {
-    constexpr sampler s0(address::repeat, filter::nearest);
-    constexpr sampler s1(address::clamp_to_edge, filter::linear);
-
     float2 o = i.u + 0.5/1280;
     float4 d = t1.sample(s1, o);
     float3 c = t2.sample(s1, o).rgb;

@@ -10,6 +10,12 @@ def compact_line(line):
         return text
     text = re.sub(r"\s*([(){}\[\],;])\s*", r"\1", text)
     text = re.sub(r"\s*([=*/<>?:])\s*", r"\1", text)
+    text = re.sub(r"\s*([+\-&|]=)\s*", r"\1", text)
+    text = re.sub(
+        r"(?<=[A-Za-z0-9_\]\).])\s*([+\-&|])\s*(?=[A-Za-z0-9_(\[\].])",
+        r"\1",
+        text,
+    )
     text = re.sub(r"(?<![A-Za-z0-9_])0\.(\d)", r".\1", text)
     text = re.sub(r"(?<![A-Za-z0-9_])(\d+)\.0(?!\d)", r"\1.", text)
     return re.sub(r"\s+", " ", text)
