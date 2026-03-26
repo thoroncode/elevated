@@ -79,8 +79,9 @@ app: build
 	@rm -rf $(APP)
 	@mkdir -p $(APP)/Contents/MacOS $(APP)/Contents/Resources
 	@cp $(BIN) $(APP)/Contents/MacOS/
-	@cp elevated/.build/release/elevated_ElevatedCore.bundle/Shaders.metal \
-	        $(APP)/Contents/Resources/
+	@xcrun -sdk macosx metal -c elevated/ElevatedCore/Shaders.metal -o /tmp/Shaders.air
+	@xcrun -sdk macosx metallib /tmp/Shaders.air -o $(APP)/Contents/Resources/default.metallib
+	@rm -f /tmp/Shaders.air
 	@cp $(ICON_ICNS) $(APP)/Contents/Resources/
 	@cp LICENSE $(APP)/Contents/Resources/
 	@shortver=$$(printf '%s.%d.%s' $$(date +%y) $$(date +%-m) $$(date +%d)); \
