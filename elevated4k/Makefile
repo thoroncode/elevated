@@ -15,7 +15,8 @@
 #
 # Usage:
 #   make          — build + strip
-#   make size     — build, strip, show section sizes + final byte count
+#   make size     — build, strip, and print the full size report
+#   make report   — print the size report for the current build
 #   make run      — build and run
 #   make clean    — remove build artifacts
 
@@ -51,8 +52,9 @@ LDFLAGS = \
 
 SRCS    = main.m $(SYNTH_DIR)/synth.c
 SHADERS = ../elevated/ElevatedCore/Shaders.metal
+REPORT  = report_binary.py
 
-.PHONY: all size run shaders clean
+.PHONY: all size report run shaders clean
 
 all: $(STRIPPED)
 
@@ -78,19 +80,10 @@ $(STRIPPED): $(BIN)
 	@cp $(BIN) $(STRIPPED)
 	@strip -x $(STRIPPED)
 
-size: $(STRIPPED)
-	@echo ""
-	@echo "=== Section sizes (unstripped) ==="
-	@size $(BIN)
-	@echo ""
-	@echo "=== Final stripped binary ==="
-	@ls -la $(STRIPPED)
-	@echo ""
-	@printf "  Bytes: %d\n" $$(wc -c < $(STRIPPED))
-	@printf "  KB:    %d\n" $$(( $$(wc -c < $(STRIPPED)) / 1024 ))
-	@echo ""
-	@echo "=== For comparison: original Windows EXE ==="
-	@ls -la ../elevated_1920_1080.exe 2>/dev/null || echo "  (not found)"
+report: $(STRIPPED) $(REPORT)
+	@python3 $(REPORT) $(BIN) $(STRIPPED)
+
+size: report
 
 run: $(STRIPPED)
 	$(STRIPPED)
