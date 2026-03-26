@@ -580,3 +580,42 @@ build settings.
 - iPad Pro 13-inch M5 (iPadOS 26.2 simulator) — synthesis ~1.1 s, full playback, exits after show
 - iPad Pro 12.9-inch 6th gen / iPad14,6 (physical device, iPadOS 26.x) — full playback confirmed
 
+---
+
+## 2026-03-26 — Codex checkpoint: 4K prototype + platform target updates
+
+This checkpoint was first saved as commit `9cea445` (`wip: checkpoint 4k prototype and platform updates`).
+Follow-up journal work was moved onto Codex branch `task/codex-4k-journal` in its own worktree to keep later edits off the integration checkout.
+
+### 4K prototype work captured in the checkpoint
+
+- Added `elevated4k/` as a size-reduction prototype for macOS.
+- Architecture is deliberately minimal:
+  - one Objective-C source file (`main.m`)
+  - `CAMetalLayer` instead of MetalKit
+  - runtime-compiled inline MSL from generated `shaders.h`
+  - shared synth from `../elevated/CSynth`
+  - `AudioUnit` output instead of the Swift app/audio stack
+- Added top-level `make` entry points for the prototype:
+  - `make 4k`
+  - `make 4k-shaders`
+  - `make 4k-size`
+  - `make 4k-run`
+  - `make 4k-clean`
+- Added `.gitignore` entry for `elevated4k/build/`.
+
+### Current measured result
+
+`make 4k-size` produced a stripped binary of `70,440` bytes on this machine at checkpoint time.
+This is still far from a true 4096-byte result; the current work is a dependency/runtime-overhead reduction prototype, not a final packed intro.
+
+### Other same-day changes bundled into the checkpoint
+
+- `elevated/Package.swift` was updated to target `26.0` for macOS, iOS, tvOS, and visionOS.
+- `ElevatedVision.xcodeproj` was updated to use `XROS_DEPLOYMENT_TARGET = 26.0`.
+- The top-level `Makefile` app packaging path now writes `LSMinimumSystemVersion = 26.0`.
+
+### Practical note for future sessions
+
+The latest implementation focus before credits ran out was the 4K binary-size-reduction path.
+If resuming optimization work, start from the `elevated4k/` prototype rather than the higher-level Swift app targets.
