@@ -95,6 +95,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let delay = normalPresentation ? max(0, Self.releaseStartupDelay - elapsed) : 0
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                     self.renderer.start()
+                    self.synth.isMuted = self.debugActive
+                    self.muteMenuItem?.state = self.debugActive ? .on : .off
                     self.synth.play()
                 }
             }
