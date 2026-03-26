@@ -10,7 +10,7 @@
 #
 # Build pipeline:
 #   1. clang -Os → ElevatedMac4k  (~60-80KB)
-#   2. strip -x  → stripped       (~40-50KB)
+#   2. strip -u  → stripped       (~40-50KB)
 #   3. (optional) custom packer   → packed    (target: <8KB)
 #
 # Usage:
@@ -58,7 +58,7 @@ TABLE_HDR = $(SYNTH_DIR)/music_tables_packed.h
 TABLE_TOOL = pack_synth_tables.py
 REPORT  = report_binary.py
 
-.PHONY: all size report run shaders tables clean
+.PHONY: all size report review run shaders tables clean
 
 all: $(STRIPPED)
 
@@ -91,10 +91,15 @@ $(BIN): $(SRCS) shaders.h $(TABLE_HDR) | $(OUTDIR)
 
 $(STRIPPED): $(BIN)
 	@cp $(BIN) $(STRIPPED)
-	@strip -x $(STRIPPED)
+	@strip -u $(STRIPPED)
 
 report: $(STRIPPED) $(REPORT)
 	@python3 $(REPORT) $(BIN) $(STRIPPED)
+
+review: report
+	@echo
+	@echo "=== Stripped Binary Hexdump ==="
+	@hexdump -C $(STRIPPED)
 
 size: report
 
