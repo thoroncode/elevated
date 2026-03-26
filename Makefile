@@ -1,4 +1,4 @@
-.PHONY: all help build run debug capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean
+.PHONY: all help build run debug capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-size 4k-shaders 4k-run 4k-clean
 
 BIN       = elevated/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -34,6 +34,13 @@ help:
 	@echo "  compare-one       Compare one second (use T=<sec>)"
 	@echo "  compare-range     Compare range (use T0=<sec> T1=<sec>)"
 	@echo "  clean             Clean Swift build artifacts and temp frame dirs"
+	@echo ""
+	@echo "4K size-optimized build (elevated4k/ — ObjC, no Swift runtime):"
+	@echo "  4k                Build size-optimized binary (ObjC + inline shaders)"
+	@echo "  4k-shaders        Regenerate shaders.h from Shaders.metal"
+	@echo "  4k-size           Build and report binary size vs original 4066-byte EXE"
+	@echo "  4k-run            Build and run the 4K version"
+	@echo "  4k-clean          Clean 4K build artifacts"
 
 build:
 	swift build -c release --package-path elevated --product ElevatedMac
@@ -96,7 +103,7 @@ app: build
 	    -c "Add :CFBundleIconFile       string icon" \
 	    -c "Add :NSPrincipalClass       string NSApplication" \
 	    -c "Add :NSHighResolutionCapable bool true" \
-	    -c "Add :LSMinimumSystemVersion string 13.0" \
+	    -c "Add :LSMinimumSystemVersion string 26.0" \
 	    $(APP)/Contents/Info.plist
 	@codesign --force --deep --sign - $(APP)
 	@echo ""
@@ -208,3 +215,23 @@ compare-range:
 clean:
 	swift package --package-path elevated clean
 	rm -rf /tmp/elevated_ref /tmp/elevated_cap /tmp/elevated_cmp
+
+# ── 4K size-optimized build (elevated4k/) ─────────────────────────────────────
+# Separate ObjC/C build targeting minimal binary size.
+# No Swift runtime, inline MSL shaders, CAMetalLayer, AudioUnit.
+# Does NOT affect the main Swift build above.
+
+4k:
+	$(MAKE) -C elevated4k
+
+4k-shaders:
+	$(MAKE) -C elevated4k shaders
+
+4k-size:
+	$(MAKE) -C elevated4k size
+
+4k-run:
+	$(MAKE) -C elevated4k run
+
+4k-clean:
+	$(MAKE) -C elevated4k clean

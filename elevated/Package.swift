@@ -3,7 +3,7 @@ import PackageDescription
 
 let package = Package(
     name: "elevated",
-    platforms: [.macOS(.v13), .iOS("26.0"), .tvOS("26.0"), .visionOS("2.0")],
+    platforms: [.macOS("26.0"), .iOS("26.0"), .tvOS("26.0"), .visionOS("26.0")],
     products: [
         .library(name: "ElevatedCore",   targets: ["ElevatedCore"]),
         .library(name: "ElevatedIOS",    targets: ["ElevatedIOS"]),
