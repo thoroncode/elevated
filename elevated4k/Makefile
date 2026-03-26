@@ -46,8 +46,6 @@ LDFLAGS = \
 	-framework QuartzCore \
 	-framework AppKit \
 	-framework AudioUnit \
-	-framework CoreAudio \
-	-framework Accelerate \
 	-lm
 
 SRCS    = main.m $(SYNTH_DIR)/synth.c

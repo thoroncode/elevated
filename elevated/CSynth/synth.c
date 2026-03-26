@@ -13,7 +13,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
-#include <Accelerate/Accelerate.h>
 #include "music_tables_packed.h"
 
 /* ── constants ─────────────────────────────────────────────────────────────── */
@@ -265,12 +264,11 @@ static void machine_compressor(float *edi, const uint8_t *params) {
 /* ── Machine: distortion_machine2: sin(x*a)*b ──────────────────────────── */
 static void machine_distortion2(float *edi, const uint8_t *params) {
     const float *fp = (const float *)params;
-    float a = fp[0], b = fp[1];
-    int   n = TOTAL_SAMPLES * 2;
-    /* Scale by a, then batch-vectorised sin via Accelerate, then scale by b */
-    vDSP_vsmul(edi, 1, &a, edi, 1, (vDSP_Length)n);
-    vvsinf(edi, edi, &n);
-    vDSP_vsmul(edi, 1, &b, edi, 1, (vDSP_Length)n);
+    float scale = fp[0] * 0.31830988618f;
+    float gain = fp[1];
+    for (int i = 0; i < TOTAL_SAMPLES * 2; i++) {
+        edi[i] = fast_sinpif(edi[i] * scale) * gain;
+    }
 }
 
 /* ── Machine: delay (ping-pong) ─────────────────────────────────────────── */

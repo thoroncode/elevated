@@ -8,12 +8,10 @@
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 #import <AudioUnit/AudioUnit.h>
-#import <CoreAudio/CoreAudio.h>
 #import <simd/simd.h>
 #import <math.h>
 #import <objc/message.h>
 #import <objc/runtime.h>
-#import <pthread.h>
 #import "shaders.h"
 #import "../elevated/CSynth/include/synth.h"
 
@@ -30,8 +28,8 @@ static inline id attachmentAt(id owner, NSUInteger index) {
     return M1(id, M0(id, owner, "colorAttachments"), "objectAtIndexedSubscript:", NSUInteger, index);
 }
 
-static inline CFStringRef mkstr(const char *text) {
-    return CFStringCreateWithCStringNoCopy(NULL, text, kCFStringEncodingUTF8, kCFAllocatorNull);
+static inline id mkstr(const char *text) {
+    return M1(id, CLS("NSString"), "stringWithUTF8String:", const char *, text);
 }
 
 // ── Uniforms (must match Shaders.metal layout exactly) ───────────────────────
@@ -163,7 +161,6 @@ static const int kSyncOffset[12] = {0,28,34,49,69,89,105,129,142,150,173,194};
 
 static float          *gAudioBuf   = NULL;
 static _Atomic uint32_t gAudioPos  = 0;
-static _Atomic int      gAudioReady = 0;
 static AudioUnit        gAudioUnit;
 
 static OSStatus audioCallback(void *ref, AudioUnitRenderActionFlags *flags,
@@ -174,10 +171,6 @@ static OSStatus audioCallback(void *ref, AudioUnitRenderActionFlags *flags,
     float *L = (float *)ioData->mBuffers[0].mData;
     float *R = (float *)ioData->mBuffers[1].mData;
     uint32_t pos = gAudioPos;
-    if (!gAudioReady) {
-        memset(L, 0, nFrames * 4); memset(R, 0, nFrames * 4);
-        return noErr;
-    }
     for (UInt32 i = 0; i < nFrames; i++) {
         uint32_t p = pos + i;
         if (p < ELEVATED_TOTAL_SAMPLES) { L[i] = gAudioBuf[p*2]; R[i] = gAudioBuf[p*2+1]; }
@@ -202,12 +195,9 @@ static void startAudioUnit(void) {
     AudioOutputUnitStart(gAudioUnit);
 }
 
-static void *synthThread(void *arg) {
-    (void)arg;
+static void generateAudio(void) {
     gAudioBuf = malloc(ELEVATED_TOTAL_SAMPLES * 2 * sizeof(float));
     elevated_generate_music(gAudioBuf);
-    gAudioReady = 1;
-    return NULL;
 }
 
 // ── Math helpers ──────────────────────────────────────────────────────────────
@@ -396,12 +386,12 @@ static void rebuildOffscreen(CGSize size) {
 }
 
 static BOOL buildPipelines(void) {
-    CFStringRef shaderSource = mkstr(kMSLSource);
-    CFStringRef sa = mkstr("a");
-    CFStringRef sb = mkstr("b");
-    CFStringRef sc = mkstr("c");
-    CFStringRef sd = mkstr("d");
-    CFStringRef se = mkstr("e");
+    id shaderSource = mkstr(kMSLSource);
+    id sa = mkstr("a");
+    id sb = mkstr("b");
+    id sc = mkstr("c");
+    id sd = mkstr("d");
+    id se = mkstr("e");
     id<MTLLibrary> lib =
         M3(id, gDevice, "newLibraryWithSource:options:error:", id, shaderSource, id, nil, NSError **, NULL);
     if (!lib) { return NO; }
@@ -497,7 +487,6 @@ static void buildGeometry(void) {
 
 // ── Render loop ───────────────────────────────────────────────────────────────
 
-static CFTimeInterval gStartTime = 0;
 
 static void renderFrame(void) {
 
@@ -506,10 +495,8 @@ static void renderFrame(void) {
 
     CGSize sz = M0(CGSize, gMetalLayer, "drawableSize");
 
-    // Time driven by audio position for A/V sync; fall back to wall clock before synth is ready
-    float t = gAudioReady
-        ? (float)gAudioPos / 44100.0f
-        : (float)(CACurrentMediaTime() - gStartTime);
+    // Time is driven directly by consumed audio samples for A/V sync.
+    float t = (float)gAudioPos / 44100.0f;
 
     // End of demo
     if (t >= (float)(ELEVATED_TOTAL_SAMPLES) / 44100.0f) {
@@ -630,12 +617,9 @@ int main(void) {
         M1(void, window, "makeKeyAndOrderFront:", id, nil);
         M1(void, app, "activateIgnoringOtherApps:", BOOL, YES);
 
-        pthread_t tid;
-        pthread_create(&tid, NULL, synthThread, NULL);
-        pthread_detach(tid);
+        generateAudio();
         startAudioUnit();
 
-        gStartTime = CACurrentMediaTime();
         while (gRunning) {
             renderFrame();
             CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.0, true);
