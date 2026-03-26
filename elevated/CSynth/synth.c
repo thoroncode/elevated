@@ -10,8 +10,7 @@
 
 #include "synth.h"
 #include <math.h>
-#include <stdlib.h>
-#include <string.h>
+#include <stddef.h>
 #include <stdint.h>
 #include "music_tables_packed.h"
 
@@ -97,6 +96,26 @@ static __attribute__((noinline)) void zero_floats(float *dst, size_t count) {
     while (count--) *p++ = 0.0f;
 }
 
+static __attribute__((noinline)) void copy_bytes(uint8_t *dst, const uint8_t *src, size_t count) {
+    volatile uint8_t *d = (volatile uint8_t *)dst;
+    while (count--) *d++ = *src++;
+}
+
+static __attribute__((noinline)) void copy_floats(float *dst, const float *src, size_t count) {
+    volatile float *d = (volatile float *)dst;
+    while (count--) *d++ = *src++;
+}
+
+static inline float load_f32(const uint8_t *src) {
+    union { uint32_t u; float f; } v = {
+        .u = ((uint32_t)src[0]) |
+             ((uint32_t)src[1] << 8) |
+             ((uint32_t)src[2] << 16) |
+             ((uint32_t)src[3] << 24)
+    };
+    return v.f;
+}
+
 static void unpack_music_table(const uint8_t *src, uint8_t *dst, size_t len) {
     size_t out = 0;
     while (out < len) {
@@ -105,7 +124,7 @@ static void unpack_music_table(const uint8_t *src, uint8_t *dst, size_t len) {
         if (ctrl & 0x80) {
             zero_bytes(dst + out, count);
         } else {
-            memcpy(dst + out, src, count);
+            copy_bytes(dst + out, src, count);
             src += count;
         }
         out += count;
@@ -145,8 +164,8 @@ static void machine_synth(float **pedi, const uint8_t **pesi, int *pedx) {
         const uint8_t *op = oscs + oi * 12;
         ocp[oi].type  = op[0];
         ocp[oi].mode  = op[1];
-        memcpy(&ocp[oi].phshift, op + 4, 4);
-        memcpy(&ocp[oi].det,     op + 8, 4);
+        ocp[oi].phshift = load_f32(op + 4);
+        ocp[oi].det     = load_f32(op + 8);
         ocp[oi].det2  = 2.0f - ocp[oi].det;
     }
 
@@ -377,7 +396,7 @@ void elevated_generate_music(float *output) {
     uint8_t *mt = synth_machine_tree;
     zero_floats(stack, (size_t)(MAX_STACK_HEIGHT + 1) * STACK_FLOATS);
     zero_bytes(pm, sizeof(synth_param_mem));
-    memcpy(mt, machine_tree_data, sizeof(machine_tree_data));
+    copy_bytes(mt, machine_tree_data, sizeof(machine_tree_data));
 
     rng_seed = 0;
 
@@ -414,7 +433,7 @@ void elevated_generate_music(float *output) {
      * (edi should point there after all machines complete their mix.)
      * Copy to caller's output buffer.                                */
     float *result = stack + STACK_FLOATS;
-    memcpy(output, result, STACK_FLOATS * sizeof(float));
+    copy_floats(output, result, STACK_FLOATS);
 }
 
 /* ── Instrument sync (visual light beams) ──────────────────────────────────
