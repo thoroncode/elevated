@@ -92,6 +92,7 @@ $(BIN): $(SRCS) shaders.h $(TABLE_HDR) | $(OUTDIR)
 $(STRIPPED): $(BIN)
 	@cp $(BIN) $(STRIPPED)
 	@strip -u $(STRIPPED)
+	@codesign --remove-signature $(STRIPPED) >/dev/null 2>&1 || true
 
 report: $(STRIPPED) $(REPORT)
 	@python3 $(REPORT) $(BIN) $(STRIPPED)
