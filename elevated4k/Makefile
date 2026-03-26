@@ -42,6 +42,7 @@ CFLAGS  = \
 
 LDFLAGS = \
 	-Wl,-dead_strip \
+	-Wl,-no_function_starts \
 	-Wl,-no_compact_unwind \
 	-framework Metal \
 	-framework QuartzCore \
