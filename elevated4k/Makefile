@@ -24,6 +24,7 @@ CC      = clang
 OUTDIR  = build
 BIN     = $(OUTDIR)/ElevatedMac4k
 STRIPPED = $(OUTDIR)/ElevatedMac4k.stripped
+RUNBIN   = $(OUTDIR)/ElevatedMac4k.run
 
 SYNTH_DIR = ../elevated/CSynth
 
@@ -92,6 +93,10 @@ $(STRIPPED): $(BIN)
 	@strip -u $(STRIPPED)
 	@codesign --remove-signature $(STRIPPED) >/dev/null 2>&1 || true
 
+$(RUNBIN): $(STRIPPED)
+	@cp $(STRIPPED) $(RUNBIN)
+	@codesign -s - --force --timestamp=none $(RUNBIN) >/dev/null
+
 report: $(STRIPPED) $(REPORT)
 	@python3 $(REPORT) $(BIN) $(STRIPPED)
 
@@ -102,8 +107,8 @@ review: report
 
 size: report
 
-run: $(STRIPPED)
-	$(STRIPPED)
+run: $(RUNBIN)
+	$(RUNBIN)
 
 clean:
 	@rm -rf $(OUTDIR)
