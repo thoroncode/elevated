@@ -636,10 +636,13 @@ int main(void) {
 
         generateAudio();
         startAudioUnit();
+        id runLoop = M0(id, CLS("NSRunLoop"), "currentRunLoop");
+        id runMode = mkstr("kCFRunLoopDefaultMode");
+        id pastDate = M0(id, CLS("NSDate"), "distantPast");
 
         while (gRunning) {
             renderFrame();
-            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.0, true);
+            M2(BOOL, runLoop, "runMode:beforeDate:", id, runMode, id, pastDate);
         }
     }
     return 0;
