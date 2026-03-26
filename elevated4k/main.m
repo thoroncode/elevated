@@ -7,14 +7,32 @@
 #import <Cocoa/Cocoa.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
-#import <QuartzCore/CADisplayLink.h>
 #import <AudioUnit/AudioUnit.h>
 #import <CoreAudio/CoreAudio.h>
 #import <simd/simd.h>
 #import <math.h>
+#import <objc/message.h>
+#import <objc/runtime.h>
 #import <pthread.h>
 #import "shaders.h"
 #import "../elevated/CSynth/include/synth.h"
+
+#define CLS(name) ((id)objc_getClass(name))
+#define S(name) sel_registerName(name)
+#define M0(ret, obj, name) ((ret (*)(id, SEL))objc_msgSend)((id)(obj), S(name))
+#define M1(ret, obj, name, t1, a1) ((ret (*)(id, SEL, t1))objc_msgSend)((id)(obj), S(name), (t1)(a1))
+#define M2(ret, obj, name, t1, a1, t2, a2) ((ret (*)(id, SEL, t1, t2))objc_msgSend)((id)(obj), S(name), (t1)(a1), (t2)(a2))
+#define M3(ret, obj, name, t1, a1, t2, a2, t3, a3) ((ret (*)(id, SEL, t1, t2, t3))objc_msgSend)((id)(obj), S(name), (t1)(a1), (t2)(a2), (t3)(a3))
+#define M4(ret, obj, name, t1, a1, t2, a2, t3, a3, t4, a4) ((ret (*)(id, SEL, t1, t2, t3, t4))objc_msgSend)((id)(obj), S(name), (t1)(a1), (t2)(a2), (t3)(a3), (t4)(a4))
+#define M5(ret, obj, name, t1, a1, t2, a2, t3, a3, t4, a4, t5, a5) ((ret (*)(id, SEL, t1, t2, t3, t4, t5))objc_msgSend)((id)(obj), S(name), (t1)(a1), (t2)(a2), (t3)(a3), (t4)(a4), (t5)(a5))
+
+static inline id attachmentAt(id owner, NSUInteger index) {
+    return M1(id, M0(id, owner, "colorAttachments"), "objectAtIndexedSubscript:", NSUInteger, index);
+}
+
+static inline CFStringRef mkstr(const char *text) {
+    return CFStringCreateWithCStringNoCopy(NULL, text, kCFStringEncodingUTF8, kCFAllocatorNull);
+}
 
 // ── Uniforms (must match Shaders.metal layout exactly) ───────────────────────
 
@@ -351,63 +369,73 @@ static id<MTLBuffer> gTerrainIBuf;
 static int           gTerrainIndexCount;
 
 static Uniforms gUniforms;
+static int      gRunning = 1;
 
 static void rebuildOffscreen(CGSize size) {
     NSUInteger w = (NSUInteger)size.width, h = (NSUInteger)size.height;
     if (!w || !h) return;
 
     MTLTextureDescriptor *td;
-    td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatRGBA32Float
-                                                            width:w height:h mipmapped:NO];
-    td.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
-    td.storageMode = MTLStorageModePrivate;
-    gGbufWorldPos = [gDevice newTextureWithDescriptor:td];
+    td = M4(id, CLS("MTLTextureDescriptor"), "texture2DDescriptorWithPixelFormat:width:height:mipmapped:",
+        MTLPixelFormat, MTLPixelFormatRGBA32Float, NSUInteger, w, NSUInteger, h, BOOL, NO);
+    M1(void, td, "setUsage:", NSUInteger, MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead);
+    M1(void, td, "setStorageMode:", NSUInteger, MTLStorageModePrivate);
+    gGbufWorldPos = M1(id, gDevice, "newTextureWithDescriptor:", id, td);
 
-    td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
-                                                            width:w height:h mipmapped:NO];
-    td.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
-    td.storageMode = MTLStorageModePrivate;
-    gSceneColor = [gDevice newTextureWithDescriptor:td];
+    td = M4(id, CLS("MTLTextureDescriptor"), "texture2DDescriptorWithPixelFormat:width:height:mipmapped:",
+        MTLPixelFormat, MTLPixelFormatBGRA8Unorm, NSUInteger, w, NSUInteger, h, BOOL, NO);
+    M1(void, td, "setUsage:", NSUInteger, MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead);
+    M1(void, td, "setStorageMode:", NSUInteger, MTLStorageModePrivate);
+    gSceneColor = M1(id, gDevice, "newTextureWithDescriptor:", id, td);
 
-    td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatDepth32Float
-                                                            width:w height:h mipmapped:NO];
-    td.usage = MTLTextureUsageRenderTarget;
-    td.storageMode = MTLStorageModePrivate;
-    gGbufDepth = [gDevice newTextureWithDescriptor:td];
+    td = M4(id, CLS("MTLTextureDescriptor"), "texture2DDescriptorWithPixelFormat:width:height:mipmapped:",
+        MTLPixelFormat, MTLPixelFormatDepth32Float, NSUInteger, w, NSUInteger, h, BOOL, NO);
+    M1(void, td, "setUsage:", NSUInteger, MTLTextureUsageRenderTarget);
+    M1(void, td, "setStorageMode:", NSUInteger, MTLStorageModePrivate);
+    gGbufDepth = M1(id, gDevice, "newTextureWithDescriptor:", id, td);
 }
 
 static BOOL buildPipelines(void) {
-    id<MTLLibrary> lib = [gDevice newLibraryWithSource:@(kMSLSource) options:nil error:NULL];
+    CFStringRef shaderSource = mkstr(kMSLSource);
+    CFStringRef sa = mkstr("a");
+    CFStringRef sb = mkstr("b");
+    CFStringRef sc = mkstr("c");
+    CFStringRef sd = mkstr("d");
+    CFStringRef se = mkstr("e");
+    id<MTLLibrary> lib =
+        M3(id, gDevice, "newLibraryWithSource:options:error:", id, shaderSource, id, nil, NSError **, NULL);
     if (!lib) { return NO; }
 
     MTLRenderPipelineDescriptor *d;
+    id ca0;
 
-    d = [MTLRenderPipelineDescriptor new];
-    d.vertexFunction   = [lib newFunctionWithName:@"a"];
-    d.fragmentFunction = [lib newFunctionWithName:@"b"];
-    d.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA32Float;
-    d.depthAttachmentPixelFormat      = MTLPixelFormatDepth32Float;
-    gGbufPSO = [gDevice newRenderPipelineStateWithDescriptor:d error:NULL];
+    d = M0(id, CLS("MTLRenderPipelineDescriptor"), "new");
+    M1(void, d, "setVertexFunction:", id, M1(id, lib, "newFunctionWithName:", id, sa));
+    M1(void, d, "setFragmentFunction:", id, M1(id, lib, "newFunctionWithName:", id, sb));
+    ca0 = attachmentAt(d, 0);
+    M1(void, ca0, "setPixelFormat:", NSUInteger, MTLPixelFormatRGBA32Float);
+    M1(void, d, "setDepthAttachmentPixelFormat:", NSUInteger, MTLPixelFormatDepth32Float);
+    gGbufPSO = M2(id, gDevice, "newRenderPipelineStateWithDescriptor:error:", id, d, NSError **, NULL);
     if (!gGbufPSO) { return NO; }
 
-    d = [MTLRenderPipelineDescriptor new];
-    d.vertexFunction   = [lib newFunctionWithName:@"c"];
-    d.fragmentFunction = [lib newFunctionWithName:@"d"];
-    d.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-    gDeferredPSO = [gDevice newRenderPipelineStateWithDescriptor:d error:NULL];
+    d = M0(id, CLS("MTLRenderPipelineDescriptor"), "new");
+    M1(void, d, "setVertexFunction:", id, M1(id, lib, "newFunctionWithName:", id, sc));
+    M1(void, d, "setFragmentFunction:", id, M1(id, lib, "newFunctionWithName:", id, sd));
+    M1(void, attachmentAt(d, 0), "setPixelFormat:", NSUInteger, MTLPixelFormatBGRA8Unorm);
+    gDeferredPSO = M2(id, gDevice, "newRenderPipelineStateWithDescriptor:error:", id, d, NSError **, NULL);
     if (!gDeferredPSO) { return NO; }
 
-    d = [MTLRenderPipelineDescriptor new];
-    d.vertexFunction   = [lib newFunctionWithName:@"c"];
-    d.fragmentFunction = [lib newFunctionWithName:@"e"];
-    d.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-    gPostPSO = [gDevice newRenderPipelineStateWithDescriptor:d error:NULL];
+    d = M0(id, CLS("MTLRenderPipelineDescriptor"), "new");
+    M1(void, d, "setVertexFunction:", id, M1(id, lib, "newFunctionWithName:", id, sc));
+    M1(void, d, "setFragmentFunction:", id, M1(id, lib, "newFunctionWithName:", id, se));
+    M1(void, attachmentAt(d, 0), "setPixelFormat:", NSUInteger, MTLPixelFormatBGRA8Unorm);
+    gPostPSO = M2(id, gDevice, "newRenderPipelineStateWithDescriptor:error:", id, d, NSError **, NULL);
     if (!gPostPSO) { return NO; }
 
-    MTLDepthStencilDescriptor *ds = [MTLDepthStencilDescriptor new];
-    ds.depthCompareFunction = MTLCompareFunctionLess;
-    ds.depthWriteEnabled    = YES;
-    gDepthState = [gDevice newDepthStencilStateWithDescriptor:ds];
+    MTLDepthStencilDescriptor *ds = M0(id, CLS("MTLDepthStencilDescriptor"), "new");
+    M1(void, ds, "setDepthCompareFunction:", NSUInteger, MTLCompareFunctionLess);
+    M1(void, ds, "setDepthWriteEnabled:", BOOL, YES);
+    gDepthState = M1(id, gDevice, "newDepthStencilStateWithDescriptor:", id, ds);
 
     return YES;
 }
@@ -422,13 +450,14 @@ static void buildGeometry(void) {
             gNoisePixels[i] = (float)v / 32768.0f;
         }
         MTLTextureDescriptor *td =
-            [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatR32Float
-                                                               width:256 height:256 mipmapped:NO];
-        td.usage = MTLTextureUsageShaderRead;
-        td.storageMode = MTLStorageModeShared;
-        gNoiseTex = [gDevice newTextureWithDescriptor:td];
-        [gNoiseTex replaceRegion:MTLRegionMake2D(0,0,256,256) mipmapLevel:0
-                       withBytes:gNoisePixels bytesPerRow:256*sizeof(float)];
+            M4(id, CLS("MTLTextureDescriptor"), "texture2DDescriptorWithPixelFormat:width:height:mipmapped:",
+                MTLPixelFormat, MTLPixelFormatR32Float, NSUInteger, 256, NSUInteger, 256, BOOL, NO);
+        M1(void, td, "setUsage:", NSUInteger, MTLTextureUsageShaderRead);
+        M1(void, td, "setStorageMode:", NSUInteger, MTLStorageModeShared);
+        gNoiseTex = M1(id, gDevice, "newTextureWithDescriptor:", id, td);
+        M4(void, gNoiseTex, "replaceRegion:mipmapLevel:withBytes:bytesPerRow:",
+            MTLRegion, MTLRegionMake2D(0,0,256,256), NSUInteger, 0, const void *, gNoisePixels,
+            NSUInteger, 256*sizeof(float));
     }
 
     // Terrain mesh: 1024×1024 grid, scale=104 (±52 world units)
@@ -456,12 +485,12 @@ static void buildGeometry(void) {
                     indices[idx++]=i;   indices[idx++]=i+1;   indices[idx++]=i+r+1;
                     indices[idx++]=i;   indices[idx++]=i+r+1; indices[idx++]=i+r;
                 }
-            }
+        }
         gTerrainIndexCount = idx;
-        gTerrainVBuf = [gDevice newBufferWithBytes:verts length:nverts*sizeof(simd_float2)
-                                           options:MTLResourceStorageModeShared];
-        gTerrainIBuf = [gDevice newBufferWithBytes:indices length:idx*sizeof(uint32_t)
-                                           options:MTLResourceStorageModeShared];
+        gTerrainVBuf = M3(id, gDevice, "newBufferWithBytes:length:options:",
+            const void *, verts, NSUInteger, nverts*sizeof(simd_float2), NSUInteger, MTLResourceStorageModeShared);
+        gTerrainIBuf = M3(id, gDevice, "newBufferWithBytes:length:options:",
+            const void *, indices, NSUInteger, idx*sizeof(uint32_t), NSUInteger, MTLResourceStorageModeShared);
         free(verts); free(indices);
     }
 }
@@ -472,10 +501,10 @@ static CFTimeInterval gStartTime = 0;
 
 static void renderFrame(void) {
 
-    id<CAMetalDrawable> drawable = [gMetalLayer nextDrawable];
+    id<CAMetalDrawable> drawable = M0(id, gMetalLayer, "nextDrawable");
     if (!drawable) return;
 
-    CGSize sz = gMetalLayer.drawableSize;
+    CGSize sz = M0(CGSize, gMetalLayer, "drawableSize");
 
     // Time driven by audio position for A/V sync; fall back to wall clock before synth is ready
     float t = gAudioReady
@@ -484,134 +513,133 @@ static void renderFrame(void) {
 
     // End of demo
     if (t >= (float)(ELEVATED_TOTAL_SAMPLES) / 44100.0f) {
-        [NSApp terminate:nil];
+        gRunning = 0;
         return;
     }
 
     gUniforms.time = t;
     updateUniforms(&gUniforms, sz);
 
-    id<MTLCommandBuffer> cmd = [gQueue commandBuffer];
+    id<MTLCommandBuffer> cmd = M0(id, gQueue, "commandBuffer");
 
     // ── Pass 1: G-buffer ─────────────────────────────────────────────────────
     {
-        MTLRenderPassDescriptor *rpd = [MTLRenderPassDescriptor renderPassDescriptor];
-        rpd.colorAttachments[0].texture     = gGbufWorldPos;
-        rpd.colorAttachments[0].loadAction  = MTLLoadActionClear;
-        rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
-        rpd.colorAttachments[0].clearColor  = MTLClearColorMake(0,0,0,0);
-        rpd.depthAttachment.texture         = gGbufDepth;
-        rpd.depthAttachment.loadAction      = MTLLoadActionClear;
-        rpd.depthAttachment.storeAction     = MTLStoreActionDontCare;
-        rpd.depthAttachment.clearDepth      = 1.0;
+        MTLRenderPassDescriptor *rpd = M0(id, CLS("MTLRenderPassDescriptor"), "renderPassDescriptor");
+        id ca0 = attachmentAt(rpd, 0);
+        id da  = M0(id, rpd, "depthAttachment");
+        M1(void, ca0, "setTexture:", id, gGbufWorldPos);
+        M1(void, ca0, "setLoadAction:", NSUInteger, MTLLoadActionClear);
+        M1(void, ca0, "setStoreAction:", NSUInteger, MTLStoreActionStore);
+        M1(void, ca0, "setClearColor:", MTLClearColor, MTLClearColorMake(0,0,0,0));
+        M1(void, da, "setTexture:", id, gGbufDepth);
+        M1(void, da, "setLoadAction:", NSUInteger, MTLLoadActionClear);
+        M1(void, da, "setStoreAction:", NSUInteger, MTLStoreActionDontCare);
+        M1(void, da, "setClearDepth:", double, 1.0);
 
-        id<MTLRenderCommandEncoder> enc = [cmd renderCommandEncoderWithDescriptor:rpd];
-        [enc setRenderPipelineState:gGbufPSO];
-        [enc setCullMode:MTLCullModeFront];
-        [enc setDepthStencilState:gDepthState];
-        [enc setVertexBuffer:gTerrainVBuf offset:0 atIndex:0];
-        [enc setVertexBytes:&gUniforms length:sizeof(gUniforms) atIndex:1];
-        [enc setVertexTexture:gNoiseTex atIndex:0];
-        [enc drawIndexedPrimitives:MTLPrimitiveTypeTriangle
-                        indexCount:gTerrainIndexCount
-                         indexType:MTLIndexTypeUInt32
-                       indexBuffer:gTerrainIBuf
-                 indexBufferOffset:0];
-        [enc endEncoding];
+        id<MTLRenderCommandEncoder> enc = M1(id, cmd, "renderCommandEncoderWithDescriptor:", id, rpd);
+        M1(void, enc, "setRenderPipelineState:", id, gGbufPSO);
+        M1(void, enc, "setCullMode:", NSUInteger, MTLCullModeFront);
+        M1(void, enc, "setDepthStencilState:", id, gDepthState);
+        M3(void, enc, "setVertexBuffer:offset:atIndex:", id, gTerrainVBuf, NSUInteger, 0, NSUInteger, 0);
+        M3(void, enc, "setVertexBytes:length:atIndex:",
+            const void *, &gUniforms, NSUInteger, sizeof(gUniforms), NSUInteger, 1);
+        M2(void, enc, "setVertexTexture:atIndex:", id, gNoiseTex, NSUInteger, 0);
+        M5(void, enc, "drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:",
+            NSUInteger, MTLPrimitiveTypeTriangle, NSUInteger, gTerrainIndexCount, NSUInteger, MTLIndexTypeUInt32,
+            id, gTerrainIBuf, NSUInteger, 0);
+        M0(void, enc, "endEncoding");
     }
 
     // ── Pass 2: Deferred shading ──────────────────────────────────────────────
     {
-        MTLRenderPassDescriptor *rpd = [MTLRenderPassDescriptor renderPassDescriptor];
-        rpd.colorAttachments[0].texture     = gSceneColor;
-        rpd.colorAttachments[0].loadAction  = MTLLoadActionDontCare;
-        rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
+        MTLRenderPassDescriptor *rpd = M0(id, CLS("MTLRenderPassDescriptor"), "renderPassDescriptor");
+        id ca0 = attachmentAt(rpd, 0);
+        M1(void, ca0, "setTexture:", id, gSceneColor);
+        M1(void, ca0, "setLoadAction:", NSUInteger, MTLLoadActionDontCare);
+        M1(void, ca0, "setStoreAction:", NSUInteger, MTLStoreActionStore);
 
-        id<MTLRenderCommandEncoder> enc = [cmd renderCommandEncoderWithDescriptor:rpd];
-        [enc setRenderPipelineState:gDeferredPSO];
-        [enc setFragmentBytes:&gUniforms length:sizeof(gUniforms) atIndex:0];
-        [enc setFragmentTexture:gNoiseTex    atIndex:0];
-        [enc setFragmentTexture:gGbufWorldPos atIndex:1];
-        [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
-        [enc endEncoding];
+        id<MTLRenderCommandEncoder> enc = M1(id, cmd, "renderCommandEncoderWithDescriptor:", id, rpd);
+        M1(void, enc, "setRenderPipelineState:", id, gDeferredPSO);
+        M3(void, enc, "setFragmentBytes:length:atIndex:",
+            const void *, &gUniforms, NSUInteger, sizeof(gUniforms), NSUInteger, 0);
+        M2(void, enc, "setFragmentTexture:atIndex:", id, gNoiseTex, NSUInteger, 0);
+        M2(void, enc, "setFragmentTexture:atIndex:", id, gGbufWorldPos, NSUInteger, 1);
+        M3(void, enc, "drawPrimitives:vertexStart:vertexCount:",
+            NSUInteger, MTLPrimitiveTypeTriangle, NSUInteger, 0, NSUInteger, 3);
+        M0(void, enc, "endEncoding");
     }
 
     // ── Pass 3: Post-processing → screen ──────────────────────────────────────
     {
-        MTLRenderPassDescriptor *rpd = [MTLRenderPassDescriptor renderPassDescriptor];
-        rpd.colorAttachments[0].texture     = drawable.texture;
-        rpd.colorAttachments[0].loadAction  = MTLLoadActionDontCare;
-        rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
+        MTLRenderPassDescriptor *rpd = M0(id, CLS("MTLRenderPassDescriptor"), "renderPassDescriptor");
+        id ca0 = attachmentAt(rpd, 0);
+        M1(void, ca0, "setTexture:", id, M0(id, drawable, "texture"));
+        M1(void, ca0, "setLoadAction:", NSUInteger, MTLLoadActionDontCare);
+        M1(void, ca0, "setStoreAction:", NSUInteger, MTLStoreActionStore);
 
-        id<MTLRenderCommandEncoder> enc = [cmd renderCommandEncoderWithDescriptor:rpd];
-        [enc setRenderPipelineState:gPostPSO];
-        [enc setFragmentBytes:&gUniforms length:sizeof(gUniforms) atIndex:0];
-        [enc setFragmentTexture:gNoiseTex    atIndex:0];
-        [enc setFragmentTexture:gGbufWorldPos atIndex:1];
-        [enc setFragmentTexture:gSceneColor   atIndex:2];
-        [enc drawPrimitives:MTLPrimitiveTypeTriangle vertexStart:0 vertexCount:3];
-        [enc endEncoding];
+        id<MTLRenderCommandEncoder> enc = M1(id, cmd, "renderCommandEncoderWithDescriptor:", id, rpd);
+        M1(void, enc, "setRenderPipelineState:", id, gPostPSO);
+        M3(void, enc, "setFragmentBytes:length:atIndex:",
+            const void *, &gUniforms, NSUInteger, sizeof(gUniforms), NSUInteger, 0);
+        M2(void, enc, "setFragmentTexture:atIndex:", id, gNoiseTex, NSUInteger, 0);
+        M2(void, enc, "setFragmentTexture:atIndex:", id, gGbufWorldPos, NSUInteger, 1);
+        M2(void, enc, "setFragmentTexture:atIndex:", id, gSceneColor, NSUInteger, 2);
+        M3(void, enc, "drawPrimitives:vertexStart:vertexCount:",
+            NSUInteger, MTLPrimitiveTypeTriangle, NSUInteger, 0, NSUInteger, 3);
+        M0(void, enc, "endEncoding");
     }
 
-    [cmd presentDrawable:drawable];
-    [cmd commit];
+    M1(void, cmd, "presentDrawable:", id, drawable);
+    M0(void, cmd, "commit");
 }
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
-@interface T : NSObject
-@end
-
-@implementation T
-
-- (void)tick:(CADisplayLink *)link { (void)link; renderFrame(); }
-
-@end
-
 int main(void) {
     @autoreleasepool {
-        NSApplication *app = [NSApplication sharedApplication];
-        [app setActivationPolicy:NSApplicationActivationPolicyRegular];
+        NSApplication *app = M0(id, CLS("NSApplication"), "sharedApplication");
+        M1(void, app, "setActivationPolicy:", NSInteger, NSApplicationActivationPolicyRegular);
 
-    gDevice = MTLCreateSystemDefaultDevice();
-    gQueue  = [gDevice newCommandQueue];
-    NSScreen *screen = NSScreen.mainScreen;
+        gDevice = MTLCreateSystemDefaultDevice();
+        gQueue  = M0(id, gDevice, "newCommandQueue");
+        NSScreen *screen = M0(id, CLS("NSScreen"), "mainScreen");
         if (!screen) return 1;
-    NSRect frame = screen.frame;
-    CGFloat scale = screen.backingScaleFactor;
+        NSRect frame = M0(NSRect, screen, "frame");
+        CGFloat scale = M0(CGFloat, screen, "backingScaleFactor");
 
-    NSWindow *window = [[NSWindow alloc]
-        initWithContentRect:frame
-                  styleMask:NSWindowStyleMaskBorderless
-                    backing:NSBackingStoreBuffered defer:NO];
-    NSView *view = [[NSView alloc] initWithFrame:frame];
-    view.wantsLayer = YES;
-    window.contentView = view;
+        NSWindow *window = M4(id, M0(id, CLS("NSWindow"), "alloc"),
+            "initWithContentRect:styleMask:backing:defer:",
+            NSRect, frame, NSUInteger, NSWindowStyleMaskBorderless,
+            NSUInteger, NSBackingStoreBuffered, BOOL, NO);
+        NSView *view = M1(id, M0(id, CLS("NSView"), "alloc"), "initWithFrame:", NSRect, frame);
+        M1(void, view, "setWantsLayer:", BOOL, YES);
+        M1(void, window, "setContentView:", id, view);
 
-    gMetalLayer = [CAMetalLayer layer];
-    gMetalLayer.device = gDevice;
-    gMetalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
-    gMetalLayer.frame = view.bounds;
-    gMetalLayer.contentsScale = scale;
-    gMetalLayer.drawableSize = CGSizeMake(NSWidth(frame) * scale, NSHeight(frame) * scale);
-    view.layer = gMetalLayer;
+        gMetalLayer = M0(id, CLS("CAMetalLayer"), "layer");
+        M1(void, gMetalLayer, "setDevice:", id, gDevice);
+        M1(void, gMetalLayer, "setPixelFormat:", NSUInteger, MTLPixelFormatBGRA8Unorm);
+        M1(void, gMetalLayer, "setFrame:", NSRect, M0(NSRect, view, "bounds"));
+        M1(void, gMetalLayer, "setContentsScale:", CGFloat, scale);
+        M1(void, gMetalLayer, "setDrawableSize:", CGSize, CGSizeMake(NSWidth(frame) * scale, NSHeight(frame) * scale));
+        M1(void, view, "setLayer:", id, gMetalLayer);
 
-    rebuildOffscreen(gMetalLayer.drawableSize);
+        rebuildOffscreen(M0(CGSize, gMetalLayer, "drawableSize"));
         if (!buildPipelines()) return 1;
-    buildGeometry();
+        buildGeometry();
 
-    [window makeKeyAndOrderFront:nil];
-    [NSApp activateIgnoringOtherApps:YES];
+        M1(void, window, "makeKeyAndOrderFront:", id, nil);
+        M1(void, app, "activateIgnoringOtherApps:", BOOL, YES);
 
-    pthread_t tid;
-    pthread_create(&tid, NULL, synthThread, NULL);
-    pthread_detach(tid);
-    startAudioUnit();
+        pthread_t tid;
+        pthread_create(&tid, NULL, synthThread, NULL);
+        pthread_detach(tid);
+        startAudioUnit();
 
-    gStartTime = CACurrentMediaTime();
-        T *t = [T new];
-    CADisplayLink *dl = [screen displayLinkWithTarget:t selector:@selector(tick:)];
-    [dl addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
-        [app run];
+        gStartTime = CACurrentMediaTime();
+        while (gRunning) {
+            renderFrame();
+            CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.0, true);
+        }
     }
+    return 0;
 }
