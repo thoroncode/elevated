@@ -53,6 +53,17 @@ static __attribute__((always_inline)) float fast_sinpif(float x) {
     return u * (r * u2 + 1.0f);
 }
 
+static __attribute__((always_inline)) float note_freq_scale(uint8_t note) {
+    float scale = 1.0f;
+    float step = NOTE_FREQ_STEP;
+    while (note) {
+        if (note & 1u) scale *= step;
+        step *= step;
+        note >>= 1;
+    }
+    return scale;
+}
+
 /* ── Oscillator (saw / square / sine) ───────────────────────────────────── */
 static __attribute__((always_inline))
 float osc_wave(float phase, float phase_shift, uint8_t type) {
@@ -139,8 +150,7 @@ static void machine_synth(float **pedi, const uint8_t **pesi, int *pedx) {
 
         const float *env = (note == 0xFE) ? ENV_STOP : ENV_NORMAL;
 
-        /* note frequency via powf — replaces O(note) multiply loop */
-        float freq = NOTE_FREQ_START * powf(NOTE_FREQ_STEP, (float)note) - base_freq;
+        float freq = NOTE_FREQ_START * note_freq_scale(note) - base_freq;
 
         float phase   = 0.0f;
         float env_val = 0.0f;
