@@ -11,5 +11,9 @@ src = re.sub(r'\n{3,}', '\n\n', src)                   # collapse blank lines
 for line in src.splitlines():
     if line.strip():
         esc = ' '.join(line.split())
+        if not esc.startswith('#'):
+            esc = re.sub(r'\s*([(){}\[\],;])\s*', r'\1', esc)
+            esc = re.sub(r'\s*([=*/<>?:])\s*', r'\1', esc)
+            esc = re.sub(r'\s+', ' ', esc)
         esc = esc.replace('\\', '\\\\').replace('"', '\\"')
         print('    "%s\\n"' % esc)

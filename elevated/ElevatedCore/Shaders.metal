@@ -19,7 +19,6 @@ struct Uniforms {
 // ─── G-buffer pixel output ───────────────────────────────────────────────────
 struct GBufferOut {
     float4 worldPos [[color(0)]];  // xyz=world pos, w=1 if hit
-    float4 color    [[color(1)]];  // vertex color pass-through
 };
 
 // ─── Vertex shader outputs ───────────────────────────────────────────────────
@@ -123,7 +122,6 @@ vertex TerrainVert terrainVert(
 fragment GBufferOut gbufferFrag(TerrainVert in [[stage_in]]) {
     GBufferOut out;
     out.worldPos = float4(in.world.xyz, 1.0);  // w=1 flags geometry hit
-    out.color    = in.world;
     return out;
 }
 

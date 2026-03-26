@@ -172,7 +172,6 @@ public class Renderer: NSObject, MTKViewDelegate {
 
     // G-buffer textures
     var gbufWorldPos: MTLTexture!  // rgba32float — world pos + hit flag
-    var gbufColor:    MTLTexture!  // rgba32float — vertex color
     var gbufDepth:    MTLTexture!  // depth32float
     var sceneColor:   MTLTexture!  // bgra8unorm — scene after deferred pass (matches D3D9 A8R8G8B8)
 
@@ -297,7 +296,6 @@ public class Renderer: NSObject, MTKViewDelegate {
         gbufDesc.vertexFunction   = lib.makeFunction(name: "terrainVert")
         gbufDesc.fragmentFunction = lib.makeFunction(name: "gbufferFrag")
         gbufDesc.colorAttachments[0].pixelFormat = .rgba32Float  // worldPos
-        gbufDesc.colorAttachments[1].pixelFormat = .rgba32Float  // color
         gbufDesc.depthAttachmentPixelFormat = .depth32Float
         gbufferPSO = try! device.makeRenderPipelineState(descriptor: gbufDesc)
 
@@ -339,7 +337,6 @@ public class Renderer: NSObject, MTKViewDelegate {
         }
 
         gbufWorldPos = makeTex(.rgba32Float)
-        gbufColor    = makeTex(.rgba32Float)
         gbufDepth    = makeTex(.depth32Float, [.renderTarget])
         sceneColor   = makeTex(.bgra8Unorm)
     }
@@ -648,9 +645,6 @@ public class Renderer: NSObject, MTKViewDelegate {
         gbRPD.colorAttachments[0].loadAction  = .clear
         gbRPD.colorAttachments[0].storeAction = .store
         gbRPD.colorAttachments[0].clearColor  = MTLClearColor(red:0,green:0,blue:0,alpha:0)
-        gbRPD.colorAttachments[1].texture     = gbufColor
-        gbRPD.colorAttachments[1].loadAction  = .clear
-        gbRPD.colorAttachments[1].storeAction = .store
         gbRPD.depthAttachment.texture         = gbufDepth
         gbRPD.depthAttachment.loadAction      = .clear
         gbRPD.depthAttachment.storeAction     = .dontCare

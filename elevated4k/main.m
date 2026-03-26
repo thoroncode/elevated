@@ -342,7 +342,6 @@ static id<MTLDepthStencilState>   gDepthState;
 static CAMetalLayer              *gMetalLayer;
 
 static id<MTLTexture> gGbufWorldPos;
-static id<MTLTexture> gGbufColor;
 static id<MTLTexture> gGbufDepth;
 static id<MTLTexture> gSceneColor;
 static id<MTLTexture> gNoiseTex;
@@ -363,7 +362,6 @@ static void rebuildOffscreen(CGSize size) {
     td.usage = MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead;
     td.storageMode = MTLStorageModePrivate;
     gGbufWorldPos = [gDevice newTextureWithDescriptor:td];
-    gGbufColor    = [gDevice newTextureWithDescriptor:td];
 
     td = [MTLTextureDescriptor texture2DDescriptorWithPixelFormat:MTLPixelFormatBGRA8Unorm
                                                             width:w height:h mipmapped:NO];
@@ -379,9 +377,7 @@ static void rebuildOffscreen(CGSize size) {
 }
 
 static BOOL buildPipelines(void) {
-    MTLCompileOptions *opts = [MTLCompileOptions new];
-    opts.languageVersion = MTLLanguageVersion3_0;
-    id<MTLLibrary> lib = [gDevice newLibraryWithSource:@(kMSLSource) options:opts error:NULL];
+    id<MTLLibrary> lib = [gDevice newLibraryWithSource:@(kMSLSource) options:nil error:NULL];
     if (!lib) { return NO; }
 
     MTLRenderPipelineDescriptor *d;
@@ -390,7 +386,6 @@ static BOOL buildPipelines(void) {
     d.vertexFunction   = [lib newFunctionWithName:@"terrainVert"];
     d.fragmentFunction = [lib newFunctionWithName:@"gbufferFrag"];
     d.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA32Float;
-    d.colorAttachments[1].pixelFormat = MTLPixelFormatRGBA32Float;
     d.depthAttachmentPixelFormat      = MTLPixelFormatDepth32Float;
     gGbufPSO = [gDevice newRenderPipelineStateWithDescriptor:d error:NULL];
     if (!gGbufPSO) { return NO; }
@@ -505,9 +500,6 @@ static void renderFrame(void) {
         rpd.colorAttachments[0].loadAction  = MTLLoadActionClear;
         rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
         rpd.colorAttachments[0].clearColor  = MTLClearColorMake(0,0,0,0);
-        rpd.colorAttachments[1].texture     = gGbufColor;
-        rpd.colorAttachments[1].loadAction  = MTLLoadActionClear;
-        rpd.colorAttachments[1].storeAction = MTLStoreActionStore;
         rpd.depthAttachment.texture         = gGbufDepth;
         rpd.depthAttachment.loadAction      = MTLLoadActionClear;
         rpd.depthAttachment.storeAction     = MTLStoreActionDontCare;
