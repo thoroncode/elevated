@@ -52,6 +52,7 @@ LDFLAGS = \
 
 SRCS    = main.m $(SYNTH_DIR)/synth.c
 SHADERS = ../elevated/ElevatedCore/Shaders.metal
+SHADER_TOOL = strip_shaders.py
 REPORT  = report_binary.py
 
 .PHONY: all size report run shaders clean
@@ -61,12 +62,14 @@ all: $(STRIPPED)
 # Generate shaders.h from the canonical Shaders.metal source.
 # The resulting C string is what gets compiled at runtime via
 # [MTLDevice newLibraryWithSource:options:error:].
-shaders: $(SHADERS)
+shaders: shaders.h
+
+shaders.h: $(SHADERS) $(SHADER_TOOL)
 	@echo "Generating shaders.h from $(SHADERS) (comments stripped)..."
 	@printf '// shaders.h — auto-generated from Shaders.metal, do not edit\n' > shaders.h
 	@printf '// Regenerate with: make shaders\n\n' >> shaders.h
 	@printf 'static const char kMSLSource[] =\n' >> shaders.h
-	@python3 strip_shaders.py $(SHADERS) >> shaders.h
+	@python3 $(SHADER_TOOL) $(SHADERS) >> shaders.h
 	@printf '    ;\n' >> shaders.h
 	@echo "  shaders.h written ($$(wc -c < shaders.h) bytes)"
 
