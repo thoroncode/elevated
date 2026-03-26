@@ -6,8 +6,11 @@ from __future__ import annotations
 import os
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
+
+PAGE_SIZE = 0x4000
 
 KNOWN_CONST_SYMBOLS = [
     "_kSyncData",
@@ -150,6 +153,97 @@ def segment_by_name(segments: list[dict], name: str) -> dict | None:
     return None
 
 
+def section_by_name(segments: list[dict], segname: str, sectname: str) -> dict | None:
+    for segment in segments:
+        if segment.get("segname") != segname:
+            continue
+        for section in segment["sections"]:
+            if section.get("sectname") == sectname:
+                return section
+    return None
+
+
+def read_section_bytes(path: Path, section: dict) -> bytes:
+    offset = section.get("offset", 0)
+    size = section.get("size", 0)
+    with path.open("rb") as handle:
+        handle.seek(offset)
+        return handle.read(size)
+
+
+def parse_cstrings(path: Path, segments: list[dict]) -> list[str]:
+    section = section_by_name(segments, "__TEXT", "__cstring")
+    if not section:
+        return []
+
+    blob = read_section_bytes(path, section)
+    strings = []
+    for row in blob.split(b"\x00"):
+        if not row:
+            continue
+        strings.append(row.decode("utf-8", errors="replace"))
+    return strings
+
+
+def shorten(text: str, limit: int = 72) -> str:
+    if len(text) <= limit:
+        return text
+    return text[: limit - 3] + "..."
+
+
+def parse_imports(path: Path) -> list[tuple[str, str]]:
+    imports = []
+    for line in run("nm", "-um", str(path)).splitlines():
+        line = line.strip()
+        if "(undefined)" not in line or " external " not in line:
+            continue
+
+        symbol = line.split(" external ", 1)[1]
+        dylib = "?"
+        if " (from " in symbol:
+            symbol, dylib = symbol.split(" (from ", 1)
+            dylib = dylib.rstrip(")")
+        imports.append((symbol, dylib))
+    return imports
+
+
+def basename_dylib(name: str) -> str:
+    if name.startswith("lib"):
+        return name
+    return name.rsplit("/", 1)[-1].removesuffix(".framework").removesuffix(".dylib")
+
+
+def segment_used_span(segment: dict) -> int:
+    sections = [section for section in segment["sections"] if section.get("offset", 0) >= segment.get("fileoff", 0)]
+    if not sections:
+        return 0
+    used_end = max(section["offset"] + section["size"] for section in sections)
+    return max(0, used_end - segment.get("fileoff", 0))
+
+
+def page_blocker_rows(segments: list[dict]) -> list[dict]:
+    rows = []
+    for segment in segments:
+        filesize = segment.get("filesize", 0)
+        if filesize == 0:
+            continue
+        used_span = segment_used_span(segment)
+        if used_span == 0:
+            continue
+        pages = (filesize + PAGE_SIZE - 1) // PAGE_SIZE
+        previous_boundary = max(0, (pages - 1) * PAGE_SIZE)
+        rows.append(
+            {
+                "segname": segment["segname"],
+                "used_span": used_span,
+                "pages": pages,
+                "tail_slack": max(0, filesize - used_span),
+                "cut_to_previous": max(0, used_span - previous_boundary),
+            }
+        )
+    return rows
+
+
 def strings_output(path: Path) -> list[str]:
     return run("strings", "-a", "-n", "4", str(path)).splitlines()
 
@@ -178,11 +272,12 @@ def main() -> int:
     symbols, symbol_rows = parse_symbols(unstripped)
     section_rows = file_backed_sections(segments)
     string_rows = strings_output(stripped)
+    cstring_rows = parse_cstrings(stripped, segments)
+    imports = parse_imports(unstripped)
+    page_rows = page_blocker_rows(segments)
 
-    text_const = next(
-        (s for seg in segments for s in seg["sections"] if seg.get("segname") == "__TEXT" and s.get("sectname") == "__const"),
-        None,
-    )
+    text_const = section_by_name(segments, "__TEXT", "__const")
+    text_cstring = section_by_name(segments, "__TEXT", "__cstring")
 
     known_blobs = []
     if text_const:
@@ -231,6 +326,18 @@ def main() -> int:
     for segname, sectname, size in sorted(section_rows, key=lambda item: item[2], reverse=True)[:10]:
         print(f"{segname},{sectname:<18} {fmt_bytes(size)}")
 
+    if text_cstring and cstring_rows:
+        selector_like = sum(1 for row in cstring_rows if ":" in row)
+        class_like = sum(1 for row in cstring_rows if row and row[0].isupper() and ":" not in row)
+        print_header("__cstring Focus")
+        print(f"Section bytes           {fmt_bytes(text_cstring['size'])}")
+        print(f"Decoded strings         {len(cstring_rows):>7d}")
+        print(f"Selector-like strings   {selector_like:>7d}")
+        print(f"Class-ish strings       {class_like:>7d}")
+        print("Longest strings:")
+        for row in sorted(cstring_rows, key=len, reverse=True)[:10]:
+            print(f"  {len(row):>3d}  {shorten(row)}")
+
     if known_blobs:
         print_header("Known Payload Blobs")
         for name, size in known_blobs:
@@ -247,6 +354,31 @@ def main() -> int:
         print_header("Metadata Pressure")
         for label, size in sorted(pressure_rows, key=lambda item: item[1], reverse=True):
             print(f"{label:<30} {fmt_bytes(size)}")
+
+    if imports:
+        import_counts = Counter(basename_dylib(dylib) for _, dylib in imports)
+        print_header("Import Pressure")
+        print(f"Imported symbols        {len(imports):>7d}")
+        print(f"Imported libraries      {len(import_counts):>7d}")
+        print("By library:")
+        for dylib, count in import_counts.most_common():
+            print(f"  {dylib:<18} {count:>3d}")
+        print("Symbols:")
+        for symbol, dylib in sorted(imports, key=lambda item: (basename_dylib(item[1]), item[0]))[:16]:
+            print(f"  {basename_dylib(dylib):<18} {symbol}")
+
+    if page_rows:
+        print_header("Page Boundary Blockers")
+        for row in page_rows:
+            if row["pages"] > 1:
+                target = f"cut {row['cut_to_previous']} B to drop to {row['pages'] - 1} page(s)"
+            else:
+                target = f"remove {row['cut_to_previous']} B to eliminate this file-backed page"
+            print(
+                f"{row['segname']:<12} "
+                f"used {fmt_bytes(row['used_span'])} in {row['pages']} page(s), "
+                f"tail slack {fmt_bytes(row['tail_slack'])}, {target}"
+            )
 
     print_header("File Layout Overhead")
     print(f"Section/linker payload   {fmt_bytes(section_bytes)}")
