@@ -379,11 +379,10 @@ static void rebuildOffscreen(CGSize size) {
 }
 
 static BOOL buildPipelines(void) {
-    NSError *err = nil;
     MTLCompileOptions *opts = [MTLCompileOptions new];
     opts.languageVersion = MTLLanguageVersion3_0;
-    id<MTLLibrary> lib = [gDevice newLibraryWithSource:@(kMSLSource) options:opts error:&err];
-    if (!lib) { NSLog(@"Shader error: %@", err); return NO; }
+    id<MTLLibrary> lib = [gDevice newLibraryWithSource:@(kMSLSource) options:opts error:NULL];
+    if (!lib) { return NO; }
 
     MTLRenderPipelineDescriptor *d;
 
@@ -393,22 +392,22 @@ static BOOL buildPipelines(void) {
     d.colorAttachments[0].pixelFormat = MTLPixelFormatRGBA32Float;
     d.colorAttachments[1].pixelFormat = MTLPixelFormatRGBA32Float;
     d.depthAttachmentPixelFormat      = MTLPixelFormatDepth32Float;
-    gGbufPSO = [gDevice newRenderPipelineStateWithDescriptor:d error:&err];
-    if (!gGbufPSO) { NSLog(@"GBuf PSO: %@", err); return NO; }
+    gGbufPSO = [gDevice newRenderPipelineStateWithDescriptor:d error:NULL];
+    if (!gGbufPSO) { return NO; }
 
     d = [MTLRenderPipelineDescriptor new];
     d.vertexFunction   = [lib newFunctionWithName:@"fullscreenVert"];
     d.fragmentFunction = [lib newFunctionWithName:@"deferredFrag"];
     d.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-    gDeferredPSO = [gDevice newRenderPipelineStateWithDescriptor:d error:&err];
-    if (!gDeferredPSO) { NSLog(@"Deferred PSO: %@", err); return NO; }
+    gDeferredPSO = [gDevice newRenderPipelineStateWithDescriptor:d error:NULL];
+    if (!gDeferredPSO) { return NO; }
 
     d = [MTLRenderPipelineDescriptor new];
     d.vertexFunction   = [lib newFunctionWithName:@"fullscreenVert"];
     d.fragmentFunction = [lib newFunctionWithName:@"postFrag"];
     d.colorAttachments[0].pixelFormat = MTLPixelFormatBGRA8Unorm;
-    gPostPSO = [gDevice newRenderPipelineStateWithDescriptor:d error:&err];
-    if (!gPostPSO) { NSLog(@"Post PSO: %@", err); return NO; }
+    gPostPSO = [gDevice newRenderPipelineStateWithDescriptor:d error:NULL];
+    if (!gPostPSO) { return NO; }
 
     MTLDepthStencilDescriptor *ds = [MTLDepthStencilDescriptor new];
     ds.depthCompareFunction = MTLCompareFunctionLess;
@@ -587,7 +586,7 @@ static void renderFrame(void) {
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
-@interface AppDelegate : NSObject <NSApplicationDelegate>
+@interface AppDelegate : NSObject
 @end
 
 @implementation AppDelegate
@@ -603,7 +602,6 @@ static void renderFrame(void) {
         initWithContentRect:NSMakeRect(0,0,1920,1080)
                   styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable
                     backing:NSBackingStoreBuffered defer:NO];
-    window.title = @"Elevated";
     [window center];
 
     MetalView *view = [[MetalView alloc] initWithFrame:NSMakeRect(0,0,1920,1080)];
@@ -647,7 +645,7 @@ int main(void) {
     @autoreleasepool {
         NSApplication *app = [NSApplication sharedApplication];
         AppDelegate *d = [[AppDelegate alloc] init];
-        app.delegate = d;
+        app.delegate = (id)d;
         [app setActivationPolicy:NSApplicationActivationPolicyRegular];
         [app run];
     }
