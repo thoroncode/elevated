@@ -565,25 +565,6 @@ static void renderFrame(void) {
     [cmd commit];
 }
 
-// ── Resizing view — keeps CAMetalLayer matched to window size ─────────────────
-
-@interface MetalView : NSView
-@end
-@implementation MetalView
-- (void)setFrameSize:(NSSize)sz {
-    [super setFrameSize:sz];
-    CGFloat scale = self.window.backingScaleFactor ?: 2.0;
-    gMetalLayer.frame = self.bounds;
-    CGSize drawable = CGSizeMake(sz.width * scale, sz.height * scale);
-    gMetalLayer.drawableSize = drawable;
-    rebuildOffscreen(drawable);
-}
-- (void)viewDidChangeBackingProperties {
-    [super viewDidChangeBackingProperties];
-    [self setFrameSize:self.frame.size];
-}
-@end
-
 // ── App ───────────────────────────────────────────────────────────────────────
 
 @interface AppDelegate : NSObject
@@ -597,25 +578,26 @@ static void renderFrame(void) {
     (void)n;
     gDevice = MTLCreateSystemDefaultDevice();
     gQueue  = [gDevice newCommandQueue];
+    NSScreen *screen = NSScreen.mainScreen;
+    if (!screen) { [NSApp terminate:nil]; return; }
+    NSRect frame = screen.frame;
+    CGFloat scale = screen.backingScaleFactor;
 
     NSWindow *window = [[NSWindow alloc]
-        initWithContentRect:NSMakeRect(0,0,1920,1080)
-                  styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable|NSWindowStyleMaskResizable
+        initWithContentRect:frame
+                  styleMask:NSWindowStyleMaskBorderless
                     backing:NSBackingStoreBuffered defer:NO];
-    [window center];
-
-    MetalView *view = [[MetalView alloc] initWithFrame:NSMakeRect(0,0,1920,1080)];
+    NSView *view = [[NSView alloc] initWithFrame:frame];
     view.wantsLayer = YES;
     window.contentView = view;
 
     gMetalLayer = [CAMetalLayer layer];
-    gMetalLayer.device        = gDevice;
-    gMetalLayer.pixelFormat   = MTLPixelFormatBGRA8Unorm;
-    gMetalLayer.frame         = view.bounds;
-    gMetalLayer.contentsScale = window.backingScaleFactor;
-    CGFloat scale = window.backingScaleFactor;
-    gMetalLayer.drawableSize  = CGSizeMake(1920*scale, 1080*scale);
-    [view.layer addSublayer:gMetalLayer];
+    gMetalLayer.device = gDevice;
+    gMetalLayer.pixelFormat = MTLPixelFormatBGRA8Unorm;
+    gMetalLayer.frame = view.bounds;
+    gMetalLayer.contentsScale = scale;
+    gMetalLayer.drawableSize = CGSizeMake(NSWidth(frame) * scale, NSHeight(frame) * scale);
+    view.layer = gMetalLayer;
 
     rebuildOffscreen(gMetalLayer.drawableSize);
     if (!buildPipelines()) { [NSApp terminate:nil]; return; }
@@ -623,7 +605,6 @@ static void renderFrame(void) {
 
     [window makeKeyAndOrderFront:nil];
     [NSApp activateIgnoringOtherApps:YES];
-    dispatch_async(dispatch_get_main_queue(), ^{ [window toggleFullScreen:nil]; });
 
     pthread_t tid;
     pthread_create(&tid, NULL, synthThread, NULL);
@@ -631,12 +612,8 @@ static void renderFrame(void) {
     startAudioUnit();
 
     gStartTime = CACurrentMediaTime();
-    CADisplayLink *dl = [NSScreen.mainScreen displayLinkWithTarget:self selector:@selector(tick:)];
+    CADisplayLink *dl = [screen displayLinkWithTarget:self selector:@selector(tick:)];
     [dl addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
-}
-
-- (BOOL)applicationShouldTerminateAfterLastWindowClosed:(NSApplication *)app {
-    (void)app; return YES;
 }
 
 @end
