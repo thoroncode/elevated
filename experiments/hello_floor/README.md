@@ -12,6 +12,7 @@ It builds a ladder of increasingly rule-breaking variants:
 - `hello_syscall_4k`: same, but forced down to 4 KB segment alignment
 - `hello_static_4k`: static `MH_EXECUTE` with raw syscalls and 4 KB alignment
 - `hello_preload_4k`: `MH_PRELOAD` with raw syscalls and 4 KB alignment
+- `hello_x86_syscall`: `x86_64` syscall hello that runs through Rosetta
 
 Usage:
 
@@ -35,8 +36,10 @@ Current floor from this experiment:
 
 - smallest file-backed `MH_EXECUTE`: about `4.0 KB` (`hello_static_4k`)
 - smallest dyld-linked file: about `4.1 KB` (`hello_syscall_4k`)
+- smallest runnable Rosetta cheat: about `4.2 KB` (`hello_x86_syscall`)
 - smallest launchable hello in this environment after ad-hoc signing: about
   `34.8 KB` (`hello_syscall_16k`)
 
 That gap is the key lesson: the container can be made tiny, but the local
-execution rules still drag launchable binaries back up.
+execution rules still drag launchable binaries back up, unless you are willing
+to cheat with a supported legacy architecture.

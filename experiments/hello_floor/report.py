@@ -118,6 +118,12 @@ def describe_file(path: Path) -> str:
     return run("file", str(path)).strip().split(": ", 1)[1]
 
 
+def run_command_for_kind(path: Path, kind: str) -> list[str]:
+    if "x86_64" in kind:
+        return ["arch", "-x86_64", str(path)]
+    return [str(path)]
+
+
 def format_output(data: bytes) -> str:
     if not data:
         return "(empty)"
@@ -144,10 +150,10 @@ def format_status(returncode: int | None, error: str | None = None, timed_out: b
     return f"exit {returncode}"
 
 
-def probe_run(path: Path) -> dict[str, object]:
+def probe_run(path: Path, kind: str) -> dict[str, object]:
     try:
         result = subprocess.run(
-            [str(path)],
+            run_command_for_kind(path, kind),
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             timeout=2,
@@ -173,7 +179,7 @@ def probe_run(path: Path) -> dict[str, object]:
     }
 
 
-def probe_signed_run(path: Path) -> dict[str, object]:
+def probe_signed_run(path: Path, kind: str) -> dict[str, object]:
     with tempfile.TemporaryDirectory() as tmp:
         signed = Path(tmp) / path.name
         shutil.copy2(path, signed)
@@ -189,7 +195,7 @@ def probe_signed_run(path: Path) -> dict[str, object]:
             detail = stderr[0] if stderr else "codesign failed"
             return {"status": detail}
 
-        run_result = probe_run(signed)
+        run_result = probe_run(signed, kind)
         run_result["size"] = signed.stat().st_size
         return run_result
 
@@ -211,8 +217,8 @@ def print_binary_report(path: Path) -> None:
         payload += linkedit.get("filesize", 0)
     padding = max(0, size - payload)
     import_counts = Counter(basename_dylib(dylib) for _, dylib in imports)
-    unsigned_probe = probe_run(path)
-    signed_probe = probe_signed_run(path)
+    unsigned_probe = probe_run(path, kind)
+    signed_probe = probe_signed_run(path, kind)
 
     print()
     print(f"{path.name}: {size} bytes ({size / 1024:.1f} KB)")

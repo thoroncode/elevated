@@ -13,6 +13,7 @@ SYSCALL_4K = $(OUTDIR)/hello_syscall_4k
 RAWSTART_OBJ = $(OUTDIR)/hello_raw_start.o
 STATIC_4K = $(OUTDIR)/hello_static_4k
 PRELOAD_4K = $(OUTDIR)/hello_preload_4k
+X86_SYSCALL = $(OUTDIR)/hello_x86_syscall
 
 C_STRIPPED = $(OUTDIR)/hello_c.stripped
 START_STRIPPED = $(OUTDIR)/hello_start.stripped
@@ -21,6 +22,7 @@ SYSCALL_8K_STRIPPED = $(OUTDIR)/hello_syscall_8k.stripped
 SYSCALL_4K_STRIPPED = $(OUTDIR)/hello_syscall_4k.stripped
 STATIC_4K_STRIPPED = $(OUTDIR)/hello_static_4k.stripped
 PRELOAD_4K_STRIPPED = $(OUTDIR)/hello_preload_4k.stripped
+X86_SYSCALL_STRIPPED = $(OUTDIR)/hello_x86_syscall.stripped
 
 .PHONY: all report clean
 
@@ -31,7 +33,8 @@ all: \
 	$(SYSCALL_8K_STRIPPED) \
 	$(SYSCALL_4K_STRIPPED) \
 	$(STATIC_4K_STRIPPED) \
-	$(PRELOAD_4K_STRIPPED)
+	$(PRELOAD_4K_STRIPPED) \
+	$(X86_SYSCALL_STRIPPED)
 
 $(OUTDIR):
 	@mkdir -p $(OUTDIR)
@@ -60,6 +63,9 @@ $(STATIC_4K): $(RAWSTART_OBJ)
 $(PRELOAD_4K): $(RAWSTART_OBJ)
 	$(LD) -preload -arch arm64 -e _start -segalign 0x1000 -no_uuid $< -o $@
 
+$(X86_SYSCALL): hello_x86_syscall.s | $(OUTDIR)
+	$(CC) -arch x86_64 $(CFLAGS) -nostartfiles -Wl,-dead_strip -Wl,-no_function_starts $< -o $@
+
 %.stripped: %
 	@cp $< $@
 	@strip -u $@
@@ -73,7 +79,8 @@ report: all
 		$(SYSCALL_8K_STRIPPED) \
 		$(SYSCALL_4K_STRIPPED) \
 		$(STATIC_4K_STRIPPED) \
-		$(PRELOAD_4K_STRIPPED)
+		$(PRELOAD_4K_STRIPPED) \
+		$(X86_SYSCALL_STRIPPED)
 
 clean:
 	@rm -rf $(OUTDIR)
