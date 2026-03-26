@@ -202,10 +202,18 @@ static void generateAudio(void) {
 
 // ── Math helpers ──────────────────────────────────────────────────────────────
 
-static simd_float4x4 lookAtLH(simd_float3 eye, simd_float3 center, simd_float3 up) {
+static simd_float4x4 lookAtLH(simd_float3 eye, simd_float3 center, simd_float3 up, simd_float4x4 *invOut) {
     simd_float3 z = simd_normalize(center - eye);
     simd_float3 x = simd_normalize(simd_cross(up, z));
     simd_float3 y = simd_cross(z, x);
+    if (invOut) {
+        *invOut = (simd_float4x4){.columns = {
+            {x.x, x.y, x.z, 0},
+            {y.x, y.y, y.z, 0},
+            {z.x, z.y, z.z, 0},
+            {eye.x, eye.y, eye.z, 1}
+        }};
+    }
     return (simd_float4x4){.columns = {
         {x.x, y.x, z.x, 0},
         {x.y, y.y, z.y, 0},
@@ -214,10 +222,18 @@ static simd_float4x4 lookAtLH(simd_float3 eye, simd_float3 center, simd_float3 u
     }};
 }
 
-static simd_float4x4 projLH(float fovY, float aspect, float near, float far) {
+static simd_float4x4 projLH(float fovY, float aspect, float near, float far, simd_float4x4 *invOut) {
     float y = 1.0f / tanf(fovY * 0.5f);
     float x = y / aspect;
     float z = far / (far - near);
+    if (invOut) {
+        *invOut = (simd_float4x4){.columns = {
+            {1.0f / x, 0, 0, 0},
+            {0, 1.0f / y, 0, 0},
+            {0, 0, 0, -1.0f / (near * z)},
+            {0, 0, 1, 1.0f / near}
+        }};
+    }
     return (simd_float4x4){.columns = {
         {x,0,0,0},{0,y,0,0},{0,0,z,1},{0,0,-near*z,0}
     }};
@@ -332,10 +348,11 @@ static void updateUniforms(Uniforms *u, CGSize sz) {
     float roll   = 0.3f * cosf(t * camSpeed * 2.0f);
     simd_float3 up = {sinf(roll), cosf(roll), 0};
     float aspect = (float)sz.width / (float)sz.height;
-    simd_float4x4 proj = projLH(camFov, aspect, 0.03125f, 256.0f);
-    simd_float4x4 view = lookAtLH(camPos, camTarget, up);
+    simd_float4x4 invProj, invView;
+    simd_float4x4 proj = projLH(camFov, aspect, 0.03125f, 256.0f, &invProj);
+    simd_float4x4 view = lookAtLH(camPos, camTarget, up, &invView);
     u->v  = simd_mul(proj, view);
-    u->vi = simd_inverse(u->v);
+    u->vi = simd_mul(invView, invProj);
     u->resolution = (simd_float2){(float)sz.width, (float)sz.height};
 }
 
