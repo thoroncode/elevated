@@ -567,19 +567,24 @@ static void renderFrame(void) {
 
 // ── App ───────────────────────────────────────────────────────────────────────
 
-@interface AppDelegate : NSObject
+@interface T : NSObject
 @end
 
-@implementation AppDelegate
+@implementation T
 
 - (void)tick:(CADisplayLink *)link { (void)link; renderFrame(); }
 
-- (void)applicationDidFinishLaunching:(NSNotification *)n {
-    (void)n;
+@end
+
+int main(void) {
+    @autoreleasepool {
+        NSApplication *app = [NSApplication sharedApplication];
+        [app setActivationPolicy:NSApplicationActivationPolicyRegular];
+
     gDevice = MTLCreateSystemDefaultDevice();
     gQueue  = [gDevice newCommandQueue];
     NSScreen *screen = NSScreen.mainScreen;
-    if (!screen) { [NSApp terminate:nil]; return; }
+        if (!screen) return 1;
     NSRect frame = screen.frame;
     CGFloat scale = screen.backingScaleFactor;
 
@@ -600,7 +605,7 @@ static void renderFrame(void) {
     view.layer = gMetalLayer;
 
     rebuildOffscreen(gMetalLayer.drawableSize);
-    if (!buildPipelines()) { [NSApp terminate:nil]; return; }
+        if (!buildPipelines()) return 1;
     buildGeometry();
 
     [window makeKeyAndOrderFront:nil];
@@ -612,18 +617,9 @@ static void renderFrame(void) {
     startAudioUnit();
 
     gStartTime = CACurrentMediaTime();
-    CADisplayLink *dl = [screen displayLinkWithTarget:self selector:@selector(tick:)];
+        T *t = [T new];
+    CADisplayLink *dl = [screen displayLinkWithTarget:t selector:@selector(tick:)];
     [dl addToRunLoop:[NSRunLoop mainRunLoop] forMode:NSRunLoopCommonModes];
-}
-
-@end
-
-int main(void) {
-    @autoreleasepool {
-        NSApplication *app = [NSApplication sharedApplication];
-        AppDelegate *d = [[AppDelegate alloc] init];
-        app.delegate = (id)d;
-        [app setActivationPolicy:NSApplicationActivationPolicyRegular];
         [app run];
     }
 }
