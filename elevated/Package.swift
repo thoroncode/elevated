@@ -3,11 +3,12 @@ import PackageDescription
 
 let package = Package(
     name: "elevated",
-    platforms: [.macOS(.v13), .iOS("26.0"), .tvOS("26.0")],
+    platforms: [.macOS(.v13), .iOS("26.0"), .tvOS("26.0"), .visionOS("2.0")],
     products: [
-        .library(name: "ElevatedCore", targets: ["ElevatedCore"]),
-        .library(name: "ElevatedIOS",  targets: ["ElevatedIOS"]),
-        .library(name: "ElevatedTV",   targets: ["ElevatedTV"]),
+        .library(name: "ElevatedCore",   targets: ["ElevatedCore"]),
+        .library(name: "ElevatedIOS",    targets: ["ElevatedIOS"]),
+        .library(name: "ElevatedTV",     targets: ["ElevatedTV"]),
+        .library(name: "ElevatedVision", targets: ["ElevatedVision"]),
     ],
     targets: [
         // ── C synth (shared) ──────────────────────────────────────────────
@@ -17,7 +18,7 @@ let package = Package(
             publicHeadersPath: "include",
             cSettings: [
                 .unsafeFlags(["-O3", "-ffast-math", "-march=native"], .when(platforms: [.macOS])),
-                .unsafeFlags(["-O3", "-ffast-math"],                  .when(platforms: [.iOS, .tvOS])),
+                .unsafeFlags(["-O3", "-ffast-math"],                  .when(platforms: [.iOS, .tvOS, .visionOS])),
             ],
             linkerSettings: [
                 .linkedFramework("Accelerate")
@@ -75,6 +76,19 @@ let package = Package(
             name: "ElevatedTV",
             dependencies: ["ElevatedCore"],
             path: "ElevatedTV",
+            swiftSettings: [
+                .unsafeFlags(["-framework", "UIKit"])
+            ],
+            linkerSettings: [
+                .linkedFramework("UIKit"),
+            ]
+        ),
+
+        // ── visionOS app (UIKit window, loops on end) ─────────────────────
+        .target(
+            name: "ElevatedVision",
+            dependencies: ["ElevatedCore"],
+            path: "ElevatedVision",
             swiftSettings: [
                 .unsafeFlags(["-framework", "UIKit"])
             ],
