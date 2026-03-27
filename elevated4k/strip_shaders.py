@@ -1,62 +1,89 @@
 #!/usr/bin/env python3
-# Reads a .metal file, strips comments, and emits a compact embedded MSL string.
+"""Strip comments and fully minimize whitespace in MSL for embedding as a C string.
+
+Uses a tokenizer instead of line-by-line regexes so every unnecessary space is
+removed, including around operators whose operands start with '.' (e.g. + .1).
+"""
 import re
 import sys
 
+# ── Tokenizer ─────────────────────────────────────────────────────────────────
+# Order matters: longer/more-specific patterns must come first.
+_TOK = re.compile(r"""
+    (?P<id>   [A-Za-z_]\w*                                   ) |
+    (?P<num>  0[xX][0-9A-Fa-f]+[uUlL]*                      |   # hex
+              \d*\.\d+(?:[eE][+-]?\d+)?[fFhHuU]?            |   # .5, 0.5, 1.5f
+              \d+\.(?:[eE][+-]?\d+)?[fFhHuU]?               |   # 1., 1.f
+              \d+[fFhHuU]?                                   ) | # 1, 1u
+    (?P<attr> \[\[|\]\]                                      ) | # Metal [[ ]]
+    (?P<op>   [-+*/%&|^~!<>=]=?|&&|\|\||<<|>>|--|
+              \+\+|->|::                                     ) |
+    (?P<pun>  [(){}\[\].,;?:]                                ) |
+    (?P<ws>   \s+                                            )
+""", re.VERBOSE)
 
-def compact_line(line):
-    text = " ".join(line.split())
-    if text.startswith("#"):
-        return text
-    text = re.sub(r"\s*([(){}\[\],;])\s*", r"\1", text)
-    text = re.sub(r"\s*([=*/<>?:])\s*", r"\1", text)
-    text = re.sub(r"\s*([+\-&|]=)\s*", r"\1", text)
-    text = re.sub(
-        r"(?<=[A-Za-z0-9_\]\).])\s*([+\-&|])\s*(?=[A-Za-z0-9_(\[\].])",
-        r"\1",
-        text,
+
+def _shrink_num(tok):
+    """1.0 → 1.   1.50 → 1.5   0.5 → .5"""
+    # strip trailing decimal zeros (keep the dot): 1.50f → 1.5f, 1.0 → 1.
+    tok = re.sub(
+        r"(\d)\.(\d*?)0+([fFhHuU]?)$",
+        lambda m: m.group(1) + "." + m.group(2) + m.group(3),
+        tok,
     )
-    text = re.sub(r"(?<![A-Za-z0-9_])0\.(\d)", r".\1", text)
-    text = re.sub(r"(?<![A-Za-z0-9_])(\d+)\.0(?!\d)", r"\1.", text)
-    return re.sub(r"\s+", " ", text)
+    # remove leading zero on plain decimal fractions: 0.5 → .5
+    # (negative lookbehind prevents matching inside hex or larger integers)
+    tok = re.sub(r"(?<![0-9A-Fa-fx])0(\.\d)", r"\1", tok)
+    return tok
 
 
-def needs_space(prev, cur):
-    if not prev or not cur:
-        return False
-    return prev[-1] in "._0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ" and cur[0] in "._0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+def _word(ch):
+    return ch.isalnum() or ch == "_"
 
 
-def emit_c_string(text):
-    for part in text.splitlines(True):
-        has_newline = part.endswith("\n")
-        if has_newline:
-            part = part[:-1]
-        esc = part.replace("\\", "\\\\").replace('"', '\\"')
+def minify(src):
+    # strip block comments, then line comments
+    src = re.sub(r"/\*.*?\*/", "", src, flags=re.DOTALL)
+    src = re.sub(r"//[^\n]*", "", src)
+
+    out = []
+    last_ch = ""
+
+    for raw in src.splitlines():
+        s = raw.strip()
+        if not s:
+            continue
+        if s.startswith("#"):
+            # preprocessor directive: normalize internal whitespace, keep newline
+            out.append(" ".join(s.split()) + "\n")
+            last_ch = ""
+            continue
+
+        for m in _TOK.finditer(raw):
+            if m.lastgroup == "ws":
+                continue
+            tok = m.group(0)
+            if m.lastgroup == "num":
+                tok = _shrink_num(tok)
+            # insert a space only when both adjacent chars are word-like,
+            # otherwise merging would create a new (wrong) identifier/keyword
+            if last_ch and _word(last_ch) and _word(tok[0]):
+                out.append(" ")
+            out.append(tok)
+            last_ch = tok[-1]
+
+    return "".join(out)
+
+
+def emit_c_string(text, width=96):
+    for line in text.splitlines(True):
+        nl = line.endswith("\n")
+        line = line.rstrip("\n")
+        esc = line.replace("\\", "\\\\").replace('"', '\\"')
         while esc:
-            chunk = esc[:96]
-            esc = esc[96:]
-            suffix = "\\n" if has_newline and not esc else ""
+            chunk, esc = esc[:width], esc[width:]
+            suffix = "\\n" if nl and not esc else ""
             print(f'    "{chunk}{suffix}"')
 
 
-src = open(sys.argv[1]).read()
-src = re.sub(r"/\*.*?\*/", "", src, flags=re.DOTALL)
-src = re.sub(r"//[^\n]*", "", src)
-
-pieces = []
-prev = ""
-for raw_line in src.splitlines():
-    if not raw_line.strip():
-        continue
-    line = compact_line(raw_line)
-    if line.startswith("#"):
-        pieces.append(line + "\n")
-        prev = ""
-        continue
-    if prev and needs_space(prev, line):
-        pieces.append(" ")
-    pieces.append(line)
-    prev = line
-
-emit_c_string("".join(pieces))
+emit_c_string(minify(open(sys.argv[1]).read()))
