@@ -45,3 +45,35 @@ Current floor from this experiment:
 That gap is the key lesson: the container can be made tiny, but the local
 execution rules still drag launchable binaries back up, unless you are willing
 to cheat with a supported legacy architecture.
+
+## What We Learned
+
+- For normal arm64 macOS executables, code size is not the first bottleneck.
+  Mach-O segment layout, dyld requirements, and signing dominate much earlier.
+- Hand-written assembly by itself does not solve the problem. A tiny `_start`
+  still lives inside the same loader and alignment world as a tiny `main()`.
+- The practical arm64 boundary on this machine is the 16 KB page world. Smaller
+  4 KB and 8 KB aligned files can exist on disk, but they stop being a reliable
+  "double-click and run" answer here.
+- Rosetta `x86_64` is a real cheat path. It gives a much smaller runnable
+  hello, but it is still a supported-legacy-architecture trick, not a general
+  solution for the native arm64 intro.
+- The real distinction is:
+  - smallest file on disk
+  - smallest file the local loader will launch
+  - smallest file we can realistically use as the shell for the actual intro
+
+## Implications For Elevated
+
+For the real intro, this experiment shifts the next optimization target away
+from "generate slightly better machine code" and toward executable-structure
+work:
+
+1. Keep shrinking the normal runnable arm64 intro until the next page-boundary
+   drop becomes unrealistic.
+2. Treat a tiny Mach-O stub as the likely native launch envelope, not the final
+   packed content format.
+3. If the project wants true demoscene-sized results, the next serious step is
+   a stub-plus-packed-payload path or deeper post-link Mach-O surgery.
+4. Keep the Rosetta/x86 result as a useful lower-bound reference, but not as
+   the primary shipping direction.
