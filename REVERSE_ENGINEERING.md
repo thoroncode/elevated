@@ -176,6 +176,7 @@ cd ElevatedMac && swift build
 | `elevated_raw.hlsl` | Extracted HLSL shaders (minified) |
 | `elevated_pretty.hlsl` | Extracted HLSL shaders (formatted) |
 | `ElevatedMac/` | Swift/Metal port |
+| `elevated/ElevatedCore/SHADER_NOTES.md` | Render-pass and shader-structure notes for the Metal port |
 | `crinkler-unpack/` | Rust Unicorn emulator (too slow, use Wine instead) |
 | `wine_dump.sh` | Wine + lldb memory dump script |
 | `REVERSE_ENGINEERING.md` | This file |
