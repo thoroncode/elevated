@@ -4,13 +4,29 @@ This file defines the default workflow for human and AI contributors in this rep
 
 ## Git Worktree Policy
 
-If you are going to modify files, do not work in the main checkout and do not work on `main`.
+By default, if you are going to modify files, do not work in the main checkout and do not work on `main`.
 
-- Treat the main checkout as read-only integration space.
+- Treat the main checkout as read-only integration space for normal implementation work.
 - Read-only investigation on `main` is allowed.
-- Any task that edits files must use its own dedicated branch and its own dedicated git worktree.
-- Do not commit directly on `main`.
+- Any non-trivial task that edits files should use its own dedicated branch and its own dedicated git worktree.
 - Merge validated task branches back to `main` from the integration checkout.
+
+### Small Fix Exception
+
+Tiny, low-risk fixes may be done directly on `main` in the main checkout when all of the following are true:
+
+- The change is isolated and easy to review.
+- The change does not span multiple subsystems.
+- There is no parallel agent or human work that could conflict with it.
+- The change does not rewrite or reorganize existing work.
+
+Examples:
+
+- Excluding one stray file from a package manifest
+- Fixing a typo in docs or comments
+- Adjusting a small build warning with an obvious one-file fix
+
+When in doubt, use a branch and a worktree.
 
 ## Branch Naming
 
