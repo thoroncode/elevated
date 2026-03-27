@@ -92,50 +92,63 @@ def main():
 
     candidates = []
 
-    # ── xz with lzma2 (default), presets 1–9 and 9e ─────────────────────────
-    for level in range(1, 10):
-        tag = f"xz -{level}"
-        comp = compress(data, [f"-{level}"])
+    def try_xz(tag, args):
+        comp = compress(data, args)
         if comp:
-            candidates.append((tag, comp, [f"-{level}"]))
+            candidates.append((tag, comp, args))
+        # silently skip failures (unsupported filter combos, etc.)
 
-    tag = "xz -9e"
-    comp = compress(data, ["-9", "--extreme"])
-    if comp:
-        candidates.append((tag, comp, ["-9", "--extreme"]))
+    # ── Plain lzma2 baselines ─────────────────────────────────────────────────
+    try_xz("xz -6",          ["-6"])
+    try_xz("xz -9",          ["-9"])
+    try_xz("xz -9e",         ["-9", "--extreme"])
+    try_xz("lzma -9e",       ["-9", "--extreme", "--format=lzma"])
 
-    # ── lzma1 format (compatible with Compression.framework COMPRESSION_LZMA) ─
-    for level in (6, 9):
-        tag = f"lzma -{level}"
-        comp = compress(data, [f"-{level}", "--format=lzma"])
-        if comp:
-            candidates.append((tag, comp, [f"-{level}", "--format=lzma"]))
+    # ── ARM64 BCJ filter ─────────────────────────────────────────────────────
+    # Converts relative branch/call offsets to absolute addresses so lzma2
+    # can find matches across longer distances. Key for ARM64 Mach-O binaries.
+    # Note: must use --lzma2=preset=N, not -N, when combining with BCJ flags.
+    A64 = ["--arm64"]
+    for nice in (64, 128, 273):
+        try_xz(f"arm64 nice={nice}",
+               A64 + [f"--lzma2=preset=9e,mf=bt4,nice={nice},depth=0"])
 
-    tag = "lzma -9e"
-    comp = compress(data, ["-9", "--extreme", "--format=lzma"])
-    if comp:
-        candidates.append((tag, comp, ["-9", "--extreme", "--format=lzma"]))
+    # lc (literal context bits): higher = more context for literal coding.
+    # lc+lp must not exceed 4. lp=0 is default (fine for code).
+    for lc in (2, 3, 4):
+        try_xz(f"arm64 lc={lc}",
+               A64 + [f"--lzma2=preset=9e,lc={lc},mf=bt4,nice=273,depth=0"])
 
-    # ── xz with x86 BCJ filter (helps Mach-O x86_64 code sections) ──────────
-    for level in (9,):
-        tag = f"xz -9e +x86"
-        comp = compress(data, ["-9", "--extreme", "--x86"])
-        if comp:
-            candidates.append((tag, comp, ["-9", "--extreme", "--x86"]))
+    # lc=2, lp=2: position-aware literals (lp helps aligned data like tables).
+    try_xz("arm64 lc=2 lp=2",
+           A64 + ["--lzma2=preset=9e,lc=2,lp=2,mf=bt4,nice=273,depth=0"])
 
-    # ── xz with delta filter (helps periodic data like synth tables) ─────────
+    # pb (position bits): default 2, try 0 (good for code with no alignment).
+    try_xz("arm64 pb=0",
+           A64 + ["--lzma2=preset=9e,pb=0,mf=bt4,nice=273,depth=0"])
+    try_xz("arm64 pb=0 lc=4",
+           A64 + ["--lzma2=preset=9e,lc=4,pb=0,mf=bt4,nice=273,depth=0"])
+
+    # Larger dict: probably no help on a 50 KB binary but worth confirming.
+    try_xz("arm64 dict=16MiB",
+           A64 + ["--lzma2=preset=9e,dict=16MiB,mf=bt4,nice=273,depth=0"])
+
+    # ── Delta filter on raw binary (helps synth table blobs) ─────────────────
     for dist in (1, 2, 4, 8):
-        tag = f"xz -9e +delta{dist}"
-        comp = compress(data, ["-9", "--extreme", f"--delta=dist={dist}"])
-        if comp:
-            candidates.append((tag, comp, ["-9", "--extreme", f"--delta=dist={dist}"]))
+        try_xz(f"delta={dist} -9e",
+               [f"--delta=dist={dist}",
+                "--lzma2=preset=9e,mf=bt4,nice=273,depth=0"])
 
-    # ── gzip for baseline comparison ─────────────────────────────────────────
-    for level in (9,):
-        tag = f"gzip -{level}"
-        comp = gzip_compress(data, level)
-        if comp:
-            candidates.append((tag, comp, []))   # no xz args, gzip only
+    # ── ARM64 BCJ + delta via --filters string syntax ─────────────────────────
+    # filter chain: arm64 BCJ → delta → lzma2
+    for dist in (1, 2):
+        try_xz(f"arm64+delta={dist}",
+               [f"--filters=arm64--delta=dist={dist}--lzma2=preset=9e,mf=bt4,nice=273"])
+
+    # ── gzip baseline ─────────────────────────────────────────────────────────
+    comp = gzip_compress(data, 9)
+    if comp:
+        candidates.append(("gzip -9", comp, []))
 
     # ── Sort by compressed size ───────────────────────────────────────────────
     candidates.sort(key=lambda x: len(x[1]))
