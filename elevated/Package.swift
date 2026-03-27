@@ -30,6 +30,9 @@ let package = Package(
             name: "ElevatedCore",
             dependencies: ["CSynth"],
             path: "ElevatedCore",
+            exclude: [
+                "SHADER_NOTES.md"
+            ],
             resources: [
                 .process("Shaders.metal")
             ],
