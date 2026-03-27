@@ -9,16 +9,22 @@
 #   - AudioUnit for audio output
 #
 # Build pipeline:
-#   1. clang -Os → ElevatedMac4k  (~60-80KB)
-#   2. strip -u  → stripped       (~40-50KB)
-#   3. (optional) custom packer   → packed    (target: <8KB)
+#   1. clang -Os → ElevatedMac4k  (~50KB)
+#   2. strip -u  → stripped       (~50KB)
+#   3. xz pack   → shell launcher (~?KB, target: <4KB)
+#
+# Requirements for packing:
+#   - xz (brew install xz)
 #
 # Usage:
-#   make          — build + strip
-#   make size     — build, strip, and print the full size report
-#   make report   — print the size report for the current build
-#   make run      — build and run
-#   make clean    — remove build artifacts
+#   make                    — build + strip
+#   make size               — build, strip, print full size report
+#   make report             — print size report for current build
+#   make compare-compress   — rank all xz options by compressed size
+#   make pack               — build self-extracting xz launcher (best flags)
+#   make pack XZ_FLAGS='-9' — pack with custom xz flags
+#   make run                — build and run
+#   make clean              — remove build artifacts
 
 CC      = clang
 OUTDIR  = build
@@ -56,10 +62,14 @@ SHADER_TOOL = strip_shaders.py
 TABLE_SRC = $(SYNTH_DIR)/music_tables_raw.h
 TABLE_HDR = $(SYNTH_DIR)/music_tables_packed.h
 TABLE_TOOL = pack_synth_tables.py
-REPORT  = report_binary.py
-SHADER_COMPARE = compare_shader_formats.py
+REPORT          = report_binary.py
+SHADER_COMPARE  = compare_shader_formats.py
+COMPRESS_CMP    = compare_compression.py
+PACK_TOOL       = make_pack.py
+PACKED          = $(OUTDIR)/ElevatedMac4k.4k
+XZ_FLAGS       ?= -9 --extreme
 
-.PHONY: all size report review shader-compare run shaders tables clean
+.PHONY: all size report review shader-compare compare-compress pack run shaders tables clean
 
 all: $(STRIPPED)
 
@@ -109,6 +119,13 @@ review: report
 
 shader-compare: shaders.h $(SHADER_COMPARE)
 	@python3 $(SHADER_COMPARE)
+
+compare-compress: $(STRIPPED) $(COMPRESS_CMP)
+	@python3 $(COMPRESS_CMP) $(STRIPPED)
+
+pack: $(STRIPPED) $(PACK_TOOL)
+	@python3 $(PACK_TOOL) $(STRIPPED) $(PACKED) $(XZ_FLAGS)
+	@echo "  Packed: $(PACKED) ($$(wc -c < $(PACKED)) bytes)"
 
 size: report
 
