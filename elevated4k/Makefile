@@ -83,7 +83,7 @@ PACKED          = $(OUTDIR)/ElevatedMac4k.4k
 # Override on the command line: make pack XZ_FLAGS='...'
 XZ_FLAGS       ?= --arm64 --lzma2=preset=9e,mf=bt4,lc=2,nice=64,depth=0
 
-.PHONY: all size report review hexdump shader-compare compare-compress pack tiny-pack tiny-bench tiny-check decoder-size run shaders tables clean
+.PHONY: all size report review hexdump shader-compare compare-compress pack pack-run tiny-pack tiny-bench tiny-check decoder-size run shaders tables clean
 
 all: $(STRIPPED)
 
@@ -166,6 +166,9 @@ decoder-size: $(DECODER_A64) | $(OUTDIR)
 	    xargs -I{} sh -c 'echo "  {} instructions × 4 bytes = $$(({} * 4)) bytes"'
 
 size: report
+
+pack-run: pack
+	$(PACKED)
 
 run: $(RUNBIN)
 	$(RUNBIN)

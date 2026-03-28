@@ -1,4 +1,4 @@
-.PHONY: all help build run debug capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-clean
+.PHONY: all help build run debug capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean
 
 BIN       = elevated/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -42,7 +42,8 @@ help:
 	@echo "  4k-shaders        Regenerate shaders.h from Shaders.metal"
 	@echo "  4k-tables         Regenerate packed synth tables"
 	@echo "  4k-size           Alias for 4k-report"
-	@echo "  4k-run            Build and run the 4K version"
+	@echo "  4k-run            Build and run the 4K version (uncompressed)"
+	@echo "  4k-pack-run       Pack with xz and run the self-extracting binary"
 	@echo "  4k-clean          Clean 4K build artifacts"
 
 build:
@@ -216,7 +217,7 @@ compare-range:
 	bash tools/compare.sh $(T0) $(T1)
 
 clean:
-	-killall ElevatedMac ElevatedMac4k ElevatedMac4k.run 2>/dev/null
+	-killall ElevatedMac ElevatedMac4k ElevatedMac4k.run ElevatedMac4k.4k _ 2>/dev/null
 	swift package --package-path elevated clean
 	$(MAKE) -C elevated4k clean
 	rm -rf /tmp/elevated_ref /tmp/elevated_cap /tmp/elevated_cmp
@@ -246,6 +247,9 @@ clean:
 
 4k-run:
 	$(MAKE) -C elevated4k run
+
+4k-pack-run:
+	$(MAKE) -C elevated4k pack-run
 
 4k-clean:
 	$(MAKE) -C elevated4k clean
