@@ -155,6 +155,11 @@ This branch is also visually sensitive, especially around horizon and shoreline 
 
 This pass changes the look a lot with fairly little code. It is a strong artistic multiplier, so even small math changes can be very noticeable.
 
+For this repo specifically, side-by-side live review showed that film-grain simplifications can
+look wrong even when frame diffs and binary-size numbers look acceptable. A screen-space shortcut
+produced a drifting overlay, and a milder approximation still felt blinkier/less stable than the
+original. Treat the grain path as artistically locked unless a candidate survives motion review.
+
 ## Helper Functions
 
 ### `no()`
@@ -210,6 +215,7 @@ These are structurally important and should be treated as look-defining:
 - terrain color layering in `d`
 - water normal/reflection logic in `d`
 - post chain in `e`
+- especially the film-grain behavior inside `e`
 
 ## Why The G-buffer Is So Small
 

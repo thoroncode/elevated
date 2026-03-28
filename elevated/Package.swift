@@ -34,7 +34,8 @@ let package = Package(
                 "SHADER_NOTES.md"
             ],
             resources: [
-                .process("Shaders.metal")
+                .process("Shaders.metal"),
+                .process("ShadersBaseline.metal")
             ],
             swiftSettings: [
                 .unsafeFlags(["-framework", "Metal",

@@ -1,4 +1,4 @@
-.PHONY: all help build run debug capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean
+.PHONY: all help build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean
 
 BIN       = elevated/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -21,6 +21,7 @@ help:
 	@echo "  build             Build release binary"
 	@echo "  run               Run demo fullscreen with a 5s startup delay"
 	@echo "  debug             Run demo with debug overlay"
+	@echo "  debug-compare     Run debug split view: baseline vs current shader"
 	@echo "  app-icon          Regenerate app icon assets"
 	@echo "  app               Build Elevated.app bundle"
 	@echo "  zip               Zip Elevated.app to ~/Desktop/Elevated-YY.M.DD.zip"
@@ -58,6 +59,9 @@ run: app
 debug: app
 	$(APP_BIN) --debug
 
+debug-compare: app
+	$(APP_BIN) --debug-compare
+
 # Regenerate the app icon from the demo at t=185.867s (00:03:05:52).
 # The result is committed to assets/ so this only needs to be run explicitly.
 app-icon: build
@@ -92,7 +96,9 @@ app: build
 	@cp $(BIN) $(APP)/Contents/MacOS/
 	@xcrun -sdk macosx metal -c elevated/ElevatedCore/Shaders.metal -o /tmp/Shaders.air
 	@xcrun -sdk macosx metallib /tmp/Shaders.air -o $(APP)/Contents/Resources/default.metallib
-	@rm -f /tmp/Shaders.air
+	@xcrun -sdk macosx metal -c elevated/ElevatedCore/ShadersBaseline.metal -o /tmp/ShadersBaseline.air
+	@xcrun -sdk macosx metallib /tmp/ShadersBaseline.air -o $(APP)/Contents/Resources/baseline.metallib
+	@rm -f /tmp/Shaders.air /tmp/ShadersBaseline.air
 	@cp $(ICON_ICNS) $(APP)/Contents/Resources/
 	@cp LICENSE $(APP)/Contents/Resources/
 	@shortver=$$(printf '%s.%d.%s' $$(date +%y) $$(date +%-m) $$(date +%d)); \
@@ -116,6 +122,7 @@ app: build
 	@echo "  Copy to Desktop:  cp -r $(CURDIR)/$(APP) ~/Desktop/"
 	@echo "  Run normal:       open $(CURDIR)/$(APP)"
 	@echo "  Run debug:        open $(CURDIR)/$(APP) --args --debug"
+	@echo "  Run compare:      open $(CURDIR)/$(APP) --args --debug-compare"
 
 # Zip Elevated.app and drop it on the Desktop with the stamped short version
 # in the filename, e.g. Elevated-26.3.24.zip.

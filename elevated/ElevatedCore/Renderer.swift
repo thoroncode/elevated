@@ -8,6 +8,25 @@ import MetalKit
 import simd
 import CSynth
 
+public enum ShaderVariant: String {
+    case optimized = "Optimized"
+    case baseline = "Baseline"
+
+    fileprivate var metallibName: String {
+        switch self {
+        case .optimized: return "default"
+        case .baseline: return "baseline"
+        }
+    }
+
+    fileprivate var sourceName: String {
+        switch self {
+        case .optimized: return "Shaders"
+        case .baseline: return "ShadersBaseline"
+        }
+    }
+}
+
 // ─── Uniforms mirror of Shaders.metal struct ─────────────────────────────────
 struct Uniforms {
     var q: (SIMD4<Float>, SIMD4<Float>, SIMD4<Float>, SIMD4<Float>,   // q[0..3]
@@ -155,6 +174,7 @@ public let kDemoDuration: Double = Double(ELEVATED_TOTAL_SAMPLES) / 44100.0
 public class Renderer: NSObject, MTKViewDelegate {
     let device: MTLDevice
     let cmdQueue: MTLCommandQueue
+    public let shaderVariant: ShaderVariant
     var uniforms = Uniforms(
         q: (.zero,.zero,.zero,.zero,.zero,.zero,.zero,.zero,
             .zero,.zero,.zero,.zero,.zero,.zero,.zero,.zero),
@@ -195,6 +215,8 @@ public class Renderer: NSObject, MTKViewDelegate {
     // Debug / capture
     public var debugMode: Bool
     public let captureMode: Bool    // --capture: save one PNG per second to /tmp/elevated_cap/
+    public var debugLabel: String
+    public var debugConsoleOutput = true
     public var frameNumber: Int = 0
     public var lastCapturedSecond: Int = -1
 #if os(macOS)
@@ -215,26 +237,29 @@ public class Renderer: NSObject, MTKViewDelegate {
     }
 
     public func start() {
-        startTime = CACurrentMediaTime()
-        view?.isPaused = false
+        setPlayback(time: 0, paused: false)
     }
 
     public func pause() {
         guard !isPaused, startTime > 0 else { return }
-        pauseTime = CACurrentMediaTime() - startTime
-        isPaused = true
+        setPlayback(time: currentTime, paused: true)
     }
 
     public func resume() {
         guard isPaused else { return }
-        startTime = CACurrentMediaTime() - pauseTime
-        isPaused = false
+        setPlayback(time: pauseTime, paused: false)
     }
 
     public func seek(to time: Double) {
+        setPlayback(time: time, paused: isPaused)
+    }
+
+    public func setPlayback(time: Double, paused: Bool, hostTime: Double = CACurrentMediaTime()) {
         let t = max(0, min(time, kDemoDuration))
-        startTime = CACurrentMediaTime() - t
-        if isPaused { pauseTime = t }
+        startTime = hostTime - t
+        pauseTime = t
+        isPaused = paused
+        view?.isPaused = false
     }
 
     /// SMPTE-style timecode string: HH:MM:SS:FF at 60 fps.
@@ -244,9 +269,14 @@ public class Renderer: NSObject, MTKViewDelegate {
                       tf / fps / 3600, tf / fps / 60 % 60, tf / fps % 60, tf % fps)
     }
 
-    public init(mtkView: MTKView, debug: Bool = false, capture: Bool = false) {
+    public init(mtkView: MTKView,
+                debug: Bool = false,
+                capture: Bool = false,
+                shaderVariant: ShaderVariant = .optimized) {
+        self.shaderVariant = shaderVariant
         self.debugMode   = debug
         self.captureMode = capture
+        self.debugLabel = shaderVariant.rawValue
         self.device   = mtkView.device!
         self.cmdQueue = device.makeCommandQueue()!
         super.init()
@@ -267,27 +297,7 @@ public class Renderer: NSObject, MTKViewDelegate {
     func buildPipelines(mtkView: MTKView) {
         let lib: MTLLibrary
         do {
-            // Load the Metal library portably across three build configurations:
-            //   Xcode build (iOS + Mac): .process("Shaders.metal") compiles to
-            //     default.metallib inside elevated_ElevatedCore.bundle — load it directly.
-            //   Mac .app (Makefile): Shaders.metal copied to Contents/Resources/ —
-            //     device.makeDefaultLibrary() finds it there.
-            //   Mac CLI (swift build): Shaders.metal source in elevated_ElevatedCore.bundle —
-            //     compile at runtime.
-            if let metallibURL = Bundle.module.url(forResource: "default", withExtension: "metallib") {
-                lib = try device.makeLibrary(URL: metallibURL)
-            } else if let defaultLib = device.makeDefaultLibrary() {
-                lib = defaultLib
-            } else {
-                let srcURL = Bundle.module.url(forResource: "Shaders", withExtension: "metal")
-                           ?? Bundle.main.url(forResource: "Shaders", withExtension: "metal")
-                guard let srcURL, let src = try? String(contentsOf: srcURL, encoding: .utf8) else {
-                    fatalError("Metal library not found (checked module bundle and Bundle.main)")
-                }
-                let opts = MTLCompileOptions()
-                opts.languageVersion = .version3_0
-                lib = try device.makeLibrary(source: src, options: opts)
-            }
+            lib = try loadLibrary()
         } catch {
             fatalError("Metal library error: \(error)")
         }
@@ -315,6 +325,44 @@ public class Renderer: NSObject, MTKViewDelegate {
         dsDesc.depthCompareFunction = .less
         dsDesc.isDepthWriteEnabled  = true
         depthState = device.makeDepthStencilState(descriptor: dsDesc)!
+    }
+
+    private func loadLibrary() throws -> MTLLibrary {
+        // Load the Metal library portably across three build configurations:
+        //   Xcode build (iOS + Mac): resource metallib inside ElevatedCore bundle.
+        //   Mac .app (Makefile): explicit metallib copied to Contents/Resources/.
+        //   Mac CLI (swift build): compile bundled .metal source at runtime.
+        if let explicit = try loadExplicitLibrary(named: shaderVariant.metallibName) {
+            return explicit
+        }
+        if shaderVariant == .optimized, let defaultLib = device.makeDefaultLibrary() {
+            return defaultLib
+        }
+        return try loadLibrarySource(named: shaderVariant.sourceName)
+    }
+
+    private func loadExplicitLibrary(named name: String) throws -> MTLLibrary? {
+        let bundles = [Bundle.module, Bundle.main]
+        for bundle in bundles {
+            if let url = bundle.url(forResource: name, withExtension: "metallib") {
+                return try device.makeLibrary(URL: url)
+            }
+        }
+        return nil
+    }
+
+    private func loadLibrarySource(named name: String) throws -> MTLLibrary {
+        let candidates = [
+            Bundle.module.url(forResource: name, withExtension: "metal"),
+            Bundle.main.url(forResource: name, withExtension: "metal"),
+        ]
+        guard let srcURL = candidates.compactMap({ $0 }).first,
+              let src = try? String(contentsOf: srcURL, encoding: .utf8) else {
+            fatalError("Metal source \(name).metal not found (checked module bundle and Bundle.main)")
+        }
+        let opts = MTLCompileOptions()
+        opts.languageVersion = .version3_0
+        return try device.makeLibrary(source: src, options: opts)
     }
 
     // ── Off-screen textures ────────────────────────────────────────────────
@@ -603,12 +651,12 @@ public class Renderer: NSObject, MTKViewDelegate {
             q1.z, q1.w,
             q2.y, q2.z
         )
+        let labeled = debugLabel.isEmpty ? msg : "variant   \(debugLabel)\n" + msg
 
-        // Console log every frame
-        print(msg)
+        if debugConsoleOutput { print(labeled) }
 
         // Screen overlay
-        debugOverlay?.update(msg)
+        debugOverlay?.update(labeled)
     }
 #endif
 

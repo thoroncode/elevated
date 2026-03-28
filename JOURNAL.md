@@ -829,3 +829,43 @@ New top-level target added alongside the existing `make 4k-run`:
 
 Current packed size: **10,670 bytes** (target ≤ 4,096 bytes; main remaining work is binary reduction).
 
+---
+
+## 2026-03-28 — Live shader compare mode, and why the grain shortcut was rejected
+
+### Goal
+
+Evaluate whether the shared macOS Metal shader could be made smaller without changing the artistic
+result to the human eye.
+
+### What was built
+
+- Added `make debug-compare`, which opens a split debug window with two synchronized renderers.
+- Left side uses a preserved baseline shader (`ShadersBaseline.metal`).
+- Right side uses the editable current shader (`Shaders.metal`).
+- Both panes share the same transport, seek, pause/play, and audio timing, so visual differences
+  can be judged in motion instead of from isolated screenshots only.
+
+### What was learned
+
+- Screenshot diffs and binary-size measurements are useful for narrowing options, but they are not
+  sufficient for subjective post-process changes.
+- The post film-grain path is especially sensitive. Even when a simplification is numerically close
+  and saves some bytes, it can still feel wrong in motion.
+- A first shortcut created a drifting screen-space overlay ("glass layer") because the noise was
+  tied to a time-driven horizontal screen offset.
+- A second, less aggressive shortcut removed the obvious drift but still felt unstable/blinky in
+  motion compared with the original.
+
+### Decision
+
+- Revert the grain optimization.
+- Keep the live compare tooling.
+- Treat the post grain path as artistically locked unless a future change survives side-by-side
+  motion review, not just still-frame comparison.
+
+### Practical takeaway
+
+The compare mode is a permanent quality tool for future shader work. The grain optimization is not
+worth shipping on macOS at the measured byte savings because it changes the perceived texture of
+the image.

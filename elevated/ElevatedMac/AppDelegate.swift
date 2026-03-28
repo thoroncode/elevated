@@ -14,9 +14,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     var aboutWindow: NSWindow?
     var helpWindow: NSWindow?
     var renderer: Renderer!
+    var comparisonRenderer: Renderer?
     let synth = SynthPlayer()
     private var transportBar: TransportBar!
     private var debugActive = false
+    private var debugCompareActive = false
     private var debugMenuItem: NSMenuItem?
     private var helpMenuItem: NSMenuItem?
     private var muteMenuItem: NSMenuItem?
@@ -27,32 +29,69 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var fullscreenCursorHideTimer: Timer?
     private var fullscreenCursorActive = false
 
+    private var activeRenderers: [Renderer] {
+        [renderer, comparisonRenderer].compactMap { $0 }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         guard let device = MTLCreateSystemDefaultDevice() else {
             fatalError("Metal is not available on this device")
         }
 
         launchTime = CACurrentMediaTime()
-        debugActive = CommandLine.arguments.contains("--debug")
-        captureMode = CommandLine.arguments.contains("--capture")
+        let args = CommandLine.arguments
+        captureMode = args.contains("--capture")
+        debugCompareActive = args.contains("--debug-compare") || args.contains("--compare-shaders")
+        debugActive = args.contains("--debug") || debugCompareActive
 
         // --icon-at=T  renders one clean frame at time T, saves to --icon-out=path, exits
-        let args = CommandLine.arguments
         func argVal(_ prefix: String) -> String? {
             args.first(where: { $0.hasPrefix(prefix) }).map { String($0.dropFirst(prefix.count)) }
         }
         let iconTime = argVal("--icon-at=").flatMap(Double.init)
         let iconOut  = argVal("--icon-out=") ?? "icon_source.png"
+        debugCompareActive = debugCompareActive && !captureMode && iconTime == nil
         let normalPresentation = !debugActive && !captureMode && iconTime == nil
 
-        let mtkView = MTKView(frame: NSRect(x: 0, y: 0, width: 1920, height: 1080), device: device)
-        mtkView.preferredFramesPerSecond = 60
-        mtkView.enableSetNeedsDisplay     = false
-        mtkView.isPaused                  = false
-        mtkView.clearColor                = MTLClearColorMake(0, 0, 0, 1)
-
-        renderer = Renderer(mtkView: mtkView, debug: debugActive || captureMode, capture: captureMode)
+        let mtkView = makeMetalView(device: device)
+        renderer = Renderer(mtkView: mtkView,
+                            debug: debugActive || captureMode,
+                            capture: captureMode,
+                            shaderVariant: .optimized)
+        renderer.debugLabel = debugCompareActive ? "Current" : ""
         mtkView.delegate = renderer
+
+        let contentView = NSView(frame: NSRect(x: 0, y: 0, width: 1920, height: 1080))
+        contentView.wantsLayer = true
+        contentView.layer?.backgroundColor = NSColor.black.cgColor
+
+        if debugCompareActive {
+            let baselineView = makeMetalView(device: device)
+            let baseline = Renderer(mtkView: baselineView,
+                                    debug: debugActive,
+                                    capture: false,
+                                    shaderVariant: .baseline)
+            baseline.debugLabel = "Baseline"
+            baseline.debugConsoleOutput = false
+            baselineView.delegate = baseline
+            comparisonRenderer = baseline
+
+            let splitView = NSSplitView(frame: contentView.bounds)
+            splitView.autoresizingMask = [.width, .height]
+            splitView.isVertical = true
+            splitView.dividerStyle = .thin
+            splitView.addArrangedSubview(baselineView)
+            splitView.addArrangedSubview(mtkView)
+            splitView.adjustSubviews()
+            contentView.addSubview(splitView)
+
+            installVariantBadge("Baseline", in: baselineView)
+            installVariantBadge("Current", in: mtkView)
+        } else {
+            mtkView.frame = contentView.bounds
+            mtkView.autoresizingMask = [.width, .height]
+            contentView.addSubview(mtkView)
+        }
 
         window = NSWindow(
             contentRect: NSRect(x: 0, y: 0, width: 1920, height: 1080),
@@ -63,14 +102,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         window.tabbingMode = .disallowed   // suppress "Show Tab Bar" menu item
         window.backgroundColor = .black
         window.delegate = self
-        window.contentView = mtkView
+        window.contentView = contentView
         window.center()
         window.makeKeyAndOrderFront(nil)
 
         // Always install both overlays; visibility controlled by debugActive
         renderer.installDebugOverlay(in: mtkView)
+        if let comparisonView = comparisonRenderer?.view {
+            comparisonRenderer?.installDebugOverlay(in: comparisonView)
+        }
         if !captureMode {
-            installTransportBar(in: mtkView)
+            installTransportBar(in: contentView)
             installKeyHandler()
         }
         setDebugActive(debugActive)
@@ -94,7 +136,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let elapsed = CACurrentMediaTime() - self.launchTime
                 let delay = normalPresentation ? max(0, Self.releaseStartupDelay - elapsed) : 0
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-                    self.renderer.start()
+                    self.setRenderersPlayback(time: 0, paused: false)
                     self.synth.isMuted = self.debugActive
                     self.muteMenuItem?.state = self.debugActive ? .on : .off
                     self.synth.play()
@@ -108,7 +150,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private func setDebugActive(_ on: Bool) {
         debugActive = on
         renderer.debugMode = on
+        comparisonRenderer?.debugMode = on
         renderer.debugOverlay?.isHidden = !on
+        comparisonRenderer?.debugOverlay?.isHidden = !on
         transportBar?.isHidden = !on
         debugMenuItem?.state = on ? .on : .off
         helpMenuItem?.isHidden = !on
@@ -127,14 +171,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     // ── Transport bar ──────────────────────────────────────────────────────
 
-    private func installTransportBar(in view: MTKView) {
+    private func installTransportBar(in view: NSView) {
         transportBar = TransportBar(frame: NSRect(x: 0, y: 0, width: view.bounds.width, height: 56))
         view.addSubview(transportBar)
 
         transportBar.onPlayPause  = { [weak self] in self?.togglePlayPause() }
-        transportBar.onSeekVisual = { [weak self] t in self?.renderer.seek(to: t) }
+        transportBar.onSeekVisual = { [weak self] t in self?.seekRenderers(to: t) }
         transportBar.onSeekFinal  = { [weak self] t in
-            self?.renderer.seek(to: t)
+            self?.seekRenderers(to: t)
             self?.synth.seek(to: t)
         }
 
@@ -150,13 +194,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     // ── Play / pause / seek ────────────────────────────────────────────────
 
     private func togglePlayPause() {
-        if renderer.isPaused { renderer.resume(); synth.resume() }
-        else                 { renderer.pause();  synth.pause()  }
+        let t = renderer.currentTime
+        let shouldPause = !renderer.isPaused
+        setRenderersPlayback(time: t, paused: shouldPause)
+        if shouldPause { synth.pause() }
+        else           { synth.resume() }
     }
 
     private func seekBy(_ delta: Double) {
         let t = max(0, min(renderer.currentTime + delta, kDemoDuration))
-        renderer.seek(to: t)
+        seekRenderers(to: t)
         synth.seek(to: t)
     }
 
@@ -493,7 +540,46 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             "Cmd+Q              Quit Elevated",
         ], to: stack)
 
+        addHelpSection("Compare", items: [
+            "make debug-compare Launch baseline vs current split view",
+        ], to: stack)
+
         return window
+    }
+
+    private func makeMetalView(device: MTLDevice) -> MTKView {
+        let view = MTKView(frame: NSRect(x: 0, y: 0, width: 1920, height: 1080), device: device)
+        view.autoresizingMask = [.width, .height]
+        view.preferredFramesPerSecond = 60
+        view.enableSetNeedsDisplay = false
+        view.isPaused = false
+        view.clearColor = MTLClearColorMake(0, 0, 0, 1)
+        return view
+    }
+
+    private func installVariantBadge(_ title: String, in view: NSView) {
+        let badge = NSTextField(frame: NSRect(x: 10, y: max(10, view.bounds.height - 32), width: 160, height: 22))
+        badge.isEditable = false
+        badge.isSelectable = false
+        badge.isBezeled = false
+        badge.drawsBackground = true
+        badge.backgroundColor = NSColor(calibratedWhite: 0, alpha: 0.55)
+        badge.textColor = .white
+        badge.font = NSFont.monospacedSystemFont(ofSize: 11, weight: .semibold)
+        badge.stringValue = title
+        badge.autoresizingMask = [.maxXMargin, .minYMargin]
+        view.addSubview(badge)
+    }
+
+    private func setRenderersPlayback(time: Double, paused: Bool) {
+        let hostTime = CACurrentMediaTime()
+        for renderer in activeRenderers {
+            renderer.setPlayback(time: time, paused: paused, hostTime: hostTime)
+        }
+    }
+
+    private func seekRenderers(to time: Double) {
+        setRenderersPlayback(time: time, paused: renderer.isPaused)
     }
 
     private func loadAboutText() -> String {
