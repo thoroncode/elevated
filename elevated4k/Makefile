@@ -76,12 +76,14 @@ REPORT          = report_binary.py
 SHADER_COMPARE  = compare_shader_formats.py
 COMPRESS_CMP    = compare_compression.py
 PACK_TOOL       = make_pack.py
+TINY_PACK       = tiny_pack.py
+DECODER_A64     = decoder_a64.s
 PACKED          = $(OUTDIR)/ElevatedMac4k.4k
 # Best flags found by `make compare-compress` (ARM64 BCJ + bt4 match finder).
 # Override on the command line: make pack XZ_FLAGS='...'
 XZ_FLAGS       ?= --arm64 --lzma2=preset=9e,mf=bt4,nice=64,depth=0
 
-.PHONY: all size report review hexdump shader-compare compare-compress pack run shaders tables clean
+.PHONY: all size report review hexdump shader-compare compare-compress pack tiny-pack tiny-bench tiny-check decoder-size run shaders tables clean
 
 all: $(STRIPPED)
 
@@ -138,6 +140,25 @@ compare-compress: $(STRIPPED) $(COMPRESS_CMP)
 pack: $(STRIPPED) $(PACK_TOOL)
 	@python3 $(PACK_TOOL) $(STRIPPED) $(PACKED) $(XZ_FLAGS)
 	@echo "  Packed: $(PACKED) ($$(wc -c < $(PACKED)) bytes)"
+
+# Grammar A custom packer (sub-160-byte ARM64 decoder).
+# Total-size comparison: Grammar A vs xz+stub vs libcompression approach.
+tiny-bench: $(STRIPPED) $(TINY_PACK)
+	@python3 $(TINY_PACK) bench $(STRIPPED)
+
+tiny-pack: $(STRIPPED) $(TINY_PACK)
+	@python3 $(TINY_PACK) encode $(STRIPPED) $(OUTDIR)/ElevatedMac4k.lza
+	@echo "  Grammar A payload: $(OUTDIR)/ElevatedMac4k.lza"
+
+tiny-check: $(STRIPPED) $(TINY_PACK)
+	@python3 $(TINY_PACK) check $(STRIPPED)
+
+# Assemble decoder and report its exact byte size.
+decoder-size: $(DECODER_A64) | $(OUTDIR)
+	@clang -target arm64-apple-macos13 -c $(DECODER_A64) -o $(OUTDIR)/decoder_a64.o
+	@echo "Grammar A ARM64 decoder: $$(size $(OUTDIR)/decoder_a64.o | awk 'NR==2{print $$1}') bytes (__TEXT)"
+	@otool -tv $(OUTDIR)/decoder_a64.o | grep -c '^\s*[0-9a-f]' | \
+	    xargs -I{} sh -c 'echo "  {} instructions × 4 bytes = $$(({} * 4)) bytes"'
 
 size: report
 
