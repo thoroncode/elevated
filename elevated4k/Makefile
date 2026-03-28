@@ -168,10 +168,10 @@ decoder-size: $(DECODER_A64) | $(OUTDIR)
 size: report
 
 pack-run: pack
-	$(PACKED)
+	-$(PACKED)
 
 run: $(RUNBIN)
-	$(RUNBIN)
+	-$(RUNBIN)
 
 clean:
 	@rm -rf $(OUTDIR)
