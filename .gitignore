@@ -17,3 +17,18 @@ wine_crash.txt
 d3d9.dll
 dist/
 elevated4k/build/
+
+# Extracted stub binary left behind by make 4k-pack-run
+_
+
+# Python bytecode
+__pycache__/
+**/__pycache__/
+
+# Metal compiler intermediates from shader experiments
+elevated4k/*.air
+elevated4k/shaders_noalias.h
+
+# macOS and scratch
+.DS_Store
+hello

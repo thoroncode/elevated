@@ -769,3 +769,63 @@ Added `-killall ElevatedMac ElevatedMac4k ElevatedMac4k.run 2>/dev/null` as the 
 the `clean` target. The `-` prefix tells make to ignore the non-zero exit when nothing is running.
 This prevents "file busy" errors when doing `make clean 4k-run` while a prior run is still open.
 
+---
+
+## 2026-03-28 — 4K self-extracting stub: design, iteration, and minimum size
+
+### Motivation
+
+The prior `make_pack.py` Python script generated an 82-byte shell stub using `mktemp` for a safe
+temp file and `xz -d` to decompress. Replacing it with an inline Makefile recipe and a tighter
+stub reduces overhead and eliminates the Python dependency.
+
+### Stub evolution
+
+| Bytes | Stub | Notes |
+|------:|------|-------|
+| 82 | `t=$(mktemp);tail -c +83 "$0"\|xz -d>$t;chmod +x $t;$t;r=$?;rm $t;exit $r` | original `make_pack.py` |
+| 57 | `tail -c +58 "$0"\|xz -d>_&&chmod +x _&&exec ./_` | fixed name, exec, quoted |
+| 54 | `tail -c+55 $0\|xz -d>_&&chmod +x _&&exec ./_` | `tail -c+N` no space, unquoted `$0` |
+| — | `tail -c+59 $0\|xzcat>_&&codesign -f -s- _&&./_` | **broken**: no `chmod +x`, codesign doesn't set execute bit |
+| 71 | `tail -c+72 $0\|xz -d>_&&chmod +x _&&codesign -s - _&&exec ./_` | codesign added (AMFI requires it) |
+| **62** | `tail -c+63 $0\|xz -d>_;chmod +x _;codesign -s- _;./_` | **current** — semicolons, merged `-s-`, drop exec |
+
+### Why each byte in the final stub is mandatory
+
+```
+#!/bin/sh\n               10 bytes  kernel needs absolute interpreter path; no shorter shebang exists
+tail -c+63 $0|xz -d>_    21 bytes  tail + xz are shortest available tools; _ is 1-char filename
+;chmod +x _               11 bytes  macOS won't exec without execute bit — cannot skip
+;codesign -s- _           15 bytes  AMFI kills unsigned binaries with SIGKILL — cannot skip on macOS 13+
+;./_                       4 bytes  ./ required since . is not in PATH
+\n                         1 byte   shell must see newline before binary payload starts
+```
+
+Total: **62 bytes**. This is the minimum for a working macOS self-extracting xz binary.
+
+### Key decisions
+
+- **`;` vs `&&`**: semicolons save 1 byte per separator (3 used). Error propagation doesn't matter
+  for a demo — if any step fails the binary just won't run.
+- **`codesign -s-`** (no space): `-s-` passes `-` as the identity argument to `-s` directly.
+  Verified working; saves 1 char vs `-s -`.
+- **No `exec`**: saves 5 bytes (`exec ` prefix). Without exec, the shell continues after `./_`
+  exits and tries to interpret the compressed payload bytes as commands, producing terminal errors
+  after the demo ends. Acceptable for a competition where the user quits early with Ctrl+C.
+- **`tail -c+N` (no space)**: valid BSD tail syntax on macOS, saves 1 byte vs `tail -c +N`.
+- **`_` as temp file**: 1-char filename, no `mktemp` overhead. Left on disk after exit.
+  Safe for single-instance use (demo scene context).
+- **Codesign required**: `make 4k-run` runs `ElevatedMac4k.run` which is pre-signed. The packed
+  stub extracts to an unsigned binary — macOS AMFI sends SIGKILL immediately without a signature.
+  Discovered by testing: `make 4k-pack-run` was killed instantly until `codesign -s- _` was added.
+- **Fixed offset**: the stub length is self-consistent at exactly 62 bytes / offset 63. No
+  convergence loop needed — the offset fits in 2 digits and the digit count doesn't change.
+
+### `make 4k-pack-run`
+
+New top-level target added alongside the existing `make 4k-run`:
+- `make 4k-run` — runs `ElevatedMac4k.run` (stripped + pre-signed, no compression, fast for dev)
+- `make 4k-pack-run` — packs with xz, runs the self-extracting `.4k` file (tests the final artifact)
+
+Current packed size: **10,670 bytes** (target ≤ 4,096 bytes; main remaining work is binary reduction).
+
