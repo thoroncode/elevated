@@ -655,12 +655,9 @@ public class Renderer: NSObject, MTKViewDelegate {
             enc.setRenderPipelineState(gbufferPSO)
             enc.setCullMode(.front)  // match D3D9 D3DCULL_CCW: cull CCW-in-screen = CW-in-NDC
             enc.setDepthStencilState(depthState)
-            enc.setVertexBuffer(terrainVBuf, offset: 0, index: 0)
             enc.setVertexBytes(&uCopy, length: MemoryLayout<Uniforms>.size, index: 1)
             enc.setVertexTexture(noiseTex, index: 0)
-            enc.drawIndexedPrimitives(type: .triangle, indexCount: terrainIndexCount,
-                                      indexType: .uint32, indexBuffer: terrainIBuf,
-                                      indexBufferOffset: 0)
+            enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 1023 * 1023 * 2 * 3)
             enc.endEncoding()
         }
 

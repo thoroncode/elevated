@@ -216,6 +216,7 @@ compare-range:
 	bash tools/compare.sh $(T0) $(T1)
 
 clean:
+	-killall ElevatedMac ElevatedMac4k ElevatedMac4k.run 2>/dev/null
 	swift package --package-path elevated clean
 	$(MAKE) -C elevated4k clean
 	rm -rf /tmp/elevated_ref /tmp/elevated_cap /tmp/elevated_cmp

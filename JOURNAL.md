@@ -701,3 +701,71 @@ Python encoder in `tiny_pack.py`. ARM64 decoder in `decoder_a64.s`: **32 instruc
 | `elevated4k/shaders.h` | `static char` (was `static const char`) |
 | `elevated/CSynth/music_tables_packed.h` | Non-const table declarations |
 
+---
+
+## 2026-03-28 — Fix both builds: procedural terrain draw + 4K window visibility
+
+Both the Swift debug build (`make debug`) and the 4K build (`make 4k-run`) were broken after the
+procedural-terrain vertex shader was introduced in an earlier session. This session fixed both.
+
+### Bug 1 — Swift debug build: indexed draw broken by procedural vertex shader
+
+**Symptom**: Black triangular artifacts over diagonal bands of terrain; terrain was clearly wrong.
+
+**Root cause**: `Renderer.swift` was calling `drawIndexedPrimitives` with a prebuilt index buffer
+(`terrainIBuf`). The vertex shader `a()` (in `Shaders.metal`) computes terrain XZ position purely
+from `[[vertex_id]]`, expecting sequential IDs 0, 1, 2, 3 … . With indexed drawing, `vertex_id`
+receives index-buffer values (0, 1, 1024, 1025, …), completely breaking the procedural grid math.
+
+**Fix** (`elevated/ElevatedCore/Renderer.swift`):
+- Removed `enc.setVertexBuffer(terrainVBuf, …, index: 0)` — no vertex buffer needed
+- Changed `drawIndexedPrimitives(…)` → `drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 1023 * 1023 * 2 * 3)`
+
+The prebuilt vertex and index buffers (`terrainVBuf`, `terrainIBuf`) were already populated in
+`buildGeometry()` but are now unused; they remain allocated (no size impact on debug build) but
+the draw call no longer references them.
+
+### Bug 2 — 4K build (`make 4k-run`): audio plays, no window visible
+
+**Symptom**: Audio played but no window or rendered content appeared.
+
+Diagnostic added (`NSLog` in `renderFrame`): drawable size was non-zero (2624×1696 on the test
+display) and frames 1 and 2 were logged — so the GPU was doing real work, PSOs compiled and ran
+successfully. The issue was purely in window/compositor setup.
+
+**Root causes (three separate problems)**:
+
+1. **Layer-hosting order** — `setWantsLayer:YES` was called *before* `setLayer:` on the content
+   view. AppKit documentation requires the opposite: set the layer first (`setLayer:`), then enable
+   layer-hosting (`setWantsLayer:YES`). The reversed order caused AppKit to create its own default
+   backing layer first; the Metal layer was then substituted but may not have been the actual
+   compositor target.
+
+2. **`[NSApp activate]` vs `activateIgnoringOtherApps:YES`** — when the binary is launched from a
+   shell script/terminal (not via `open`), `[NSApp activate]` does not force the app to the front
+   because another app (Terminal) is already active. `activateIgnoringOtherApps:YES` is required.
+
+3. **Main thread run loop never pumped** — the render loop is a tight `while (gRunning) { renderFrame(); }` on the main thread. `makeKeyAndOrderFront:` schedules the window appearance but
+   the actual display update requires at least one pass through the AppKit run loop. Without it,
+   the window is in "pending show" state but never appears. Similarly, the CA compositor may need
+   periodic run loop passes to composite the Metal layer content.
+
+**Fixes** (`elevated4k/main.m`):
+- Swapped `setLayer:` / `setWantsLayer:YES` to the correct layer-hosting order.
+- Changed `activate` → `activateIgnoringOtherApps:YES`.
+- Added `[NSApp finishLaunching]` before `makeKeyAndOrderFront:` to complete NSApp initialisation.
+- Added `[[NSRunLoop mainRunLoop] runUntilDate: +0.1s]` after showing the window — pumps the
+  run loop long enough for the window show event to be processed (window appears before audio gen).
+- Added per-frame AppKit event drain inside the render loop (`nextEventMatchingMask:distantPast`)
+  so the CA compositor stays active for the full playback duration.
+
+**Also added** to `buildPipelines()`: proper error capture (`NSError **`) for
+`newLibraryWithSource:options:error:` and all three `newRenderPipelineStateWithDescriptor:error:`
+calls, with `NSLog` output on failure. Previously all errors were silently discarded via `NULL`.
+
+### Makefile: `make clean` kills running binaries
+
+Added `-killall ElevatedMac ElevatedMac4k ElevatedMac4k.run 2>/dev/null` as the first step of
+the `clean` target. The `-` prefix tells make to ignore the non-zero exit when nothing is running.
+This prevents "file busy" errors when doing `make clean 4k-run` while a prior run is still open.
+

@@ -431,9 +431,10 @@ static BOOL buildPipelines(void) {
     id sc = mkstr("c");
     id sd = mkstr("d");
     id se = mkstr("e");
+    NSError *libErr = nil;
     id<MTLLibrary> lib =
-        M3(id, gDevice, "newLibraryWithSource:options:error:", id, shaderSource, id, nil, NSError **, NULL);
-    if (!lib) { return NO; }
+        M3(id, gDevice, "newLibraryWithSource:options:error:", id, shaderSource, id, nil, NSError **, &libErr);
+    if (!lib) { NSLog(@"Library compile error: %@", libErr); return NO; }
 
     MTLRenderPipelineDescriptor *d;
     id ca0;
@@ -444,22 +445,23 @@ static BOOL buildPipelines(void) {
     ca0 = attachmentAt(d, 0);
     M1(void, ca0, "setPixelFormat:", NSUInteger, MTLPixelFormatRGBA32Float);
     M1(void, d, "setDepthAttachmentPixelFormat:", NSUInteger, MTLPixelFormatDepth32Float);
-    gGbufPSO = M2(id, gDevice, "newRenderPipelineStateWithDescriptor:error:", id, d, NSError **, NULL);
-    if (!gGbufPSO) { return NO; }
+    NSError *psoErr = nil;
+    gGbufPSO = M2(id, gDevice, "newRenderPipelineStateWithDescriptor:error:", id, d, NSError **, &psoErr);
+    if (!gGbufPSO) { NSLog(@"GbufPSO error: %@", psoErr); return NO; }
 
     d = M0(id, CLS("MTLRenderPipelineDescriptor"), "new");
     M1(void, d, "setVertexFunction:", id, M1(id, lib, "newFunctionWithName:", id, sc));
     M1(void, d, "setFragmentFunction:", id, M1(id, lib, "newFunctionWithName:", id, sd));
     M1(void, attachmentAt(d, 0), "setPixelFormat:", NSUInteger, MTLPixelFormatBGRA8Unorm);
-    gDeferredPSO = M2(id, gDevice, "newRenderPipelineStateWithDescriptor:error:", id, d, NSError **, NULL);
-    if (!gDeferredPSO) { return NO; }
+    gDeferredPSO = M2(id, gDevice, "newRenderPipelineStateWithDescriptor:error:", id, d, NSError **, &psoErr);
+    if (!gDeferredPSO) { NSLog(@"DeferredPSO error: %@", psoErr); return NO; }
 
     d = M0(id, CLS("MTLRenderPipelineDescriptor"), "new");
     M1(void, d, "setVertexFunction:", id, M1(id, lib, "newFunctionWithName:", id, sc));
     M1(void, d, "setFragmentFunction:", id, M1(id, lib, "newFunctionWithName:", id, se));
     M1(void, attachmentAt(d, 0), "setPixelFormat:", NSUInteger, MTLPixelFormatBGRA8Unorm);
-    gPostPSO = M2(id, gDevice, "newRenderPipelineStateWithDescriptor:error:", id, d, NSError **, NULL);
-    if (!gPostPSO) { return NO; }
+    gPostPSO = M2(id, gDevice, "newRenderPipelineStateWithDescriptor:error:", id, d, NSError **, &psoErr);
+    if (!gPostPSO) { NSLog(@"PostPSO error: %@", psoErr); return NO; }
 
     MTLDepthStencilDescriptor *ds = M0(id, CLS("MTLDepthStencilDescriptor"), "new");
     M1(void, ds, "setDepthCompareFunction:", NSUInteger, MTLCompareFunctionLess);
@@ -601,7 +603,6 @@ int main(void) {
         NSRect, frame, NSUInteger, NSWindowStyleMaskBorderless,
         NSUInteger, NSBackingStoreBuffered, BOOL, NO);
     id view = M0(id, window, "contentView");
-    M1(void, view, "setWantsLayer:", BOOL, YES);
 
     gMetalLayer = M0(id, CLS("CAMetalLayer"), "layer");
     M1(void, gMetalLayer, "setDevice:", id, gDevice);
@@ -610,18 +611,30 @@ int main(void) {
     M1(void, gMetalLayer, "setContentsScale:", CGFloat, scale);
     M1(void, gMetalLayer, "setDrawableSize:", CGSize, CGSizeMake(NSWidth(frame) * scale, NSHeight(frame) * scale));
     M1(void, view, "setLayer:", id, gMetalLayer);
+    M1(void, view, "setWantsLayer:", BOOL, YES);
 
     rebuildOffscreen(M0(CGSize, gMetalLayer, "drawableSize"));
     if (!buildPipelines()) return 1;
     buildGeometry();
 
+    M0(void, app, "finishLaunching");
     M1(void, window, "makeKeyAndOrderFront:", id, nil);
-    M0(void, app, "activate");
+    M1(void, app, "activateIgnoringOtherApps:", BOOL, YES);
+    // Pump the run loop so the window actually appears before we enter the render loop.
+    M1(void, M0(id, CLS("NSRunLoop"), "mainRunLoop"), "runUntilDate:",
+       id, M1(id, CLS("NSDate"), "dateWithTimeIntervalSinceNow:", double, 0.1));
 
     generateAudio();
     startAudioUnit();
 
     while (gRunning) {
+        // Drain pending AppKit events so the window stays composited.
+        id ev;
+        while ((ev = M4(id, app, "nextEventMatchingMask:untilDate:inMode:dequeue:",
+                        NSUInteger, NSEventMaskAny,
+                        id, M0(id, CLS("NSDate"), "distantPast"),
+                        id, mkstr("kCFRunLoopDefaultMode"), BOOL, YES)))
+            M1(void, app, "sendEvent:", id, ev);
         renderFrame();
     }
     return 0;
