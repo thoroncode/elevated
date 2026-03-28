@@ -70,6 +70,7 @@ LDFLAGS = \
 SRCS    = main.m $(SYNTH_DIR)/synth.c
 SHADERS = ../elevated/ElevatedCore/Shaders.metal
 SHADER_TOOL = strip_shaders.py
+SHADER_MIN  = $(OUTDIR)/shaders.min.metal
 TABLE_SRC = $(SYNTH_DIR)/music_tables_raw.h
 TABLE_HDR = $(SYNTH_DIR)/music_tables_packed.h
 TABLE_TOOL = pack_synth_tables.py
@@ -90,9 +91,16 @@ all: $(STRIPPED)
 # Generate shaders.h from the canonical Shaders.metal source.
 # The resulting C string is what gets compiled at runtime via
 # [MTLDevice newLibraryWithSource:options:error:].
-shaders: shaders.h
+shaders: shaders.h $(SHADER_MIN)
+	@printf '  Header:   %s/%s (%s bytes)\n' $$(pwd) shaders.h "$$(wc -c < shaders.h | tr -d ' ')"
+	@printf '  Minified: %s/%s (%s bytes)\n' $$(pwd) $(SHADER_MIN) "$$(wc -c < $(SHADER_MIN) | tr -d ' ')"
 
 tables: $(TABLE_HDR)
+
+$(SHADER_MIN): $(SHADERS) $(SHADER_TOOL) | $(OUTDIR)
+	@echo "Writing minified shader payload from $(SHADERS)..."
+	@python3 $(SHADER_TOOL) --raw $(SHADERS) > $(SHADER_MIN)
+	@echo "  $(SHADER_MIN) written ($$(wc -c < $(SHADER_MIN)) bytes)"
 
 shaders.h: $(SHADERS) $(SHADER_TOOL)
 	@echo "Generating shaders.h from $(SHADERS) (comments stripped)..."

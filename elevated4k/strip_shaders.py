@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Strip comments and fully minimize whitespace in MSL for embedding as a C string.
+"""Strip comments and fully minimize whitespace in MSL for embedding or inspection.
 
 Uses a tokenizer instead of line-by-line regexes so every unnecessary space is
 removed, including around operators whose operands start with '.' (e.g. + .1).
 """
+import argparse
 import re
 import sys
 
@@ -86,4 +87,19 @@ def emit_c_string(text, width=96):
             print(f'    "{chunk}{suffix}"')
 
 
-emit_c_string(minify(open(sys.argv[1]).read()))
+def main() -> int:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--raw", action="store_true", help="emit minified text instead of a C string")
+    parser.add_argument("source", help="input .metal file")
+    args = parser.parse_args()
+
+    text = minify(open(args.source).read())
+    if args.raw:
+        sys.stdout.write(text)
+    else:
+        emit_c_string(text)
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

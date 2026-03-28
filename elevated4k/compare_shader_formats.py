@@ -18,10 +18,13 @@ SHADER_SRC = (ROOT / "../elevated/ElevatedCore/Shaders.metal").resolve()
 
 def parse_embedded_source(header: pathlib.Path) -> bytes:
     lines = header.read_text().splitlines()
-    try:
-        start = lines.index("static const char kMSLSource[] =") + 1
-    except ValueError as exc:
-        raise SystemExit("kMSLSource not found in shaders.h") from exc
+    start = None
+    for idx, line in enumerate(lines):
+        if re.fullmatch(r"static(?: const)? char kMSLSource\[\] =", line):
+            start = idx + 1
+            break
+    if start is None:
+        raise SystemExit("kMSLSource not found in shaders.h")
     parts = []
     for line in lines[start:]:
         if line.strip() == ";":
@@ -34,7 +37,13 @@ def parse_embedded_source(header: pathlib.Path) -> bytes:
 
 
 def run(cmd: list[str]) -> None:
-    subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    try:
+        subprocess.run(cmd, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    except subprocess.CalledProcessError as exc:
+        detail = (exc.stderr or exc.stdout or "").strip()
+        if not detail:
+            detail = f"command exited with status {exc.returncode}"
+        raise SystemExit(f"{' '.join(cmd)} failed:\n{detail}") from exc
 
 
 def build_variant(src: pathlib.Path, flags: list[str]) -> tuple[int, int]:
