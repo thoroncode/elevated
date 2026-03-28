@@ -47,7 +47,7 @@ typedef struct {
 // Format: byte0=(interp<<7)|(row>>8), byte1=row&0xFF, byte2=value(0-255)
 // 203 keys × 3 bytes = 609 bytes (was 2436)
 
-static const uint8_t kSyncCount[12] = {28,6,15,20,20,16,24,13,8,23,21,9};
+static uint8_t kSyncCount[12] __attribute__((section("__DATA,__data"))) = {28,6,15,20,20,16,24,13,8,23,21,9};
 
 #define SYNC_CAMSEEDX    0
 #define SYNC_CAMSEEDY   28
@@ -62,7 +62,7 @@ static const uint8_t kSyncCount[12] = {28,6,15,20,20,16,24,13,8,23,21,9};
 #define SYNC_CONTRAST  173
 #define SYNC_TERSCALE  194
 
-static const uint8_t kSyncData[] = {
+static uint8_t kSyncData[] __attribute__((section("__DATA,__data"))) = {
     /* camSeedX */
     0x00,0x00,0x62, 0x00,0x10,0x05, 0x00,0x20,0x11, 0x00,0x2c,0x71,
     0x00,0x38,0x6c, 0x00,0x3e,0x12, 0x00,0x48,0x09, 0x00,0x50,0x69,
@@ -154,7 +154,7 @@ static float syncParam(int position, int trackOffset, int count) {
 // Track index enum matching kSyncCount order
 enum { TR_CAMSEEDX=0,TR_CAMSEEDY,TR_CAMSPEED,TR_CAMFOV,TR_CAMPOSY,
        TR_CAMTARY,TR_SUNANGLE,TR_WLEVEL,TR_SEASON,TR_BRIGHT,TR_CONTRAST,TR_TERSCALE };
-static const int kSyncOffset[12] = {0,28,34,49,69,89,105,129,142,150,173,194};
+static int kSyncOffset[12] __attribute__((section("__DATA,__data"))) = {0,28,34,49,69,89,105,129,142,150,173,194};
 #define SYNC(pos, idx) syncParam(pos, kSyncOffset[idx], kSyncCount[idx])
 
 // ── Audio ─────────────────────────────────────────────────────────────────────

@@ -88,7 +88,7 @@ def main() -> int:
         lines.append(
             f"/* {raw_name}: {len(raw)} -> {len(packed)} bytes ({savings} bytes saved) */"
         )
-        lines.append(f"static const uint8_t {packed_name}[] = {{")
+        lines.append(f"static uint8_t {packed_name}[] = {{")
         lines.append(format_bytes(packed))
         lines.append("};")
         lines.append("")

@@ -8,21 +8,30 @@
 #   - Synth shared from ../elevated/CSynth/ — no duplication
 #   - AudioUnit for audio output
 #
-# Build pipeline:
-#   1. clang -Os → ElevatedMac4k  (~50KB)
-#   2. strip -u  → stripped       (~50KB)
-#   3. xz pack   → shell launcher (~?KB, target: <4KB)
+# Size strategy:
+#   - All large data blobs (shader, tables) declared non-const → __DATA not __TEXT
+#   - -Wl,-no_data_const → GOT/ObjC imageinfo go to __DATA, no __DATA_CONST segment
+#   - Goal: 1× __TEXT page + 1× __DATA page instead of 2× __TEXT + 1× __DATA_CONST
+#
+# Compression pipeline (final step — do NOT pre-compress blobs before this):
+#   1. clang -Os → ElevatedMac4k
+#   2. strip -u + codesign --remove-signature → ElevatedMac4k.stripped
+#   3. xz (ARM64 BCJ + lzma2 bt4) → shell self-extractor → ElevatedMac4k.4k
+#   Best known flags: --arm64 --lzma2=preset=9e,mf=bt4,nice=64,depth=0 (~21% ratio)
+#   Run `make compare-compress` to re-rank all candidates.
 #
 # Requirements for packing:
-#   - xz (brew install xz)
+#   - xz  (brew install xz)
 #
 # Usage:
 #   make                    — build + strip
 #   make size               — build, strip, print full size report
-#   make report             — print size report for current build
-#   make compare-compress   — rank all xz options by compressed size
-#   make pack               — build self-extracting xz launcher (best flags)
-#   make pack XZ_FLAGS='-9' — pack with custom xz flags
+#   make report             — size report for current build (no rebuild)
+#   make hexdump            — hexdump stripped binary (pre-compression view)
+#   make review             — size report + hexdump
+#   make compare-compress   — rank all xz option combinations by compressed size
+#   make pack               — build self-extracting xz launcher with best flags
+#   make pack XZ_FLAGS='…'  — pack with custom xz flags
 #   make run                — build and run
 #   make clean              — remove build artifacts
 
@@ -50,6 +59,7 @@ LDFLAGS = \
 	-Wl,-dead_strip \
 	-Wl,-no_function_starts \
 	-Wl,-no_compact_unwind \
+	-Wl,-no_data_const \
 	-framework Metal \
 	-framework QuartzCore \
 	-framework AppKit \
@@ -67,9 +77,11 @@ SHADER_COMPARE  = compare_shader_formats.py
 COMPRESS_CMP    = compare_compression.py
 PACK_TOOL       = make_pack.py
 PACKED          = $(OUTDIR)/ElevatedMac4k.4k
-XZ_FLAGS       ?= -9 --extreme
+# Best flags found by `make compare-compress` (ARM64 BCJ + bt4 match finder).
+# Override on the command line: make pack XZ_FLAGS='...'
+XZ_FLAGS       ?= --arm64 --lzma2=preset=9e,mf=bt4,nice=64,depth=0
 
-.PHONY: all size report review shader-compare compare-compress pack run shaders tables clean
+.PHONY: all size report review hexdump shader-compare compare-compress pack run shaders tables clean
 
 all: $(STRIPPED)
 
@@ -84,7 +96,7 @@ shaders.h: $(SHADERS) $(SHADER_TOOL)
 	@echo "Generating shaders.h from $(SHADERS) (comments stripped)..."
 	@printf '// shaders.h — auto-generated from Shaders.metal, do not edit\n' > shaders.h
 	@printf '// Regenerate with: make shaders\n\n' >> shaders.h
-	@printf 'static const char kMSLSource[] =\n' >> shaders.h
+	@printf 'static char kMSLSource[] =\n' >> shaders.h
 	@python3 $(SHADER_TOOL) $(SHADERS) >> shaders.h
 	@printf '    ;\n' >> shaders.h
 	@echo "  shaders.h written ($$(wc -c < shaders.h) bytes)"
@@ -112,10 +124,10 @@ $(RUNBIN): $(STRIPPED)
 report: $(STRIPPED) $(REPORT)
 	@python3 $(REPORT) $(BIN) $(STRIPPED)
 
-review: report
-	@echo
-	@echo "=== Stripped Binary Hexdump ==="
+hexdump: $(STRIPPED)
 	@hexdump -C $(STRIPPED)
+
+review: report hexdump
 
 shader-compare: shaders.h $(SHADER_COMPARE)
 	@python3 $(SHADER_COMPARE)

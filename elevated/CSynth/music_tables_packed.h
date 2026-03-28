@@ -6,7 +6,7 @@
 
 #define PATTERN_DATA_LEN 1120
 /* pattern_data: 1120 -> 496 bytes (624 bytes saved) */
-static const uint8_t kPatternDataPacked[] = {
+static uint8_t kPatternDataPacked[] = {
     147,0,61,134,0,61,132,0,61,132,3,61,127,61,127,131,
     0,60,142,0,67,134,2,70,0,74,130,0,79,132,0,77,
     130,0,74,130,0,70,130,0,67,142,0,65,134,2,67,0,
@@ -42,7 +42,7 @@ static const uint8_t kPatternDataPacked[] = {
 
 #define SEQUENCE_DATA_LEN 1368
 /* sequence_data: 1368 -> 738 bytes (630 bytes saved) */
-static const uint8_t kSequenceDataPacked[] = {
+static uint8_t kSequenceDataPacked[] = {
     176,13,1,1,1,1,1,1,1,1,1,1,1,1,1,1,
     129,7,1,1,1,1,1,1,1,1,136,14,1,1,1,1,
     1,1,1,0,1,1,1,1,1,1,1,193,24,2,2,2,
@@ -94,7 +94,7 @@ static const uint8_t kSequenceDataPacked[] = {
 
 #define MACHINE_TREE_DATA_LEN 1398
 /* machine_tree_data: 1398 -> 852 bytes (546 bytes saved) */
-static const uint8_t kMachineTreeDataPacked[] = {
+static uint8_t kMachineTreeDataPacked[] = {
     0,8,130,0,48,131,0,8,130,0,20,131,1,128,63,129,
     1,128,63,134,0,65,129,3,128,62,3,1,137,1,3,1,
     137,1,3,1,137,0,2,129,1,160,69,129,1,208,62,145,

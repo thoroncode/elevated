@@ -1,7 +1,7 @@
 // shaders.h — auto-generated from Shaders.metal, do not edit
 // Regenerate with: make shaders
 
-static const char kMSLSource[] =
+static char kMSLSource[] =
     "#include <metal_stdlib>\n"
     "using namespace metal;using T=texture2d<float>;constexpr sampler s0(address::repeat,filter::near"
     "est);constexpr sampler s1(address::clamp_to_edge,filter::linear);struct U{float4 q[16];float4x4 "
