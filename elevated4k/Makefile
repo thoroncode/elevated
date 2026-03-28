@@ -92,6 +92,7 @@ all: $(STRIPPED)
 # The resulting C string is what gets compiled at runtime via
 # [MTLDevice newLibraryWithSource:options:error:].
 shaders: shaders.h $(SHADER_MIN)
+	@printf '  Source:   %s (%s bytes)\n' "$(abspath $(SHADERS))" "$$(wc -c < $(SHADERS) | tr -d ' ')"
 	@printf '  Header:   %s/%s (%s bytes)\n' $$(pwd) shaders.h "$$(wc -c < shaders.h | tr -d ' ')"
 	@printf '  Minified: %s/%s (%s bytes)\n' $$(pwd) $(SHADER_MIN) "$$(wc -c < $(SHADER_MIN) | tr -d ' ')"
 
