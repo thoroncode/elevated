@@ -16,8 +16,8 @@
 # Compression pipeline (final step — do NOT pre-compress blobs before this):
 #   1. clang -Os → ElevatedMac4k
 #   2. strip -u + codesign --remove-signature → ElevatedMac4k.stripped
-#   3. xz (ARM64 BCJ + lzma2 bt4) → 71-byte shell stub → ElevatedMac4k.4k
-#   Stub: #!/bin/sh\ntail -c+72 $0|xz -d>_&&chmod +x _&&codesign -s - _&&exec ./_
+#   3. xz (ARM64 BCJ + lzma2 bt4) → 62-byte shell stub → ElevatedMac4k.4k
+#   Stub: #!/bin/sh\ntail -c+63 $0|xz -d>_;chmod +x _;codesign -s- _;./_
 #   Best known flags: --arm64 --lzma2=preset=9e,mf=bt4,lc=2,nice=64,depth=0 (~21% ratio)
 #   Run `make compare-compress` to re-rank all candidates.
 #
@@ -141,10 +141,10 @@ compare-compress: $(STRIPPED) $(COMPRESS_CMP)
 	@python3 $(COMPRESS_CMP) $(STRIPPED)
 
 pack: $(STRIPPED)
-	@{ printf '#!/bin/sh\ntail -c+72 $$0|xz -d>_&&chmod +x _&&codesign -s - _&&exec ./_\n'; \
+	@{ printf '#!/bin/sh\ntail -c+63 $$0|xz -d>_;chmod +x _;codesign -s- _;./_\n'; \
 	   xz -c $(XZ_FLAGS) -- $<; } > $(PACKED) && chmod +x $(PACKED)
 	@sz=$$(wc -c < $(PACKED) | tr -d ' '); \
-	 printf '  Stub:   71 bytes (fixed offset 72)\n'; \
+	 printf '  Stub:   62 bytes (fixed offset 63)\n'; \
 	 printf '  Packed: %s/%s  (%d bytes total)\n' $$(pwd) $(PACKED) $$sz; \
 	 if [ $$sz -le 4096 ]; then printf '  Fits in 4096 bytes!\n'; \
 	 else printf '  %d bytes over 4096 (%d / 4096)\n' $$(($$sz-4096)) $$sz; fi
