@@ -81,7 +81,7 @@ DECODER_A64     = decoder_a64.s
 PACKED          = $(OUTDIR)/ElevatedMac4k.4k
 # Best flags found by `make compare-compress` (ARM64 BCJ + bt4 match finder).
 # Override on the command line: make pack XZ_FLAGS='...'
-XZ_FLAGS       ?= --arm64 --lzma2=preset=9e,mf=bt4,nice=64,depth=0
+XZ_FLAGS       ?= --arm64 --lzma2=preset=9e,mf=bt4,lc=2,nice=64,depth=0
 
 .PHONY: all size report review hexdump shader-compare compare-compress pack tiny-pack tiny-bench tiny-check decoder-size run shaders tables clean
 

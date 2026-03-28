@@ -98,19 +98,27 @@ float3 sl(float3 p, float3 c, float3 d, constant U& u,
 // ────────────────────────────────────────────────────────────────────────────
 vertex V a(
     uint i [[vertex_id]],
-    constant float2* p [[buffer(0)]],
     constant U& u [[buffer(1)]],
     T t0 [[texture(0)]])
 {
-    float2 xz = p[i];
+    // Procedural XZ from vertex_id — no vertex buffer needed.
+    // Non-indexed draw: vertex_id encodes triangle+vertex, matches the CPU index pattern.
+    uint tri = i / 3, vert = i % 3, quad = tri / 2, qt = tri % 2;
+    uint qx = quad % 1023u, qz = quad / 1023u;
+    uint bl = qz * 1024u + qx;
+    uint idx[6];
+    if (((qx + qz) & 1) == 0) {
+        idx[0]=bl; idx[1]=bl+1; idx[2]=bl+1024u;
+        idx[3]=bl+1; idx[4]=bl+1025u; idx[5]=bl+1024u;
+    } else {
+        idx[0]=bl; idx[1]=bl+1; idx[2]=bl+1025u;
+        idx[3]=bl; idx[4]=bl+1025u; idx[5]=bl+1024u;
+    }
+    uint gv = idx[qt * 3 + vert];
+    float2 xz = (float2(gv % 1024u, gv / 1024u) / 1023.0 - 0.5) * 104.0;
 
-    // Exact port of m0 vertex shader:
-    // x.z = q[2].w * f(x.yx, 8)  — FBM at (mesh.y, mesh.x) = (world.x, world.z)
-    // y   = x.yzxw                — world = (mesh.y, height, mesh.x, 1)
-    // Mesh XZ = world XZ (fixed world coordinates, camera moves through with view matrix)
     float h = u.q[2].w * fbm(xz, 8, t0);
-    float4 w = float4(xz.x, h, xz.y, 1);  // world position
-
+    float4 w = float4(xz.x, h, xz.y, 1);
     V r;
     r.w = w;
     r.p = u.v * w;

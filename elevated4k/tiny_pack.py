@@ -212,7 +212,7 @@ def _xz_compress(data: bytes, args: list[str]) -> bytes | None:
     r = subprocess.run([xz, "--stdout"] + args, input=data, capture_output=True)
     return r.stdout if r.returncode == 0 else None
 
-_XZ_BEST = ["--arm64", "--lzma2=preset=9e,mf=bt4,nice=64,depth=0"]
+_XZ_BEST = ["--arm64", "--lzma2=preset=9e,mf=bt4,lc=2,nice=64,depth=0"]
 _XZ_STUB = 82   # shell stub bytes (tail + xz -d + exec)
 
 

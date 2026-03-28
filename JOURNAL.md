@@ -619,3 +619,85 @@ This is still far from a true 4096-byte result; the current work is a dependency
 
 The latest implementation focus before credits ran out was the 4K binary-size-reduction path.
 If resuming optimization work, start from the `elevated4k/` prototype rather than the higher-level Swift app targets.
+
+---
+
+## 2026-03-27 — 4K binary reduction: xz pipeline, Grammar A packer, __DATA_CONST elimination
+
+### Starting point
+
+Binary at start of session: 70,440 bytes (from prior checkpoint). Target: ≤ 4,096 bytes.
+
+### MSL shader minifier: regex → tokenizer
+
+`strip_shaders.py` was rewritten from a line-by-line regex approach to a proper tokenizer using `re.compile` with named groups (`id`, `num`, `attr`, `op`, `pun`, `ws`). The old regex missed spaces in cases like `float3(...) + .1` because the `)` in a prior pass consumed the trailing space, leaving `+ .1` — the leading `.` looked like a member accessor so no space was inserted. The tokenizer is deterministic: only insert a space between two adjacent "word-like" tokens (identifiers or numbers), never around punctuation or operators. Also optimises float literals (`0.5` → `.5`, `1.0` → `1.`).
+
+### Eliminating __DATA_CONST: 50,176 → 33,792 bytes
+
+The binary was at 50,176 bytes before this step (3 Mach-O pages: __TEXT×2 + __DATA_CONST + __DATA + __LINKEDIT). The goal was to collapse to 2 pages by eliminating __DATA_CONST.
+
+**Linker flag**: `-Wl,-no_data_const` moves GOT (88B), `__const` (16B), and `__objc_imageinfo` (8B) from __DATA_CONST into __DATA. This flag alone was not sufficient — the large data arrays (`kMSLSource`, music tables) stayed in `__TEXT,__const` because the linker promotes `static const` to read-only.
+
+**Root cause**: `static const` arrays go to `__TEXT,__const`, not `__DATA`. Simply removing `const` was also insufficient — ld64 with `-Os` still promoted them. Fix: add `__attribute__((section("__DATA,__data")))` to each large array.
+
+**Arrays moved to __DATA**:
+- `kMSLSource[]` in `shaders.h` (4,336 bytes) — changed to `static char` + section attribute
+- `kPatternDataPacked[]`, `kSequenceDataPacked[]`, `kMachineTreeDataPacked[]` in `music_tables_packed.h` (2,088 bytes total) — changed from `static const uint8_t` to `static uint8_t`
+- `kSyncData[]`, `kSyncCount[]`, `kSyncOffset[]` in `main.m` — added section attribute
+
+**Result**: 50,176 → 33,792 bytes. Segments now: `__TEXT` (16,384, 1 page) + `__DATA` (16,384, 1 page) + `__LINKEDIT` (1,024). The third segment (`__DATA_CONST`) is gone.
+
+### xz compression pipeline
+
+`compare_compression.py` benchmarks all xz/lzma option combinations: presets 1–9, `-9e`, ARM64 BCJ filter (`--arm64`), LZMA2 tuning (`mf=bt4`, `nice=64/128/273`, `lc=2/3/4`, `pb=0`). Key discovery: the ARM64 BCJ filter (branch-call-jump rewriter) reduces the binary from ~34% ratio to ~21% ratio by normalising all `bl`/`b`/`adrp` instructions before LZMA2, dramatically improving cross-reference matches.
+
+**Best flags**: `--arm64 --lzma2=preset=9e,mf=bt4,nice=64,depth=0` → **10,616 bytes** (31.4% of 33,792).
+
+**Shell stub** (`make_pack.py`): `#!/bin/sh\nt=$(mktemp);tail -c +{offset} "$0"|xz -d>$t;chmod +x $t;$t;r=$?;rm $t;exit $r\n` — 82 bytes. Total packed: **10,698 bytes**.
+
+**Gotchas**:
+- `--arm64` is incompatible with plain `-N` preset syntax → must use `--lzma2=preset=N`
+- `--arm64` is incompatible with `--format=lzma` (LZMA1 doesn't support BCJ filters)
+- `lc + lp` must not exceed 4; `lc=4, lp=1` is rejected by xz
+- `xz --stdout` pipes result to stdout — avoids the `file.raw.xz` naming issue when using temp files
+
+**Pre-compressing the shader is worse**: empirically tested — shader separately compresses to 1,780 bytes but within the whole binary contributes only ~1,636 bytes (cross-boundary LZMA matches save 144 bytes). Pre-compressing kills those matches: whole-binary xz result is 184 bytes larger.
+
+### Grammar A custom packer (sub-160-byte ARM64 decoder)
+
+Designed a minimal LZ format with byte-aligned tokens (no bit reader → smallest possible decoder):
+
+```
+0xxxxxxx   LITERAL run : count = x+1 (1–128), then count raw bytes
+10lllooo   MATCH       : length = lll+3 (3–10), offset = (ooo<<8)|next (1–2047, 11-bit)
+11llllll   RLE         : count = l+2  (2–65),  then 1 fill byte
+```
+
+Python encoder in `tiny_pack.py`. ARM64 decoder in `decoder_a64.s`: **32 instructions = 128 bytes** (measured with `otool -tv`; initial estimate was 136 bytes).
+
+**Compression result**: 33,792 → 16,164 bytes payload (47.8% ratio).
+
+**Verdict**: Grammar A never beats xz+shell stub. xz achieves 31.4% vs Grammar A's 47.8%. Even though Grammar A's decoder (128B) is far smaller than the xz approach's overhead, the ratio difference dominates at all tested sizes. Break-even would require Grammar A to have a better ratio than xz, which it doesn't. `tiny_pack.py bench` confirms this with exact numbers.
+
+**libcompression.framework**: Also evaluated — COMPRESSION_LZMA (LZMA1) is available by default on all macOS (no xz dependency), but it doesn't support the ARM64 BCJ filter. This makes it 619 bytes worse than xz+stub due to the ratio penalty. Not viable.
+
+### Selector string audit (next targets)
+
+`__TEXT,__cstring` is 1,660 bytes — the dominant remaining __TEXT cost. The longest string that can be shortened:
+- `texture2DDescriptorWithPixelFormat:width:height:mipmapped:` (59 bytes) — used 4× → replace with `new` + individual property setters (`setPixelFormat:`, `setWidth:`, `setHeight:`) which are all already in the binary or are short. Saves ~38 bytes in cstring.
+- `activateIgnoringOtherApps:` (27 bytes) — deprecated macOS 14+, replacement is `activate` (9 bytes). Target is macOS 26. Saves ~18 bytes.
+
+### File inventory
+
+| File | Change |
+|------|--------|
+| `elevated4k/strip_shaders.py` | Full rewrite: tokenizer-based minifier |
+| `elevated4k/compare_compression.py` | New: ranks all xz option combos by size |
+| `elevated4k/make_pack.py` | New: self-extracting xz shell launcher |
+| `elevated4k/tiny_pack.py` | New: Grammar A encoder/decoder/benchmark |
+| `elevated4k/decoder_a64.s` | New: 128-byte ARM64 Grammar A decoder |
+| `elevated4k/Makefile` | Added `-no_data_const`, hexdump/pack/bench targets |
+| `elevated4k/main.m` | Arrays moved to __DATA with section attribute |
+| `elevated4k/shaders.h` | `static char` (was `static const char`) |
+| `elevated/CSynth/music_tables_packed.h` | Non-const table declarations |
+

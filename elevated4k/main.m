@@ -265,8 +265,6 @@ static simd_float4x4 projLH(float fovY, float aspect, float near, float far, sim
 // ── CPU noise (matches shader no() / fbm() exactly) ──────────────────────────
 
 static float gNoisePixels[256*256];
-static simd_float2 gTerrainVerts[1024*1024];
-static uint32_t gTerrainIndices[(1023*1023*2)*3];
 
 static float sampleNoise(float ux, float uy) {
     int x = (int)floorf((ux - floorf(ux)) * 256.0f) & 255;
@@ -396,10 +394,6 @@ static id<MTLTexture> gGbufDepth;
 static id<MTLTexture> gSceneColor;
 static id<MTLTexture> gNoiseTex;
 
-static id<MTLBuffer> gTerrainVBuf;
-static id<MTLBuffer> gTerrainIBuf;
-static int           gTerrainIndexCount;
-
 static Uniforms gUniforms;
 static int      gRunning = 1;
 
@@ -408,20 +402,23 @@ static void rebuildOffscreen(CGSize size) {
     if (!w || !h) return;
 
     MTLTextureDescriptor *td;
-    td = M4(id, CLS("MTLTextureDescriptor"), "texture2DDescriptorWithPixelFormat:width:height:mipmapped:",
-        MTLPixelFormat, MTLPixelFormatRGBA32Float, NSUInteger, w, NSUInteger, h, BOOL, NO);
+    td = M0(id, CLS("MTLTextureDescriptor"), "new");
+    M1(void, td, "setPixelFormat:", NSUInteger, MTLPixelFormatRGBA32Float);
+    M1(void, td, "setWidth:", NSUInteger, w); M1(void, td, "setHeight:", NSUInteger, h);
     M1(void, td, "setUsage:", NSUInteger, MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead);
     M1(void, td, "setStorageMode:", NSUInteger, MTLStorageModePrivate);
     gGbufWorldPos = M1(id, gDevice, "newTextureWithDescriptor:", id, td);
 
-    td = M4(id, CLS("MTLTextureDescriptor"), "texture2DDescriptorWithPixelFormat:width:height:mipmapped:",
-        MTLPixelFormat, MTLPixelFormatBGRA8Unorm, NSUInteger, w, NSUInteger, h, BOOL, NO);
+    td = M0(id, CLS("MTLTextureDescriptor"), "new");
+    M1(void, td, "setPixelFormat:", NSUInteger, MTLPixelFormatBGRA8Unorm);
+    M1(void, td, "setWidth:", NSUInteger, w); M1(void, td, "setHeight:", NSUInteger, h);
     M1(void, td, "setUsage:", NSUInteger, MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead);
     M1(void, td, "setStorageMode:", NSUInteger, MTLStorageModePrivate);
     gSceneColor = M1(id, gDevice, "newTextureWithDescriptor:", id, td);
 
-    td = M4(id, CLS("MTLTextureDescriptor"), "texture2DDescriptorWithPixelFormat:width:height:mipmapped:",
-        MTLPixelFormat, MTLPixelFormatDepth32Float, NSUInteger, w, NSUInteger, h, BOOL, NO);
+    td = M0(id, CLS("MTLTextureDescriptor"), "new");
+    M1(void, td, "setPixelFormat:", NSUInteger, MTLPixelFormatDepth32Float);
+    M1(void, td, "setWidth:", NSUInteger, w); M1(void, td, "setHeight:", NSUInteger, h);
     M1(void, td, "setUsage:", NSUInteger, MTLTextureUsageRenderTarget);
     M1(void, td, "setStorageMode:", NSUInteger, MTLStorageModePrivate);
     gGbufDepth = M1(id, gDevice, "newTextureWithDescriptor:", id, td);
@@ -481,9 +478,9 @@ static void buildGeometry(void) {
             int16_t v = (int16_t)(seed >> 14);
             gNoisePixels[i] = (float)v / 32768.0f;
         }
-        MTLTextureDescriptor *td =
-            M4(id, CLS("MTLTextureDescriptor"), "texture2DDescriptorWithPixelFormat:width:height:mipmapped:",
-                MTLPixelFormat, MTLPixelFormatR32Float, NSUInteger, 256, NSUInteger, 256, BOOL, NO);
+        MTLTextureDescriptor *td = M0(id, CLS("MTLTextureDescriptor"), "new");
+        M1(void, td, "setPixelFormat:", NSUInteger, MTLPixelFormatR32Float);
+        M1(void, td, "setWidth:", NSUInteger, 256); M1(void, td, "setHeight:", NSUInteger, 256);
         M1(void, td, "setUsage:", NSUInteger, MTLTextureUsageShaderRead);
         M1(void, td, "setStorageMode:", NSUInteger, MTLStorageModeShared);
         gNoiseTex = M1(id, gDevice, "newTextureWithDescriptor:", id, td);
@@ -492,36 +489,6 @@ static void buildGeometry(void) {
             NSUInteger, 256*sizeof(float));
     }
 
-    // Terrain mesh: 1024×1024 grid, scale=104 (±52 world units)
-    {
-        int size = 1024; float scale = 104.0f;
-        int nverts = size * size;
-        int ntris  = (size-1)*(size-1)*2;
-        for (int z=0; z<size; z++)
-            for (int x=0; x<size; x++) {
-                gTerrainVerts[z*size+x] = (simd_float2){
-                    ((float)x/(size-1) - 0.5f) * scale,
-                    ((float)z/(size-1) - 0.5f) * scale
-                };
-            }
-        int idx = 0;
-        for (int z=0; z<size-1; z++)
-            for (int x=0; x<size-1; x++) {
-                uint32_t i = z*size+x, r = size;
-                if (((x+z)&1)==0) {
-                    gTerrainIndices[idx++]=i; gTerrainIndices[idx++]=i+1;   gTerrainIndices[idx++]=i+r;
-                    gTerrainIndices[idx++]=i+1; gTerrainIndices[idx++]=i+r+1; gTerrainIndices[idx++]=i+r;
-                } else {
-                    gTerrainIndices[idx++]=i;   gTerrainIndices[idx++]=i+1;   gTerrainIndices[idx++]=i+r+1;
-                    gTerrainIndices[idx++]=i;   gTerrainIndices[idx++]=i+r+1; gTerrainIndices[idx++]=i+r;
-                }
-        }
-        gTerrainIndexCount = idx;
-        gTerrainVBuf = M3(id, gDevice, "newBufferWithBytes:length:options:",
-            const void *, gTerrainVerts, NSUInteger, nverts*sizeof(simd_float2), NSUInteger, MTLResourceStorageModeShared);
-        gTerrainIBuf = M3(id, gDevice, "newBufferWithBytes:length:options:",
-            const void *, gTerrainIndices, NSUInteger, idx*sizeof(uint32_t), NSUInteger, MTLResourceStorageModeShared);
-    }
 }
 
 // ── Render loop ───────────────────────────────────────────────────────────────
@@ -560,19 +527,16 @@ static void renderFrame(void) {
         M1(void, da, "setTexture:", id, gGbufDepth);
         M1(void, da, "setLoadAction:", NSUInteger, MTLLoadActionClear);
         M1(void, da, "setStoreAction:", NSUInteger, MTLStoreActionDontCare);
-        M1(void, da, "setClearDepth:", double, 1.0);
 
         id<MTLRenderCommandEncoder> enc = M1(id, cmd, "renderCommandEncoderWithDescriptor:", id, rpd);
         M1(void, enc, "setRenderPipelineState:", id, gGbufPSO);
         M1(void, enc, "setCullMode:", NSUInteger, MTLCullModeFront);
         M1(void, enc, "setDepthStencilState:", id, gDepthState);
-        M3(void, enc, "setVertexBuffer:offset:atIndex:", id, gTerrainVBuf, NSUInteger, 0, NSUInteger, 0);
         M3(void, enc, "setVertexBytes:length:atIndex:",
             const void *, &gUniforms, NSUInteger, sizeof(gUniforms), NSUInteger, 1);
         M2(void, enc, "setVertexTexture:atIndex:", id, gNoiseTex, NSUInteger, 0);
-        M5(void, enc, "drawIndexedPrimitives:indexCount:indexType:indexBuffer:indexBufferOffset:",
-            NSUInteger, MTLPrimitiveTypeTriangle, NSUInteger, gTerrainIndexCount, NSUInteger, MTLIndexTypeUInt32,
-            id, gTerrainIBuf, NSUInteger, 0);
+        M3(void, enc, "drawPrimitives:vertexStart:vertexCount:",
+            NSUInteger, MTLPrimitiveTypeTriangle, NSUInteger, 0, NSUInteger, 1023*1023*2*3);
         M0(void, enc, "endEncoding");
     }
 
@@ -622,50 +586,43 @@ static void renderFrame(void) {
 // ── App ───────────────────────────────────────────────────────────────────────
 
 int main(void) {
-    @autoreleasepool {
-        NSApplication *app = M0(id, CLS("NSApplication"), "sharedApplication");
-        M1(void, app, "setActivationPolicy:", NSInteger, NSApplicationActivationPolicyRegular);
+    NSApplication *app = M0(id, CLS("NSApplication"), "sharedApplication");
+    M1(void, app, "setActivationPolicy:", NSInteger, NSApplicationActivationPolicyRegular);
 
-        gDevice = MTLCreateSystemDefaultDevice();
-        gQueue  = M0(id, gDevice, "newCommandQueue");
-        NSScreen *screen = M0(id, CLS("NSScreen"), "mainScreen");
-        if (!screen) return 1;
-        NSRect frame = M0(NSRect, screen, "frame");
-        CGFloat scale = M0(CGFloat, screen, "backingScaleFactor");
+    gDevice = MTLCreateSystemDefaultDevice();
+    gQueue  = M0(id, gDevice, "newCommandQueue");
+    NSScreen *screen = M0(id, CLS("NSScreen"), "mainScreen");
+    if (!screen) return 1;
+    NSRect frame = M0(NSRect, screen, "frame");
+    CGFloat scale = M0(CGFloat, screen, "backingScaleFactor");
 
-        NSWindow *window = M4(id, M0(id, CLS("NSWindow"), "alloc"),
-            "initWithContentRect:styleMask:backing:defer:",
-            NSRect, frame, NSUInteger, NSWindowStyleMaskBorderless,
-            NSUInteger, NSBackingStoreBuffered, BOOL, NO);
-        NSView *view = M1(id, M0(id, CLS("NSView"), "alloc"), "initWithFrame:", NSRect, frame);
-        M1(void, view, "setWantsLayer:", BOOL, YES);
-        M1(void, window, "setContentView:", id, view);
+    NSWindow *window = M4(id, M0(id, CLS("NSWindow"), "alloc"),
+        "initWithContentRect:styleMask:backing:defer:",
+        NSRect, frame, NSUInteger, NSWindowStyleMaskBorderless,
+        NSUInteger, NSBackingStoreBuffered, BOOL, NO);
+    id view = M0(id, window, "contentView");
+    M1(void, view, "setWantsLayer:", BOOL, YES);
 
-        gMetalLayer = M0(id, CLS("CAMetalLayer"), "layer");
-        M1(void, gMetalLayer, "setDevice:", id, gDevice);
-        M1(void, gMetalLayer, "setPixelFormat:", NSUInteger, MTLPixelFormatBGRA8Unorm);
-        M1(void, gMetalLayer, "setFrame:", NSRect, M0(NSRect, view, "bounds"));
-        M1(void, gMetalLayer, "setContentsScale:", CGFloat, scale);
-        M1(void, gMetalLayer, "setDrawableSize:", CGSize, CGSizeMake(NSWidth(frame) * scale, NSHeight(frame) * scale));
-        M1(void, view, "setLayer:", id, gMetalLayer);
+    gMetalLayer = M0(id, CLS("CAMetalLayer"), "layer");
+    M1(void, gMetalLayer, "setDevice:", id, gDevice);
+    M1(void, gMetalLayer, "setPixelFormat:", NSUInteger, MTLPixelFormatBGRA8Unorm);
+    M1(void, gMetalLayer, "setFrame:", NSRect, M0(NSRect, view, "bounds"));
+    M1(void, gMetalLayer, "setContentsScale:", CGFloat, scale);
+    M1(void, gMetalLayer, "setDrawableSize:", CGSize, CGSizeMake(NSWidth(frame) * scale, NSHeight(frame) * scale));
+    M1(void, view, "setLayer:", id, gMetalLayer);
 
-        rebuildOffscreen(M0(CGSize, gMetalLayer, "drawableSize"));
-        if (!buildPipelines()) return 1;
-        buildGeometry();
+    rebuildOffscreen(M0(CGSize, gMetalLayer, "drawableSize"));
+    if (!buildPipelines()) return 1;
+    buildGeometry();
 
-        M1(void, window, "makeKeyAndOrderFront:", id, nil);
-        M1(void, app, "activateIgnoringOtherApps:", BOOL, YES);
+    M1(void, window, "makeKeyAndOrderFront:", id, nil);
+    M0(void, app, "activate");
 
-        generateAudio();
-        startAudioUnit();
-        id runLoop = M0(id, CLS("NSRunLoop"), "currentRunLoop");
-        id runMode = mkstr("kCFRunLoopDefaultMode");
-        id pastDate = M0(id, CLS("NSDate"), "distantPast");
+    generateAudio();
+    startAudioUnit();
 
-        while (gRunning) {
-            renderFrame();
-            M2(BOOL, runLoop, "runMode:beforeDate:", id, runMode, id, pastDate);
-        }
+    while (gRunning) {
+        renderFrame();
     }
     return 0;
 }
