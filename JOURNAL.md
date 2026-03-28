@@ -653,7 +653,7 @@ The binary was at 50,176 bytes before this step (3 Mach-O pages: __TEXT×2 + __D
 
 **Best flags**: `--arm64 --lzma2=preset=9e,mf=bt4,nice=64,depth=0` → **10,616 bytes** (31.4% of 33,792).
 
-**Shell stub** (`make_pack.py`): `#!/bin/sh\nt=$(mktemp);tail -c +{offset} "$0"|xz -d>$t;chmod +x $t;$t;r=$?;rm $t;exit $r\n` — 82 bytes. Total packed: **10,698 bytes**.
+**Shell stub** (originally `make_pack.py`, now inline in Makefile): 54 bytes. `#!/bin/sh\ntail -c+55 $0|xz -d>_&&chmod +x _&&exec ./_` — fixed offset, no convergence loop, no mktemp, no cleanup. `exec` replaces the shell process so the binary payload is never interpreted as shell commands after exit. Total packed: **10,662 bytes**.
 
 **Gotchas**:
 - `--arm64` is incompatible with plain `-N` preset syntax → must use `--lzma2=preset=N`

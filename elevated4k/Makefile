@@ -16,8 +16,9 @@
 # Compression pipeline (final step — do NOT pre-compress blobs before this):
 #   1. clang -Os → ElevatedMac4k
 #   2. strip -u + codesign --remove-signature → ElevatedMac4k.stripped
-#   3. xz (ARM64 BCJ + lzma2 bt4) → shell self-extractor → ElevatedMac4k.4k
-#   Best known flags: --arm64 --lzma2=preset=9e,mf=bt4,nice=64,depth=0 (~21% ratio)
+#   3. xz (ARM64 BCJ + lzma2 bt4) → 54-byte shell stub → ElevatedMac4k.4k
+#   Stub: #!/bin/sh\ntail -c+55 $0|xz -d>_&&chmod +x _&&exec ./_  (fixed offset, no mktemp)
+#   Best known flags: --arm64 --lzma2=preset=9e,mf=bt4,lc=2,nice=64,depth=0 (~21% ratio)
 #   Run `make compare-compress` to re-rank all candidates.
 #
 # Requirements for packing:
@@ -75,7 +76,6 @@ TABLE_TOOL = pack_synth_tables.py
 REPORT          = report_binary.py
 SHADER_COMPARE  = compare_shader_formats.py
 COMPRESS_CMP    = compare_compression.py
-PACK_TOOL       = make_pack.py
 TINY_PACK       = tiny_pack.py
 DECODER_A64     = decoder_a64.s
 PACKED          = $(OUTDIR)/ElevatedMac4k.4k
@@ -137,9 +137,14 @@ shader-compare: shaders.h $(SHADER_COMPARE)
 compare-compress: $(STRIPPED) $(COMPRESS_CMP)
 	@python3 $(COMPRESS_CMP) $(STRIPPED)
 
-pack: $(STRIPPED) $(PACK_TOOL)
-	@python3 $(PACK_TOOL) $(STRIPPED) $(PACKED) $(XZ_FLAGS)
-	@echo "  Packed: $(PACKED) ($$(wc -c < $(PACKED)) bytes)"
+pack: $(STRIPPED)
+	@{ printf '#!/bin/sh\ntail -c+55 $$0|xz -d>_&&chmod +x _&&exec ./_\n'; \
+	   xz -c $(XZ_FLAGS) -- $<; } > $(PACKED) && chmod +x $(PACKED)
+	@sz=$$(wc -c < $(PACKED) | tr -d ' '); \
+	 printf '  Stub:   54 bytes (fixed offset 55)\n'; \
+	 printf '  Packed: $(PACKED)  (%d bytes total)\n' $$sz; \
+	 if [ $$sz -le 4096 ]; then printf '  Fits in 4096 bytes!\n'; \
+	 else printf '  %d bytes over 4096 (%d / 4096)\n' $$(($$sz-4096)) $$sz; fi
 
 # Grammar A custom packer (sub-160-byte ARM64 decoder).
 # Total-size comparison: Grammar A vs xz+stub vs libcompression approach.
