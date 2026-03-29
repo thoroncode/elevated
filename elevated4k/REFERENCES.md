@@ -28,6 +28,7 @@ Relevant takeaways captured from the seminar:
 ### 2. WebGL reimplementation
 
 - URL: `https://301.untergrund.net/elevated.html`
+- Local snapshot: `doc/elevated.html`
 
 Relevant takeaways captured from the page source:
 
