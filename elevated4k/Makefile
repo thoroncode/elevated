@@ -70,7 +70,7 @@ LDFLAGS = \
 	-lm
 
 SRCS    = main.m $(SYNTH_DIR)/synth.c
-SHADERS = ../elevated/ElevatedCore/Shaders.metal
+SHADERS = Shaders.metal
 SHADER_TOOL = strip_shaders.py
 SHADER_MIN  = $(OUTDIR)/shaders.min.metal
 TABLE_SRC = $(SYNTH_DIR)/music_tables_raw.h
