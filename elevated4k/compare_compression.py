@@ -13,6 +13,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from typing import List, Optional, Tuple
 
 # Honour Homebrew on Apple Silicon even when launched from a bare make session.
 os.environ.setdefault("PATH", "/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin")
@@ -20,11 +21,11 @@ XZ = shutil.which("xz") or "xz"
 
 TARGET = 4096
 # Shell launcher stub that will prefix the compressed binary.
-# tail skips to byte OFFSET (placeholder), xz -d decompresses, exec runs it.
-STUB_TEMPLATE = "#!/bin/sh\nt=$(mktemp);tail -c +{offset} \"$0\"|xz -d>$t;chmod +x $t;$t;rm $t;exit\n"
+# tail skips to byte 63, extracts to `_`, signs it, then runs it.
+STUB = "#!/bin/sh\ntail -c+63 $0|xz -d>_;chmod +x _;codesign -s- _;./_\n"
 
 
-def compress(data: bytes, args: list[str]) -> bytes | None:
+def compress(data: bytes, args: List[str]) -> Optional[bytes]:
     """Run xz with given args, return compressed bytes or None on failure."""
     try:
         result = subprocess.run(
@@ -40,7 +41,7 @@ def compress(data: bytes, args: list[str]) -> bytes | None:
         sys.exit(1)
 
 
-def gzip_compress(data: bytes, level: int) -> bytes | None:
+def gzip_compress(data: bytes, level: int) -> Optional[bytes]:
     try:
         import gzip
         return gzip.compress(data, compresslevel=level)
@@ -48,24 +49,12 @@ def gzip_compress(data: bytes, level: int) -> bytes | None:
         return None
 
 
-def _compute_stub() -> str:
-    """Return stub with the correct self-referential offset (handles digit changes)."""
-    offset = 1
-    for _ in range(8):
-        stub = STUB_TEMPLATE.format(offset=offset)
-        needed = len(stub.encode()) + 1
-        if needed == offset:
-            return stub
-        offset = needed
-    raise RuntimeError("stub offset did not converge")
-
-_STUB = _compute_stub()
-_STUB_LEN = len(_STUB.encode())
+_STUB_LEN = len(STUB.encode())
 
 
-def stub_size(compressed: bytes) -> tuple[int, str]:
+def stub_size(compressed: bytes) -> Tuple[int, str]:
     """Return total (stub + compressed) size and stub text."""
-    return _STUB_LEN + len(compressed), _STUB
+    return _STUB_LEN + len(compressed), STUB
 
 
 def bar(ratio: float, width: int = 30) -> str:
