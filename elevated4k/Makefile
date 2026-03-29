@@ -86,7 +86,8 @@ PACKED          = $(OUTDIR)/ElevatedMac4k.4k
 # Override on the command line: make pack XZ_FLAGS='...'
 XZ_FLAGS       ?= --arm64 --lzma2=preset=9e,mf=bt4,lc=2,nice=64,depth=0
 
-.PHONY: all size report review hexdump shader-compare compare-compress pack pack-run tiny-pack tiny-bench tiny-check decoder-size run shaders tables clean
+.DELETE_ON_ERROR:
+.PHONY: all size report review hexdump shader-compare compare-compress pack pack-run tiny-pack tiny-bench tiny-check decoder-size run shaders tables clean stop-run
 
 all: $(STRIPPED)
 
@@ -101,41 +102,67 @@ shaders: shaders.h $(SHADER_MIN)
 tables: $(TABLE_HDR)
 
 $(SHADER_MIN): $(SHADERS) $(SHADER_TOOL) | $(OUTDIR)
-	@echo "Writing minified shader payload from $(SHADERS)..."
-	@python3 $(SHADER_TOOL) --raw $(SHADERS) > $(SHADER_MIN)
-	@echo "  $(SHADER_MIN) written ($$(wc -c < $(SHADER_MIN)) bytes)"
+	@tmp=$@.tmp.$$$$; \
+	echo "Writing minified shader payload from $(SHADERS)..."; \
+	trap 'rm -f "$$tmp"' EXIT INT TERM; \
+	python3 $(SHADER_TOOL) --raw $(SHADERS) > "$$tmp"; \
+	mv "$$tmp" $@; \
+	trap - EXIT INT TERM; \
+	echo "  $@ written ($$(wc -c < $@) bytes)"
 
 shaders.h: $(SHADERS) $(SHADER_TOOL)
-	@echo "Generating shaders.h from $(SHADERS) (comments stripped)..."
-	@printf '// shaders.h — auto-generated from Shaders.metal, do not edit\n' > shaders.h
-	@printf '// Regenerate with: make shaders\n\n' >> shaders.h
-	@printf 'static char kMSLSource[] =\n' >> shaders.h
-	@python3 $(SHADER_TOOL) $(SHADERS) >> shaders.h
-	@printf '    ;\n' >> shaders.h
-	@echo "  shaders.h written ($$(wc -c < shaders.h) bytes)"
+	@tmp=$@.tmp.$$$$; \
+	echo "Generating $@ from $(SHADERS) (comments stripped)..."; \
+	trap 'rm -f "$$tmp"' EXIT INT TERM; \
+	{ \
+	  printf '// shaders.h — auto-generated from Shaders.metal, do not edit\n'; \
+	  printf '// Regenerate with: make shaders\n\n'; \
+	  printf 'static char kMSLSource[] =\n'; \
+	  python3 $(SHADER_TOOL) $(SHADERS); \
+	  printf '    ;\n'; \
+	} > "$$tmp"; \
+	mv "$$tmp" $@; \
+	trap - EXIT INT TERM; \
+	echo "  $@ written ($$(wc -c < $@) bytes)"
 
 $(TABLE_HDR): $(TABLE_SRC) $(TABLE_TOOL)
-	@echo "Packing synth tables from $(TABLE_SRC)..."
-	@python3 $(TABLE_TOOL) $(TABLE_SRC) $(TABLE_HDR)
-	@echo "  $(TABLE_HDR) written ($$(wc -c < $(TABLE_HDR)) bytes)"
+	@tmp=$@.tmp.$$$$; \
+	echo "Packing synth tables from $(TABLE_SRC)..."; \
+	trap 'rm -f "$$tmp"' EXIT INT TERM; \
+	python3 $(TABLE_TOOL) $(TABLE_SRC) "$$tmp"; \
+	mv "$$tmp" $@; \
+	trap - EXIT INT TERM; \
+	echo "  $@ written ($$(wc -c < $@) bytes)"
 
 $(OUTDIR):
 	@mkdir -p $(OUTDIR)
 
-$(BIN): $(SRCS) shaders.h $(TABLE_HDR) | $(OUTDIR)
-	$(CC) $(CFLAGS) $(LDFLAGS) $(SRCS) -o $(BIN)
-	@printf '  Binary:   %s/%s\n' $$(pwd) $(BIN)
+$(BIN): $(SRCS) shaders.h $(TABLE_HDR) | $(OUTDIR) stop-run
+	@tmp=$@.tmp.$$$$; \
+	trap 'rm -f "$$tmp"' EXIT INT TERM; \
+	$(CC) $(CFLAGS) $(LDFLAGS) $(SRCS) -o "$$tmp"; \
+	mv "$$tmp" $@; \
+	trap - EXIT INT TERM; \
+	printf '  Binary:   %s/%s\n' $$(pwd) $@
 
-$(STRIPPED): $(BIN)
-	@cp $(BIN) $(STRIPPED)
-	@strip -u $(STRIPPED)
-	@codesign --remove-signature $(STRIPPED) >/dev/null 2>&1 || true
-	@printf '  Stripped: %s/%s\n' $$(pwd) $(STRIPPED)
+$(STRIPPED): $(BIN) | stop-run
+	@tmp=$@.tmp.$$$$; \
+	trap 'rm -f "$$tmp"' EXIT INT TERM; \
+	cp $(BIN) "$$tmp"; \
+	strip -u "$$tmp"; \
+	codesign --remove-signature "$$tmp" >/dev/null 2>&1 || true; \
+	mv "$$tmp" $@; \
+	trap - EXIT INT TERM; \
+	printf '  Stripped: %s/%s\n' $$(pwd) $@
 
-$(RUNBIN): $(STRIPPED)
-	@cp $(STRIPPED) $(RUNBIN)
-	@codesign -s - --force --timestamp=none $(RUNBIN) >/dev/null
-	@printf '  Run bin:  %s/%s\n' $$(pwd) $(RUNBIN)
+$(RUNBIN): $(STRIPPED) | stop-run
+	@tmp=$@.tmp.$$$$; \
+	trap 'rm -f "$$tmp"' EXIT INT TERM; \
+	cp $(STRIPPED) "$$tmp"; \
+	codesign -s - --force --timestamp=none "$$tmp" >/dev/null; \
+	mv "$$tmp" $@; \
+	trap - EXIT INT TERM; \
+	printf '  Run bin:  %s/%s\n' $$(pwd) $@
 
 report: $(STRIPPED) $(REPORT)
 	@python3 $(REPORT) $(BIN) $(STRIPPED)
@@ -151,9 +178,16 @@ shader-compare: shaders.h $(SHADER_COMPARE)
 compare-compress: $(STRIPPED) $(COMPRESS_CMP)
 	@python3 $(COMPRESS_CMP) $(STRIPPED)
 
-pack: $(STRIPPED)
-	@{ printf '#!/bin/sh\ntail -c+63 $$0|xz -d>_;chmod +x _;codesign -s- _;./_\n'; \
-	   xz -c $(XZ_FLAGS) -- $<; } > $(PACKED) && chmod +x $(PACKED)
+$(PACKED): $(STRIPPED) | stop-run
+	@tmp=$@.tmp.$$$$; \
+	trap 'rm -f "$$tmp"' EXIT INT TERM; \
+	{ printf '#!/bin/sh\ntail -c+63 $$0|xz -d>_;chmod +x _;codesign -s- _;./_\n'; \
+	  xz -c $(XZ_FLAGS) -- $(STRIPPED); } > "$$tmp"; \
+	chmod +x "$$tmp"; \
+	mv "$$tmp" $@; \
+	trap - EXIT INT TERM
+
+pack: $(PACKED)
 	@sz=$$(wc -c < $(PACKED) | tr -d ' '); \
 	 printf '  Stub:   62 bytes (fixed offset 63)\n'; \
 	 printf '  Packed: %s/%s  (%d bytes total)\n' $$(pwd) $(PACKED) $$sz; \
@@ -179,12 +213,17 @@ decoder-size: $(DECODER_A64) | $(OUTDIR)
 	@otool -tv $(OUTDIR)/decoder_a64.o | grep -c '^\s*[0-9a-f]' | \
 	    xargs -I{} sh -c 'echo "  {} instructions × 4 bytes = $$(({} * 4)) bytes"'
 
+stop-run:
+	@killall ElevatedMac4k ElevatedMac4k.run ElevatedMac4k.4k _ >/dev/null 2>&1 || true
+
 size: report
 
 pack-run: pack
+	@$(MAKE) stop-run
 	-$(PACKED)
 
 run: $(RUNBIN)
+	@$(MAKE) stop-run
 	-$(RUNBIN)
 
 clean:
