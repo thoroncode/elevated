@@ -272,7 +272,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = fi.iki.thoron.elevated.vision;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nitor.elevated.vision;
 				PRODUCT_NAME = Elevated;
 				SDKROOT = xros;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -295,7 +295,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 1.0;
-				PRODUCT_BUNDLE_IDENTIFIER = fi.iki.thoron.elevated.vision;
+				PRODUCT_BUNDLE_IDENTIFIER = com.nitor.elevated.vision;
 				PRODUCT_NAME = Elevated;
 				SDKROOT = xros;
 				SWIFT_EMIT_LOC_STRINGS = YES;

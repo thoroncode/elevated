@@ -105,7 +105,7 @@ app: build
 	 buildver=$$(date +%H.%M); \
 	 /usr/libexec/PlistBuddy \
 	    -c "Add :CFBundleName           string Elevated" \
-	    -c "Add :CFBundleIdentifier     string fi.iki.thoron.elevated" \
+	    -c "Add :CFBundleIdentifier     string com.nitor.elevated" \
 	    -c "Add :CFBundleVersion        string $$buildver" \
 	    -c "Add :CFBundleShortVersionString string $$shortver" \
 	    -c "Add :CFBundleExecutable     string ElevatedMac" \
@@ -177,7 +177,7 @@ pkg:
 	@pkgbuild \
 	    --install-location /Applications \
 	    --component /tmp/elevated_pkg_stage \
-	    --identifier fi.iki.thoron.elevated \
+	    --identifier com.nitor.elevated \
 	    --version 1.0 \
 	    Elevated.pkg
 	@rm -rf /tmp/elevated_pkg_stage
