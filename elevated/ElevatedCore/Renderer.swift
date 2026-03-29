@@ -355,10 +355,12 @@ public class Renderer: NSObject, MTKViewDelegate {
         let candidates = [
             Bundle.module.url(forResource: name, withExtension: "metal"),
             Bundle.main.url(forResource: name, withExtension: "metal"),
+            Bundle.module.url(forResource: name, withExtension: "txt"),
+            Bundle.main.url(forResource: name, withExtension: "txt"),
         ]
         guard let srcURL = candidates.compactMap({ $0 }).first,
               let src = try? String(contentsOf: srcURL, encoding: .utf8) else {
-            fatalError("Metal source \(name).metal not found (checked module bundle and Bundle.main)")
+            fatalError("Metal source \(name) not found (checked module bundle and Bundle.main)")
         }
         let opts = MTLCompileOptions()
         opts.languageVersion = .version3_0

@@ -35,7 +35,7 @@ let package = Package(
             ],
             resources: [
                 .process("Shaders.metal"),
-                .process("ShadersBaseline.metal")
+                .copy("ShadersBaseline.txt")
             ],
             swiftSettings: [
                 .unsafeFlags(["-framework", "Metal",
