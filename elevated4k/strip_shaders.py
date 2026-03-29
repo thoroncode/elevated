@@ -56,6 +56,8 @@ def minify(src):
             continue
         if s.startswith("#"):
             # preprocessor directive: normalize internal whitespace, keep newline
+            if out and not out[-1].endswith("\n"):
+                out.append("\n")
             out.append(" ".join(s.split()) + "\n")
             last_ch = ""
             continue
