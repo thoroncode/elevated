@@ -69,3 +69,33 @@ For experiments, keep the branch only as long as it still adds comparison value.
 - Do not rewrite or delete someone else's in-progress work without explicit approval.
 - Do not use destructive git commands unless explicitly requested.
 - If multiple agents are working at once, each agent should use a separate worktree.
+
+## 4K Fidelity Policy
+
+The `elevated4k/` path is not a freeform reinterpretation of Elevated. Treat it as
+an engineering port with size constraints, not as an art direction sandbox.
+See also `elevated4k/FIDELITY.md`.
+
+- Preserve rendering semantics unless the user explicitly approves a visual change.
+- Do not make "looks close enough" shader edits just because they save bytes.
+- Cleanup, simplification, and tooling improvements are welcome when they preserve
+  the produced image and timing behavior.
+- When a change touches modeling, shading, texturing, camera behavior, motion blur,
+  postprocessing, or pass structure, assume it is high risk for visual regression.
+- High-risk visual changes must be validated with output comparison at representative
+  timestamps before they are treated as acceptable optimizations.
+- If a change is exploratory or intentionally changes the image, keep it on an
+  experiment branch such as `exp/...` until it has been reviewed.
+
+The historical reference for Elevated matters. The Function 2009 "behind elevated"
+seminar describes the intended architecture and image goals. In particular:
+
+- The intro uses the "2 triangles plus 1,000,000" approach: rasterized primary
+  intersections plus fullscreen procedural shading.
+- The final image pipeline is a 3-pass structure: geometry/intersection pass,
+  deferred shading pass, then postprocessing pass.
+- Motion blur is a postprocess effect and is not license to replace the shading
+  model with a cheaper approximation.
+
+If there is tension between visual fidelity and packed size, fidelity wins by
+default unless the user says otherwise.
