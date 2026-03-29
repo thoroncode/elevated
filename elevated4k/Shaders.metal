@@ -15,9 +15,6 @@ struct U {
     float4 q[16];
     float4x4 v;       // view-projection matrix
     float4x4 vi;      // inverse view-projection matrix (for ray reconstruction)
-    float2 resolution;
-    float  time;
-    float  _pad;
 };
 
 // ─── G-buffer pixel output ───────────────────────────────────────────────────
@@ -243,14 +240,11 @@ fragment float4 e(
         // Motion blur: reproject world pos to clip, sample along motion vector
         float4 clip = u.v * float4(d.xyz, 1);
         clip.y *= -1;
-        float2 m = (0.5 + 0.5*clip.xy/clip.w - o) / 16;
-        c = 0;
-        for (float i = 0; i < 16; i++) {
-            c.x += f(o + i*m + float2( 2,0)/1280, u, t0, t1).r;
-            c.y += f(o + i*m + float2( 0,0)/1280, u, t0, t1).g;
-            c.z += f(o + i*m + float2(-2,0)/1280, u, t0, t1).b;
-        }
-        c /= 16;
+        float2 m = 0.5 + 0.5*clip.xy/clip.w - o;
+        c *= 0.4;
+        c += 0.3 * f(o + 0.33 * m,  u, t0, t1);
+        c += 0.2 * f(o + 0.66 * m,  u, t0, t1);
+        c += 0.1 * f(o +        m,  u, t0, t1);
     }
 
     // Gamma + brightness/contrast
