@@ -45,7 +45,8 @@ RUNBIN   = $(OUTDIR)/ElevatedMac4k.run
 SYNTH_DIR = ../elevated/CSynth
 
 CFLAGS  = \
-	-Os \
+	-Oz \
+	-flto \
 	-mmacosx-version-min=26.0 \
 	-fno-stack-protector \
 	-fomit-frame-pointer \
@@ -57,6 +58,7 @@ CFLAGS  = \
 	-I$(SYNTH_DIR)/include
 
 LDFLAGS = \
+	-flto \
 	-Wl,-dead_strip \
 	-Wl,-no_function_starts \
 	-Wl,-no_compact_unwind \

@@ -5,6 +5,7 @@
 // Synth shared from ../elevated/CSynth/.
 
 #import <Cocoa/Cocoa.h>
+#import <CoreFoundation/CoreFoundation.h>
 #import <Metal/Metal.h>
 #import <QuartzCore/CAMetalLayer.h>
 #import <AudioUnit/AudioUnit.h>
@@ -154,8 +155,6 @@ static float syncParam(int position, int trackOffset, int count) {
 // Track index enum matching kSyncCount order
 enum { TR_CAMSEEDX=0,TR_CAMSEEDY,TR_CAMSPEED,TR_CAMFOV,TR_CAMPOSY,
        TR_CAMTARY,TR_SUNANGLE,TR_WLEVEL,TR_SEASON,TR_BRIGHT,TR_CONTRAST,TR_TERSCALE };
-static int kSyncOffset[12] __attribute__((section("__DATA,__data"))) = {0,28,34,49,69,89,105,129,142,150,173,194};
-#define SYNC(pos, idx) syncParam(pos, kSyncOffset[idx], kSyncCount[idx])
 
 // ── Audio ─────────────────────────────────────────────────────────────────────
 
@@ -339,22 +338,22 @@ static void updateUniforms(Uniforms *u, CGSize sz) {
     float t = u->time;
     int   pos = (int)(t * 44100.0f);
 
-    float camSeedX   = SYNC(pos, TR_CAMSEEDX)  / 256.0f;
-    float camSeedY   = SYNC(pos, TR_CAMSEEDY)  / 256.0f;
-    float camSpeed   = SYNC(pos, TR_CAMSPEED)  / 4096.0f;
-    float camFov     = SYNC(pos, TR_CAMFOV)    / 96.0f;
+    float camSeedX   = syncParam(pos, SYNC_CAMSEEDX, kSyncCount[TR_CAMSEEDX])  / 256.0f;
+    float camSeedY   = syncParam(pos, SYNC_CAMSEEDY, kSyncCount[TR_CAMSEEDY])  / 256.0f;
+    float camSpeed   = syncParam(pos, SYNC_CAMSPEED, kSyncCount[TR_CAMSPEED])  / 4096.0f;
+    float camFov     = syncParam(pos, SYNC_CAMFOV,   kSyncCount[TR_CAMFOV])    / 96.0f;
     u->q[0] = (simd_float4){camSeedX, camSeedY, camSpeed, camFov};
 
-    float camPosY    = SYNC(pos, TR_CAMPOSY)   / 64.0f;
-    float camTarY    = (SYNC(pos, TR_CAMTARY)  - 128.0f) / 4.0f;
-    float sunAngle   = SYNC(pos, TR_SUNANGLE)  / 32.0f;
-    float waterLevel = (SYNC(pos, TR_WLEVEL)   - 192.0f) / 128.0f;
+    float camPosY    = syncParam(pos, SYNC_CAMPOSY,   kSyncCount[TR_CAMPOSY])   / 64.0f;
+    float camTarY    = (syncParam(pos, SYNC_CAMTARY,  kSyncCount[TR_CAMTARY])   - 128.0f) / 4.0f;
+    float sunAngle   = syncParam(pos, SYNC_SUNANGLE,  kSyncCount[TR_SUNANGLE])  / 32.0f;
+    float waterLevel = (syncParam(pos, SYNC_WLEVEL,   kSyncCount[TR_WLEVEL])    - 192.0f) / 128.0f;
     u->q[1] = (simd_float4){camPosY, camTarY, sunAngle, waterLevel};
 
-    float season     = SYNC(pos, TR_SEASON)    / 256.0f;
-    float brightness = (SYNC(pos, TR_BRIGHT)   - 128.0f) / 128.0f;
-    float contrast   = SYNC(pos, TR_CONTRAST)  / 128.0f;
-    float terScale   = (SYNC(pos, TR_TERSCALE) - 128.0f) / 128.0f;
+    float season     = syncParam(pos, SYNC_SEASON,    kSyncCount[TR_SEASON])    / 256.0f;
+    float brightness = (syncParam(pos, SYNC_BRIGHT,   kSyncCount[TR_BRIGHT])    - 128.0f) / 128.0f;
+    float contrast   = syncParam(pos, SYNC_CONTRAST,  kSyncCount[TR_CONTRAST])  / 128.0f;
+    float terScale   = (syncParam(pos, SYNC_TERSCALE, kSyncCount[TR_TERSCALE])  - 128.0f) / 128.0f;
     u->q[2] = (simd_float4){season, brightness, contrast, terScale};
 
     u->q[3] = (simd_float4){fast_cos(sunAngle), 0.3125f, fast_sin(sunAngle), t};
@@ -397,31 +396,39 @@ static id<MTLTexture> gNoiseTex;
 static Uniforms gUniforms;
 static int      gRunning = 1;
 
+static __attribute__((noinline)) id newTexture(NSUInteger pf, NSUInteger w, NSUInteger h,
+                                               NSUInteger usage, NSUInteger storage) {
+    id td = M0(id, CLS("MTLTextureDescriptor"), "new");
+    M1(void, td, "setPixelFormat:", NSUInteger, pf);
+    M1(void, td, "setWidth:", NSUInteger, w);
+    M1(void, td, "setHeight:", NSUInteger, h);
+    M1(void, td, "setUsage:", NSUInteger, usage);
+    M1(void, td, "setStorageMode:", NSUInteger, storage);
+    return M1(id, gDevice, "newTextureWithDescriptor:", id, td);
+}
+
+static __attribute__((noinline)) id newPSO(id lib, id vs, id fs, NSUInteger colorPF, NSUInteger depthPF) {
+    id d = M0(id, CLS("MTLRenderPipelineDescriptor"), "new");
+    M1(void, d, "setVertexFunction:", id, M1(id, lib, "newFunctionWithName:", id, vs));
+    M1(void, d, "setFragmentFunction:", id, M1(id, lib, "newFunctionWithName:", id, fs));
+    M1(void, attachmentAt(d, 0), "setPixelFormat:", NSUInteger, colorPF);
+    if (depthPF) M1(void, d, "setDepthAttachmentPixelFormat:", NSUInteger, depthPF);
+    return M2(id, gDevice, "newRenderPipelineStateWithDescriptor:error:", id, d, NSError **, nil);
+}
+
 static void rebuildOffscreen(CGSize size) {
     NSUInteger w = (NSUInteger)size.width, h = (NSUInteger)size.height;
     if (!w || !h) return;
 
-    MTLTextureDescriptor *td;
-    td = M0(id, CLS("MTLTextureDescriptor"), "new");
-    M1(void, td, "setPixelFormat:", NSUInteger, MTLPixelFormatRGBA32Float);
-    M1(void, td, "setWidth:", NSUInteger, w); M1(void, td, "setHeight:", NSUInteger, h);
-    M1(void, td, "setUsage:", NSUInteger, MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead);
-    M1(void, td, "setStorageMode:", NSUInteger, MTLStorageModePrivate);
-    gGbufWorldPos = M1(id, gDevice, "newTextureWithDescriptor:", id, td);
-
-    td = M0(id, CLS("MTLTextureDescriptor"), "new");
-    M1(void, td, "setPixelFormat:", NSUInteger, MTLPixelFormatBGRA8Unorm);
-    M1(void, td, "setWidth:", NSUInteger, w); M1(void, td, "setHeight:", NSUInteger, h);
-    M1(void, td, "setUsage:", NSUInteger, MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead);
-    M1(void, td, "setStorageMode:", NSUInteger, MTLStorageModePrivate);
-    gSceneColor = M1(id, gDevice, "newTextureWithDescriptor:", id, td);
-
-    td = M0(id, CLS("MTLTextureDescriptor"), "new");
-    M1(void, td, "setPixelFormat:", NSUInteger, MTLPixelFormatDepth32Float);
-    M1(void, td, "setWidth:", NSUInteger, w); M1(void, td, "setHeight:", NSUInteger, h);
-    M1(void, td, "setUsage:", NSUInteger, MTLTextureUsageRenderTarget);
-    M1(void, td, "setStorageMode:", NSUInteger, MTLStorageModePrivate);
-    gGbufDepth = M1(id, gDevice, "newTextureWithDescriptor:", id, td);
+    gGbufWorldPos = newTexture(MTLPixelFormatRGBA32Float, w, h,
+                               MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead,
+                               MTLStorageModePrivate);
+    gSceneColor = newTexture(MTLPixelFormatBGRA8Unorm, w, h,
+                             MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead,
+                             MTLStorageModePrivate);
+    gGbufDepth = newTexture(MTLPixelFormatDepth32Float, w, h,
+                            MTLTextureUsageRenderTarget,
+                            MTLStorageModePrivate);
 }
 
 static BOOL buildPipelines(void) {
@@ -431,37 +438,18 @@ static BOOL buildPipelines(void) {
     id sc = mkstr("c");
     id sd = mkstr("d");
     id se = mkstr("e");
-    NSError *libErr = nil;
     id<MTLLibrary> lib =
-        M3(id, gDevice, "newLibraryWithSource:options:error:", id, shaderSource, id, nil, NSError **, &libErr);
-    if (!lib) { NSLog(@"Library compile error: %@", libErr); return NO; }
+        M3(id, gDevice, "newLibraryWithSource:options:error:", id, shaderSource, id, nil, NSError **, nil);
+    if (!lib) return NO;
 
-    MTLRenderPipelineDescriptor *d;
-    id ca0;
+    gGbufPSO = newPSO(lib, sa, sb, MTLPixelFormatRGBA32Float, MTLPixelFormatDepth32Float);
+    if (!gGbufPSO) return NO;
 
-    d = M0(id, CLS("MTLRenderPipelineDescriptor"), "new");
-    M1(void, d, "setVertexFunction:", id, M1(id, lib, "newFunctionWithName:", id, sa));
-    M1(void, d, "setFragmentFunction:", id, M1(id, lib, "newFunctionWithName:", id, sb));
-    ca0 = attachmentAt(d, 0);
-    M1(void, ca0, "setPixelFormat:", NSUInteger, MTLPixelFormatRGBA32Float);
-    M1(void, d, "setDepthAttachmentPixelFormat:", NSUInteger, MTLPixelFormatDepth32Float);
-    NSError *psoErr = nil;
-    gGbufPSO = M2(id, gDevice, "newRenderPipelineStateWithDescriptor:error:", id, d, NSError **, &psoErr);
-    if (!gGbufPSO) { NSLog(@"GbufPSO error: %@", psoErr); return NO; }
+    gDeferredPSO = newPSO(lib, sc, sd, MTLPixelFormatBGRA8Unorm, MTLPixelFormatInvalid);
+    if (!gDeferredPSO) return NO;
 
-    d = M0(id, CLS("MTLRenderPipelineDescriptor"), "new");
-    M1(void, d, "setVertexFunction:", id, M1(id, lib, "newFunctionWithName:", id, sc));
-    M1(void, d, "setFragmentFunction:", id, M1(id, lib, "newFunctionWithName:", id, sd));
-    M1(void, attachmentAt(d, 0), "setPixelFormat:", NSUInteger, MTLPixelFormatBGRA8Unorm);
-    gDeferredPSO = M2(id, gDevice, "newRenderPipelineStateWithDescriptor:error:", id, d, NSError **, &psoErr);
-    if (!gDeferredPSO) { NSLog(@"DeferredPSO error: %@", psoErr); return NO; }
-
-    d = M0(id, CLS("MTLRenderPipelineDescriptor"), "new");
-    M1(void, d, "setVertexFunction:", id, M1(id, lib, "newFunctionWithName:", id, sc));
-    M1(void, d, "setFragmentFunction:", id, M1(id, lib, "newFunctionWithName:", id, se));
-    M1(void, attachmentAt(d, 0), "setPixelFormat:", NSUInteger, MTLPixelFormatBGRA8Unorm);
-    gPostPSO = M2(id, gDevice, "newRenderPipelineStateWithDescriptor:error:", id, d, NSError **, &psoErr);
-    if (!gPostPSO) { NSLog(@"PostPSO error: %@", psoErr); return NO; }
+    gPostPSO = newPSO(lib, sc, se, MTLPixelFormatBGRA8Unorm, MTLPixelFormatInvalid);
+    if (!gPostPSO) return NO;
 
     MTLDepthStencilDescriptor *ds = M0(id, CLS("MTLDepthStencilDescriptor"), "new");
     M1(void, ds, "setDepthCompareFunction:", NSUInteger, MTLCompareFunctionLess);
@@ -480,12 +468,8 @@ static void buildGeometry(void) {
             int16_t v = (int16_t)(seed >> 14);
             gNoisePixels[i] = (float)v / 32768.0f;
         }
-        MTLTextureDescriptor *td = M0(id, CLS("MTLTextureDescriptor"), "new");
-        M1(void, td, "setPixelFormat:", NSUInteger, MTLPixelFormatR32Float);
-        M1(void, td, "setWidth:", NSUInteger, 256); M1(void, td, "setHeight:", NSUInteger, 256);
-        M1(void, td, "setUsage:", NSUInteger, MTLTextureUsageShaderRead);
-        M1(void, td, "setStorageMode:", NSUInteger, MTLStorageModeShared);
-        gNoiseTex = M1(id, gDevice, "newTextureWithDescriptor:", id, td);
+        gNoiseTex = newTexture(MTLPixelFormatR32Float, 256, 256,
+                               MTLTextureUsageShaderRead, MTLStorageModeShared);
         M4(void, gNoiseTex, "replaceRegion:mipmapLevel:withBytes:bytesPerRow:",
             MTLRegion, MTLRegionMake2D(0,0,256,256), NSUInteger, 0, const void *, gNoisePixels,
             NSUInteger, 256*sizeof(float));
@@ -620,21 +604,13 @@ int main(void) {
     M0(void, app, "finishLaunching");
     M1(void, window, "makeKeyAndOrderFront:", id, nil);
     M1(void, app, "activateIgnoringOtherApps:", BOOL, YES);
-    // Pump the run loop so the window actually appears before we enter the render loop.
-    M1(void, M0(id, CLS("NSRunLoop"), "mainRunLoop"), "runUntilDate:",
-       id, M1(id, CLS("NSDate"), "dateWithTimeIntervalSinceNow:", double, 0.1));
+    CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.1, false);
 
     generateAudio();
     startAudioUnit();
 
     while (gRunning) {
-        // Drain pending AppKit events so the window stays composited.
-        id ev;
-        while ((ev = M4(id, app, "nextEventMatchingMask:untilDate:inMode:dequeue:",
-                        NSUInteger, NSEventMaskAny,
-                        id, M0(id, CLS("NSDate"), "distantPast"),
-                        id, mkstr("kCFRunLoopDefaultMode"), BOOL, YES)))
-            M1(void, app, "sendEvent:", id, ev);
+        CFRunLoopRunInMode(kCFRunLoopDefaultMode, 0.0, true);
         renderFrame();
     }
     return 0;
