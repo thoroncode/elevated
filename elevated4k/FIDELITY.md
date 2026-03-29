@@ -12,6 +12,8 @@ The rendering intent should follow:
 
 That seminar is useful here because it states the actual engineering model behind
 the intro instead of leaving contributors to guess from screenshots.
+See also `elevated4k/REFERENCES.md` for the external references and the derived
+optimization constraints captured from them.
 
 ## Architectural Constraints
 
