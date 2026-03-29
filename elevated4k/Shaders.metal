@@ -226,18 +226,35 @@ float3 f(float2 o, constant U& u, T t0, T t1)
 }
 
 // ────────────────────────────────────────────────────────────────────────────
-// PASS 2 — FUSED DEFERRED SHADING + POST (m4)
-// Shades from the G-buffer and post-processes directly into the drawable.
+// PASS 2 — DEFERRED SHADING (m3)
+// Shades from the G-buffer into an intermediate scene color target.
 // ────────────────────────────────────────────────────────────────────────────
-fragment float4 e(
+fragment float4 d(
     P i [[stage_in]],
     constant U& u [[buffer(0)]],
     T t0 [[texture(0)]],   // noise texture
     T t1 [[texture(1)]])   // G-buffer
 {
     float2 o = i.u + 0.5/1280;
-    float4 d = t1.sample(s1, o);
     float3 c = f(o, u, t0, t1);
+
+    return float4(c, 0);
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// PASS 3 — POST-PROCESSING (m4)
+// Motion blur + grading from pre-shaded scene color.
+// ────────────────────────────────────────────────────────────────────────────
+fragment float4 e(
+    P i [[stage_in]],
+    constant U& u [[buffer(0)]],
+    T t0 [[texture(0)]],   // noise texture
+    T t1 [[texture(1)]],   // G-buffer
+    T t2 [[texture(2)]])   // scene color
+{
+    float2 o = i.u + 0.5/1280;
+    float4 d = t1.sample(s1, o);
+    float3 c = t2.sample(s1, o).rgb;
 
     if (d.w > 0.5) {
         // Motion blur: reproject world pos to clip, sample along motion vector
@@ -246,9 +263,9 @@ fragment float4 e(
         float2 m = (0.5 + 0.5*clip.xy/clip.w - o) / 16;
         c = 0;
         for (float i = 0; i < 16; i++) {
-            c.x += f(o + i*m + float2( 2,0)/1280, u, t0, t1).r;
-            c.y += f(o + i*m + float2( 0,0)/1280, u, t0, t1).g;
-            c.z += f(o + i*m + float2(-2,0)/1280, u, t0, t1).b;
+            c.x += t2.sample(s1, o + i*m + float2( 2,0)/1280).r;
+            c.y += t2.sample(s1, o + i*m + float2( 0,0)/1280).g;
+            c.z += t2.sample(s1, o + i*m + float2(-2,0)/1280).b;
         }
         c /= 16;
     }

@@ -383,12 +383,14 @@ static void updateUniforms(Uniforms *u, CGSize sz) {
 static id<MTLDevice>              gDevice;
 static id<MTLCommandQueue>        gQueue;
 static id<MTLRenderPipelineState> gGbufPSO;
+static id<MTLRenderPipelineState> gDeferredPSO;
 static id<MTLRenderPipelineState> gPostPSO;
 static id<MTLDepthStencilState>   gDepthState;
 static CAMetalLayer              *gMetalLayer;
 
 static id<MTLTexture> gGbufWorldPos;
 static id<MTLTexture> gGbufDepth;
+static id<MTLTexture> gSceneColor;
 static id<MTLTexture> gNoiseTex;
 
 static Uniforms gUniforms;
@@ -421,6 +423,9 @@ static void rebuildOffscreen(CGSize size) {
     gGbufWorldPos = newTexture(MTLPixelFormatRGBA32Float, w, h,
                                MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead,
                                MTLStorageModePrivate);
+    gSceneColor = newTexture(MTLPixelFormatBGRA8Unorm, w, h,
+                             MTLTextureUsageRenderTarget | MTLTextureUsageShaderRead,
+                             MTLStorageModePrivate);
     gGbufDepth = newTexture(MTLPixelFormatDepth32Float, w, h,
                             MTLTextureUsageRenderTarget,
                             MTLStorageModePrivate);
@@ -431,6 +436,7 @@ static BOOL buildPipelines(void) {
     id sa = mkstr("a");
     id sb = mkstr("b");
     id sc = mkstr("c");
+    id sd = mkstr("d");
     id se = mkstr("e");
     id<MTLLibrary> lib =
         M3(id, gDevice, "newLibraryWithSource:options:error:", id, shaderSource, id, nil, NSError **, nil);
@@ -438,6 +444,9 @@ static BOOL buildPipelines(void) {
 
     gGbufPSO = newPSO(lib, sa, sb, MTLPixelFormatRGBA32Float, MTLPixelFormatDepth32Float);
     if (!gGbufPSO) return NO;
+
+    gDeferredPSO = newPSO(lib, sc, sd, MTLPixelFormatBGRA8Unorm, MTLPixelFormatInvalid);
+    if (!gDeferredPSO) return NO;
 
     gPostPSO = newPSO(lib, sc, se, MTLPixelFormatBGRA8Unorm, MTLPixelFormatInvalid);
     if (!gPostPSO) return NO;
@@ -517,7 +526,26 @@ static void renderFrame(void) {
         M0(void, enc, "endEncoding");
     }
 
-    // ── Pass 2: Fused deferred shading + post → screen ───────────────────────
+    // ── Pass 2: Deferred shading ──────────────────────────────────────────────
+    {
+        MTLRenderPassDescriptor *rpd = M0(id, CLS("MTLRenderPassDescriptor"), "renderPassDescriptor");
+        id ca0 = attachmentAt(rpd, 0);
+        M1(void, ca0, "setTexture:", id, gSceneColor);
+        M1(void, ca0, "setLoadAction:", NSUInteger, MTLLoadActionDontCare);
+        M1(void, ca0, "setStoreAction:", NSUInteger, MTLStoreActionStore);
+
+        id<MTLRenderCommandEncoder> enc = M1(id, cmd, "renderCommandEncoderWithDescriptor:", id, rpd);
+        M1(void, enc, "setRenderPipelineState:", id, gDeferredPSO);
+        M3(void, enc, "setFragmentBytes:length:atIndex:",
+            const void *, &gUniforms, NSUInteger, sizeof(gUniforms), NSUInteger, 0);
+        M2(void, enc, "setFragmentTexture:atIndex:", id, gNoiseTex, NSUInteger, 0);
+        M2(void, enc, "setFragmentTexture:atIndex:", id, gGbufWorldPos, NSUInteger, 1);
+        M3(void, enc, "drawPrimitives:vertexStart:vertexCount:",
+            NSUInteger, MTLPrimitiveTypeTriangle, NSUInteger, 0, NSUInteger, 3);
+        M0(void, enc, "endEncoding");
+    }
+
+    // ── Pass 3: Post-processing → screen ──────────────────────────────────────
     {
         MTLRenderPassDescriptor *rpd = M0(id, CLS("MTLRenderPassDescriptor"), "renderPassDescriptor");
         id ca0 = attachmentAt(rpd, 0);
@@ -531,6 +559,7 @@ static void renderFrame(void) {
             const void *, &gUniforms, NSUInteger, sizeof(gUniforms), NSUInteger, 0);
         M2(void, enc, "setFragmentTexture:atIndex:", id, gNoiseTex, NSUInteger, 0);
         M2(void, enc, "setFragmentTexture:atIndex:", id, gGbufWorldPos, NSUInteger, 1);
+        M2(void, enc, "setFragmentTexture:atIndex:", id, gSceneColor, NSUInteger, 2);
         M3(void, enc, "drawPrimitives:vertexStart:vertexCount:",
             NSUInteger, MTLPrimitiveTypeTriangle, NSUInteger, 0, NSUInteger, 3);
         M0(void, enc, "endEncoding");
