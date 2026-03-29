@@ -248,17 +248,6 @@ def strings_output(path: Path) -> list[str]:
     return run("strings", "-a", "-n", "4", str(path)).splitlines()
 
 
-def unique_strings(rows: list[str]) -> list[str]:
-    seen = set()
-    out = []
-    for row in rows:
-        if row in seen:
-            continue
-        seen.add(row)
-        out.append(row)
-    return out
-
-
 def print_header(title: str) -> None:
     print()
     print(f"=== {title} ===")
@@ -350,12 +339,11 @@ def main() -> int:
             print(f"  {len(row):>3d}  {shorten(row)}")
 
     if string_rows:
-        print_header("Raw Strings Hit List")
-        uniq_rows = unique_strings(string_rows)
-        print(f"Unique strings          {len(uniq_rows):>7d}")
-        print("Longest raw strings:")
-        for row in sorted(uniq_rows, key=len, reverse=True)[:20]:
-            print(f"  {len(row):>3d}  {shorten(row, 96)}")
+        print_header("Sorted Strings")
+        print(f"Raw strings             {len(string_rows):>7d}")
+        print("Equivalent to: strings -a -n 4 <binary> | sort")
+        for row in sorted(string_rows):
+            print(row)
 
     if known_blobs:
         print_header("Known Payload Blobs")
