@@ -1,4 +1,4 @@
-.PHONY: all help build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata ios-submit
+.PHONY: all help build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata ios-submit ios-add-tester
 
 BIN       = elevated/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -32,6 +32,7 @@ help:
 	@echo "  ios-release       Stamp version, archive, and upload to TestFlight"
 	@echo "  ios-metadata      Upload metadata/icon/screenshots to App Store Connect"
 	@echo "  ios-submit        Submit latest build for App Store review"
+	@echo "  ios-add-tester    Add tester to TestFlight (EMAIL=user@example.com)"
 	@echo "  uninstall         Remove /Applications/Elevated.app"
 	@echo "  capture           Capture one PNG per second to /tmp/elevated_cap/"
 	@echo "  branch-frame      Capture one exact frame (use T=<sec> [BRANCHES='...'])"
@@ -230,6 +231,12 @@ ios-metadata:
 # Submit the latest TestFlight build for App Store review
 ios-submit:
 	@$(FASTLANE) submit
+
+# Add a tester to TestFlight internal testing
+# Usage: make ios-add-tester EMAIL=user@example.com
+ios-add-tester:
+	@test -n "$(EMAIL)" || (echo "Usage: make ios-add-tester EMAIL=user@example.com" && exit 1)
+	@$(FASTLANE) add_tester email:$(EMAIL)
 
 # Remove the installed app from /Applications
 uninstall:

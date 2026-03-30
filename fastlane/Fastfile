@@ -49,6 +49,23 @@ platform :ios do
     )
   end
 
+  desc "Add a tester to TestFlight. Usage: fastlane add_tester email:user@example.com"
+  lane :add_tester do |options|
+    email = options[:email]
+    UI.user_error!("Usage: fastlane add_tester email:user@example.com") unless email
+
+    # Create group if it doesn't exist, add tester
+    pilot(
+      distribute_only: false,
+      skip_submission: true,
+      testers_file_path: nil,
+      email: email,
+      first_name: "",
+      last_name: "",
+      groups: ["Internal Testers"]
+    )
+  end
+
   desc "Take screenshots on all device sizes"
   lane :screenshots do
     # Placeholder — requires UI test target for automated screenshots
