@@ -1,4 +1,4 @@
-.PHONY: all help build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean
+.PHONY: all help build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata
 
 BIN       = elevated/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -27,6 +27,10 @@ help:
 	@echo "  zip               Zip Elevated.app to ~/Desktop/Elevated-YY.M.DD.zip"
 	@echo "  src-distribution  Create source zip in dist/"
 	@echo "  pkg               Build Elevated.pkg installer"
+	@echo "  ios-archive       Build iOS archive"
+	@echo "  ios-upload        Upload iOS archive to TestFlight"
+	@echo "  ios-release       Stamp version, archive, and upload to TestFlight"
+	@echo "  ios-metadata      Upload metadata/icon/screenshots to App Store Connect"
 	@echo "  uninstall         Remove /Applications/Elevated.app"
 	@echo "  capture           Capture one PNG per second to /tmp/elevated_cap/"
 	@echo "  branch-frame      Capture one exact frame (use T=<sec> [BRANCHES='...'])"
@@ -89,8 +93,9 @@ app-icon: build
 	@sips -z 480  800  $(ICON_SRC) --out AppTV/Assets.xcassets/AppIcon.appiconset/icon_800x480.png > /dev/null
 	@sips -z 720  1920 $(ICON_SRC) --out AppTV/Assets.xcassets/AppIcon.appiconset/icon_1920x720.png > /dev/null
 	@sips -z 768  1280 $(ICON_SRC) --out AppTV/Assets.xcassets/AppIcon.appiconset/icon_1280x768.png > /dev/null
+	@cp /tmp/icon_sq.png fastlane/metadata/app_icon.png
 	@rm -rf /tmp/Elevated.iconset /tmp/icon_sq.png
-	@echo "Icons: $(ICON_ICNS) + iOS/tvOS/visionOS asset catalogs"
+	@echo "Icons: $(ICON_ICNS) + iOS/tvOS/visionOS asset catalogs + fastlane metadata"
 
 # Build a self-contained Elevated.app bundle (double-clickable, drag to Applications)
 #   Normal:  open Elevated.app
@@ -191,6 +196,35 @@ pkg:
 	@echo ""
 	@echo "  Installer: $(CURDIR)/Elevated.pkg"
 	@echo "  Send this file — recipient double-clicks to install to /Applications"
+
+IOS_ARCHIVE = /tmp/Elevated.xcarchive
+IOS_EXPORT  = /tmp/ElevatedExport
+
+# Archive the iOS app with date-stamped version
+ios-archive:
+	@./stamp-version.sh
+	@echo "Archiving iOS..."
+	@xcodebuild -project ElevatedIOS.xcodeproj -scheme Elevated \
+	    -destination 'generic/platform=iOS' -configuration Release \
+	    archive -archivePath $(IOS_ARCHIVE) 2>&1 | tail -1
+	@echo "  Archive: $(IOS_ARCHIVE)"
+
+# Upload the most recent iOS archive to App Store Connect / TestFlight
+ios-upload:
+	@echo "Uploading to App Store Connect..."
+	@xcodebuild -exportArchive -archivePath $(IOS_ARCHIVE) \
+	    -exportOptionsPlist ExportOptions.plist \
+	    -allowProvisioningUpdates 2>&1 | tail -3
+	@echo "  Upload complete — check App Store Connect for processing status"
+
+# One-step: stamp version, archive, upload to TestFlight
+ios-release: ios-archive ios-upload
+
+FASTLANE = PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/lib/ruby/gems/4.0.0/bin:$$PATH" fastlane
+
+# Upload metadata (description, keywords, icon, screenshots) to App Store Connect
+ios-metadata:
+	@$(FASTLANE) metadata
 
 # Remove the installed app from /Applications
 uninstall:

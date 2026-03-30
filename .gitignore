@@ -29,6 +29,11 @@ __pycache__/
 elevated4k/*.air
 elevated4k/shaders_noalias.h
 
+# Fastlane build artifacts
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/test_output/
+
 # macOS and scratch
 .DS_Store
 hello

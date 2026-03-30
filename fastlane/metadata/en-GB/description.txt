@@ -1,0 +1,5 @@
+Elevated is a real-time procedural graphics demo originally created by rgba/tbc for Breakpoint 2009. Everything you see and hear is generated algorithmically — no pre-made textures, models, or audio files.
+
+The demo features procedurally generated terrain with water, sky, fog, and volumetric light beams, all rendered in real-time using Metal. The music is synthesized from scratch on your device.
+
+This is a faithful port of the legendary 4KB intro that won 1st place at Breakpoint 2009, brought to Apple platforms with Metal rendering.

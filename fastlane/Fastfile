@@ -1,0 +1,43 @@
+default_platform(:ios)
+
+platform :ios do
+  desc "Stamp version, build archive, and upload to TestFlight"
+  lane :release do
+    # Stamp date-based version
+    sh("cd .. && ./stamp-version.sh")
+
+    # Build archive
+    build_app(
+      project: "ElevatedIOS.xcodeproj",
+      scheme: "Elevated",
+      configuration: "Release",
+      destination: "generic/platform=iOS",
+      export_method: "app-store",
+      export_team_id: "MU8NPY2D99",
+      clean: true
+    )
+
+    # Upload to TestFlight
+    upload_to_testflight(
+      skip_waiting_for_build_processing: true
+    )
+  end
+
+  desc "Upload metadata and screenshots to App Store Connect"
+  lane :metadata do
+    deliver(
+      skip_binary_upload: true,
+      skip_screenshots: false,
+      force: true,
+      automatic_release: false,
+      submit_for_review: false
+    )
+  end
+
+  desc "Take screenshots on all device sizes"
+  lane :screenshots do
+    # Placeholder — requires UI test target for automated screenshots
+    # For now, screenshots can be placed in fastlane/screenshots/
+    UI.message("Place screenshots in fastlane/screenshots/ and run 'fastlane metadata'")
+  end
+end
