@@ -27,10 +27,13 @@ platform :ios do
   lane :metadata do
     deliver(
       skip_binary_upload: true,
-      skip_screenshots: false,
+      skip_screenshots: true,
       force: true,
       automatic_release: false,
-      submit_for_review: false
+      submit_for_review: false,
+      platform: "ios",
+      app_review_information: {},
+      skip_app_version_update: true
     )
   end
 
