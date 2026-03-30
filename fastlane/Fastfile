@@ -34,6 +34,21 @@ platform :ios do
     )
   end
 
+  desc "Submit the latest TestFlight build for App Store review"
+  lane :submit do
+    deliver(
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_metadata: false,
+      submit_for_review: true,
+      automatic_release: false,
+      force: true,
+      submission_information: {
+        add_id_info_uses_idfa: false
+      }
+    )
+  end
+
   desc "Take screenshots on all device sizes"
   lane :screenshots do
     # Placeholder — requires UI test target for automated screenshots
