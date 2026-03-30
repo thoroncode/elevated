@@ -959,3 +959,52 @@ Then open Xcode Organizer (Window > Organizer) to validate and distribute.
 Workflow configured to build on push to `main`, archive for iOS, and deploy to TestFlight.
 GitHub repo: `thoroncode/elevated` (private). Xcode Cloud accesses it via the GitHub App
 authorization.
+
+### Fastlane Automation
+
+Installed via Homebrew Ruby (`/opt/homebrew/opt/ruby/bin`). Fastlane 2.232.2.
+
+**Makefile targets:**
+
+| Target | Description |
+|--------|-------------|
+| `make ios-screenshots` | Render 5 key demo frames, scale to iPhone 6.9" + iPad 13" |
+| `make ios-archive` | Stamp version + build iOS archive |
+| `make ios-upload` | Upload archive to TestFlight via `xcodebuild -exportArchive` |
+| `make ios-release` | One-step: stamp + archive + upload |
+| `make ios-metadata` | Upload screenshots to App Store Connect (hides `Elevated.pkg` to prevent macOS detection) |
+| `make ios-submit` | Submit latest build for App Store review |
+| `make ios-add-tester` | Add tester via `pilot` (currently broken — use App Store Connect web UI) |
+
+**Configuration:**
+- `fastlane/Appfile` — app identifier, team ID
+- `fastlane/.env` — `FASTLANE_USER` (gitignored, copy from `.env.default`)
+- `fastlane/metadata/en-GB/` — description, keywords, copyright, URLs
+- `fastlane/screenshots/en-GB/` — generated screenshots (5 iPhone + 5 iPad)
+- `ExportOptions.plist` — xcodebuild export settings for App Store Connect upload
+
+**Screenshot timestamps:** t=5s (mountains+water), t=17s (dramatic mountains), t=48s (mountain
+composition), t=95s (mid-demo), t=185s (icon frame — the best single frame).
+
+**Known Fastlane issues (as of 2.232.2):**
+- `deliver` crashes with "No data" on `fetch_app_store_review_detail` for new apps that have never
+  been submitted for review. Workaround: upload screenshots only (`skip_metadata: true`), set text
+  metadata in App Store Connect web UI for the first version.
+- `pilot add/list` crashes with "'betaTesterMetrics' is not a valid relationship name" due to
+  App Store Connect API changes. Workaround: add testers via web UI.
+- Fastlane auto-detects `Elevated.pkg` in repo root and forces `platform: osx`. Workaround:
+  Makefile temporarily moves pkg out of the way during `ios-metadata`.
+
+### Web Presence
+
+- **Support page**: https://thoron.iki.fi/elevated/
+- **Privacy policy**: https://thoron.iki.fi/elevated/privacy.html
+- Hosted at `ssh://thoron@thoron.iki.fi/public_html/elevated/`
+- The app collects no data, has no network access, no analytics, no tracking.
+
+### TestFlight Status (2026-03-31)
+
+- First build **26.3.30 (10.47)** uploaded and verified running on device.
+- TestFlight group: "Elevated Testers"
+- App Store Connect app ID: `6761337391`
+- Copyright: "Petri Koistinen et al."

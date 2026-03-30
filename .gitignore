@@ -33,6 +33,7 @@ elevated4k/shaders_noalias.h
 fastlane/report.xml
 fastlane/Preview.html
 fastlane/test_output/
+fastlane/README.md
 fastlane/.env
 
 # macOS and scratch
