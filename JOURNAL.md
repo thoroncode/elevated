@@ -869,3 +869,93 @@ result to the human eye.
 The compare mode is a permanent quality tool for future shader work. The grain optimization is not
 worth shipping on macOS at the measured byte savings because it changes the perceived texture of
 the image.
+
+---
+
+## App Store / TestFlight Release (2026-03-30)
+
+### Apple Developer Setup
+
+- **Developer Program**: Nitor Creations Oy (Team ID: `MU8NPY2D99`)
+- **Account**: `petri.koistinen@iki.fi`
+- **Personal signing cert**: `Apple Development: petri.koistinen@iki.fi (B8KD8TW482)`, OU=536299P3P6
+- Note: The personal team ID (536299P3P6) is different from the organization team ID (MU8NPY2D99).
+  Xcode Cloud requires the organization team ID in `DEVELOPMENT_TEAM`.
+
+### Bundle Identifiers
+
+Registered under Nitor Creations Oy in Certificates, Identifiers & Profiles:
+
+| Platform  | Bundle ID                   |
+|-----------|-----------------------------|
+| iOS/iPad  | `com.nitor.elevated`        |
+| tvOS      | `com.nitor.elevated.tv`     |
+| visionOS  | `com.nitor.elevated.vision` |
+| macOS     | `com.nitor.elevated` (Makefile) |
+
+**Why `com.nitor`?** The `fi.iki.thoron.elevated` and `fi.iki.thoron.elevated.intro` identifiers were
+rejected as "not available" — bundle IDs are globally unique across all Apple developers. The Nitor
+domain prefix matched the team's existing identifiers.
+
+### App Store Connect
+
+- **App name**: "Elevated Intro" ("Elevated" was already taken globally)
+- **SKU**: `elevated`
+- **Platforms**: iOS, macOS, tvOS, visionOS (all selected)
+- **Primary language**: English (U.K.)
+- **User Access**: Full Access
+
+### Versioning
+
+Date-based scheme matching the macOS Makefile:
+
+- **MARKETING_VERSION** (CFBundleShortVersionString): `YY.M.DD` (e.g. `26.3.30`)
+- **CURRENT_PROJECT_VERSION** (CFBundleVersion): `HH.MM` (e.g. `10.47`)
+
+**Local builds**: Run `./stamp-version.sh` before archiving. It updates all `.xcodeproj` files via sed.
+
+**Xcode Cloud**: `ci_scripts/ci_post_clone.sh` calls `stamp-version.sh` automatically after cloning,
+before the build starts.
+
+**Why not a Run Script build phase?** Xcode 26's build sandbox blocks scripts from writing to either
+the built Info.plist (`TARGET_BUILD_DIR`) or the source tree (`SRCROOT`). `agvtool` also fails because
+there are multiple `.xcodeproj` files in the root. The `ci_post_clone.sh` approach runs outside the
+sandbox.
+
+### Metal Shader Linking Fix
+
+SPM compiles all `.metal` files in a target into a single metallib. Both `Shaders.metal` and
+`ShadersBaseline.metal` define the same 9 functions (`no`, `fbm`, `cn`, `sl`, `a`, `b`, `c`, `d`, `e`),
+causing "9 duplicated symbols" from `air-lld`.
+
+**Fix**: Renamed `ShadersBaseline.metal` to `ShadersBaseline.txt` so SPM doesn't compile it. The
+renderer's `loadLibrarySource()` was updated to also look for `.txt` extension — it compiles the
+shader source at runtime via `device.makeLibrary(source:options:)`.
+
+In `Package.swift`:
+```swift
+resources: [
+    .process("Shaders.metal"),       // compiled into default.metallib
+    .copy("ShadersBaseline.txt")     // bundled as raw source, compiled at runtime
+]
+```
+
+The macOS Makefile was already compiling them into separate `.metallib` files, so this only affected
+the Xcode/SPM builds for iOS, tvOS, and visionOS.
+
+### Local Archive (without Xcode Cloud)
+
+```sh
+./stamp-version.sh
+xcodebuild -project ElevatedIOS.xcodeproj -scheme Elevated \
+    -destination 'generic/platform=iOS' -configuration Release \
+    archive -archivePath /tmp/Elevated.xcarchive
+```
+
+Then open Xcode Organizer (Window > Organizer) to validate and distribute.
+
+### Xcode Cloud
+
+Workflow configured to build on push to `main`, archive for iOS, and deploy to TestFlight.
+GitHub repo: `thoroncode/elevated` (private). Xcode Cloud accesses it via the GitHub App
+authorization.
