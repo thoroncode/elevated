@@ -82,8 +82,15 @@ app-icon: build
 	@sips -z 512  512  /tmp/icon_sq.png --out /tmp/Elevated.iconset/icon_512x512.png    > /dev/null
 	@sips -z 1024 1024 /tmp/icon_sq.png --out /tmp/Elevated.iconset/icon_512x512@2x.png > /dev/null
 	@iconutil -c icns /tmp/Elevated.iconset -o $(ICON_ICNS)
+	@echo "Generating iOS/visionOS icons..."
+	@sips -z 1024 1024 /tmp/icon_sq.png --out App/Assets.xcassets/AppIcon.appiconset/icon_1024.png > /dev/null
+	@sips -z 1024 1024 /tmp/icon_sq.png --out AppVision/Assets.xcassets/AppIcon.appiconset/icon_1024.png > /dev/null
+	@echo "Generating tvOS icons..."
+	@sips -z 480  800  $(ICON_SRC) --out AppTV/Assets.xcassets/AppIcon.appiconset/icon_800x480.png > /dev/null
+	@sips -z 720  1920 $(ICON_SRC) --out AppTV/Assets.xcassets/AppIcon.appiconset/icon_1920x720.png > /dev/null
+	@sips -z 768  1280 $(ICON_SRC) --out AppTV/Assets.xcassets/AppIcon.appiconset/icon_1280x768.png > /dev/null
 	@rm -rf /tmp/Elevated.iconset /tmp/icon_sq.png
-	@echo "Icon: $(ICON_ICNS)"
+	@echo "Icons: $(ICON_ICNS) + iOS/tvOS/visionOS asset catalogs"
 
 # Build a self-contained Elevated.app bundle (double-clickable, drag to Applications)
 #   Normal:  open Elevated.app
