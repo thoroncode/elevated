@@ -33,7 +33,9 @@ platform :ios do
       overwrite_screenshots: true,
       skip_metadata: true,
       force: true,
-      platform: "ios"
+      platform: "ios",
+      pkg: nil,
+      ipa: nil
     )
     UI.success("Screenshots uploaded. Text metadata must be set in App Store Connect until Fastlane fixes the 'No data' bug for new apps.")
   end

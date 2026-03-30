@@ -243,7 +243,10 @@ ios-screenshots: build
 
 # Upload metadata (description, keywords, icon, screenshots) to App Store Connect
 ios-metadata:
-	@$(FASTLANE) metadata
+	@test -f Elevated.pkg && mv Elevated.pkg Elevated.pkg.bak || true
+	@$(FASTLANE) metadata; rc=$$?; \
+	 test -f Elevated.pkg.bak && mv Elevated.pkg.bak Elevated.pkg || true; \
+	 exit $$rc
 
 # Submit the latest TestFlight build for App Store review
 ios-submit:
