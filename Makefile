@@ -1,4 +1,4 @@
-.PHONY: all help build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata ios-submit ios-add-tester
+.PHONY: all help build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots ios-submit ios-add-tester
 
 BIN       = elevated/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -30,6 +30,7 @@ help:
 	@echo "  ios-archive       Build iOS archive"
 	@echo "  ios-upload        Upload iOS archive to TestFlight"
 	@echo "  ios-release       Stamp version, archive, and upload to TestFlight"
+	@echo "  ios-screenshots    Generate App Store screenshots from the demo"
 	@echo "  ios-metadata      Upload metadata/icon/screenshots to App Store Connect"
 	@echo "  ios-submit        Submit latest build for App Store review"
 	@echo "  ios-add-tester    Add tester to TestFlight (EMAIL=user@example.com)"
@@ -223,6 +224,22 @@ ios-upload:
 ios-release: ios-archive ios-upload
 
 FASTLANE = PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/lib/ruby/gems/4.0.0/bin:$$PATH" fastlane
+
+SS_DIR   = fastlane/screenshots/en-GB
+SS_TIMES = 5.0 17.0 48.0 95.0 185.0
+
+# Generate App Store screenshots at key demo moments
+ios-screenshots: build
+	@mkdir -p $(SS_DIR)
+	@i=1; for t in $(SS_TIMES); do \
+	    echo "Capturing t=$${t}s..."; \
+	    $(BIN) --icon-at=$${t} --icon-out=/tmp/ss_$${i}.png; \
+	    sips -z 1320 2868 /tmp/ss_$${i}.png --out $(SS_DIR)/iPhone_6.9_$${i}.png > /dev/null 2>&1; \
+	    sips -p 2064 2752 /tmp/ss_$${i}.png --out $(SS_DIR)/iPad_13_$${i}.png > /dev/null 2>&1; \
+	    rm -f /tmp/ss_$${i}.png; \
+	    i=$$((i+1)); \
+	done
+	@echo "Screenshots: $(SS_DIR)/"
 
 # Upload metadata (description, keywords, icon, screenshots) to App Store Connect
 ios-metadata:

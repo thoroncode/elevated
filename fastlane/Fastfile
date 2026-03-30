@@ -27,7 +27,8 @@ platform :ios do
   lane :metadata do
     deliver(
       skip_binary_upload: true,
-      skip_screenshots: true,
+      skip_screenshots: false,
+      overwrite_screenshots: true,
       force: true,
       automatic_release: false,
       submit_for_review: false,
@@ -53,10 +54,8 @@ platform :ios do
   end
 
 
-  desc "Take screenshots on all device sizes"
+  desc "Generate App Store screenshots from the demo"
   lane :screenshots do
-    # Placeholder — requires UI test target for automated screenshots
-    # For now, screenshots can be placed in fastlane/screenshots/
-    UI.message("Place screenshots in fastlane/screenshots/ and run 'fastlane metadata'")
+    sh("cd .. && make ios-screenshots")
   end
 end
