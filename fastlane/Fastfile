@@ -25,17 +25,17 @@ platform :ios do
 
   desc "Upload metadata and screenshots to App Store Connect"
   lane :metadata do
+    # Upload screenshots only (metadata upload crashes on new apps
+    # due to missing AppStoreReviewDetail — known Fastlane bug)
     deliver(
       skip_binary_upload: true,
       skip_screenshots: false,
       overwrite_screenshots: true,
+      skip_metadata: true,
       force: true,
-      automatic_release: false,
-      submit_for_review: false,
-      platform: "ios",
-      app_review_information: {},
-      skip_app_version_update: true
+      platform: "ios"
     )
+    UI.success("Screenshots uploaded. Text metadata must be set in App Store Connect until Fastlane fixes the 'No data' bug for new apps.")
   end
 
   desc "Submit the latest TestFlight build for App Store review"
