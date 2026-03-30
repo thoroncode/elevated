@@ -236,7 +236,7 @@ ios-submit:
 # Usage: make ios-add-tester EMAIL=user@example.com
 ios-add-tester:
 	@test -n "$(EMAIL)" || (echo "Usage: make ios-add-tester EMAIL=user@example.com" && exit 1)
-	@$(FASTLANE) add_tester email:$(EMAIL)
+	@$(FASTLANE) pilot add $(EMAIL) -a com.nitor.elevated
 
 # Remove the installed app from /Applications
 uninstall:
