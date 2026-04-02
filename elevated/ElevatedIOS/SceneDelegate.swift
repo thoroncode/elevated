@@ -20,5 +20,17 @@ public class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         let prefs = UIWindowScene.GeometryPreferences.iOS(interfaceOrientations: .landscape)
         windowScene.requestGeometryUpdate(prefs)
     }
+
+    public func sceneDidEnterBackground(_ scene: UIScene) {
+        viewController?.pausePlayback()
+    }
+
+    public func sceneWillEnterForeground(_ scene: UIScene) {
+        viewController?.resumePlayback()
+    }
+
+    private var viewController: ViewController? {
+        window?.rootViewController as? ViewController
+    }
 }
 #endif

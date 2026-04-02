@@ -1113,3 +1113,30 @@ by the display), giving a ~4x speedup with negligible visual loss on a TV viewin
    Must use a paid team.
 8. **Fastlane 2.232.2** has broken `betaBuildMetrics` API — `pilot builds`, `pilot distribute`,
    and `pilot list` all crash. Use Spaceship Ruby API or App Store Connect web UI as workaround.
+
+### tvOS Transport Scrubber (2026-04-02)
+
+Native-feeling transport bar for the Apple TV, implemented in the tvOS ViewController
+without any debug mode — always available via the Siri Remote.
+
+**Controls:**
+- **Swipe left/right** on touchpad: velocity-based scrubbing (faster swipe = faster seek)
+- **Click touchpad** or **Play/Pause button**: toggle play/pause
+- Transport bar appears on any interaction, auto-hides after 4 seconds
+
+**Implementation:**
+- `UIPanGestureRecognizer` maps `velocity.x` to seek speed (~800 points/sec = 1x playback speed)
+- During scrub: only Renderer seeks (visual preview), SynthPlayer seeks on gesture end (no audio glitch)
+- Progress bar: white fill on gray track, elapsed/remaining time labels, rounded container with
+  semi-transparent background — follows Apple TV video app conventions
+- `CADisplayLink` updates the progress bar every frame when visible
+
+**No AVPlayerViewController** — Apple's built-in transport bar only works with AVPlayer. Custom Metal
+players must implement their own scrub UI. The Siri Remote's outer ring scrubbing is exclusive to
+AVPlayerViewController and not available to third-party apps.
+
+### Background Muting (2026-04-02)
+
+Both iOS and tvOS now pause renderer + audio when the app enters background, and resume on
+foreground return. Implemented via `sceneDidEnterBackground` / `sceneWillEnterForeground` in
+the SceneDelegates, calling `pausePlayback()` / `resumePlayback()` on the ViewController.

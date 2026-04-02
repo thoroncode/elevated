@@ -50,6 +50,20 @@ public class ViewController: UIViewController {
         else                 { renderer.pause();  synth.pause()  }
     }
 
+    // MARK: - Background/Foreground
+
+    func pausePlayback() {
+        guard !renderer.isPaused else { return }
+        renderer.pause()
+        synth.pause()
+    }
+
+    func resumePlayback() {
+        guard renderer.isPaused else { return }
+        renderer.resume()
+        synth.resume()
+    }
+
     private func activateAudioSession() {
         do {
             try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)

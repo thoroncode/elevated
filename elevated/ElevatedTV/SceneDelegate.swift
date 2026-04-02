@@ -18,5 +18,17 @@ public class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window.makeKeyAndVisible()
         self.window = window
     }
+
+    public func sceneDidEnterBackground(_ scene: UIScene) {
+        viewController?.pausePlayback()
+    }
+
+    public func sceneWillEnterForeground(_ scene: UIScene) {
+        viewController?.resumePlayback()
+    }
+
+    private var viewController: ViewController? {
+        window?.rootViewController as? ViewController
+    }
 }
 #endif
