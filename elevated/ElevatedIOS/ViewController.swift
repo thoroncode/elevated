@@ -1,5 +1,5 @@
 // ViewController.swift
-// ElevatedIOS — fullscreen Metal playback, landscape-locked, no debug UI.
+// ElevatedIOS — fullscreen Metal playback with touch-based transport scrubber.
 
 #if canImport(UIKit)
 import UIKit
@@ -10,6 +10,16 @@ import ElevatedCore
 public class ViewController: UIViewController {
     private var renderer: Renderer!
     private let synth = SynthPlayer()
+
+    // Transport overlay
+    private let transportView = UIView()
+    private let progressTrack = UIView()
+    private let progressFill = UIView()
+    private let elapsedLabel = UILabel()
+    private let remainingLabel = UILabel()
+    private var hideTimer: Timer?
+    private var isScrubbing = false
+    private var scrubTime: Double = 0
 
     public override func viewDidLoad() {
         super.viewDidLoad()
@@ -31,23 +41,188 @@ public class ViewController: UIViewController {
 
         renderer = Renderer(mtkView: mtkView, debug: false, capture: false)
         mtkView.delegate = renderer
-        renderer.onDemoEnd = {
-            DispatchQueue.main.asyncAfter(deadline: .now() + 5) { exit(0) }
+        renderer.onDemoEnd = { [weak self] in
+            guard let self else { return }
+            self.synth.seek(to: 0)
+            self.renderer.start()
         }
 
-        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
-        view.addGestureRecognizer(tap)
+        setupTransport()
+        setupGestures()
 
         synth.synthesize { [weak self] ok in
             guard let self, ok else { return }
             self.renderer.start()
             self.synth.play()
         }
+
+        let link = CADisplayLink(target: self, selector: #selector(updateTransport))
+        link.add(to: .main, forMode: .common)
+    }
+
+    // MARK: - Transport Bar
+
+    private func setupTransport() {
+        transportView.translatesAutoresizingMaskIntoConstraints = false
+        transportView.alpha = 0
+        view.addSubview(transportView)
+
+        let bg = UIView()
+        bg.translatesAutoresizingMaskIntoConstraints = false
+        bg.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        bg.layer.cornerRadius = 10
+        transportView.addSubview(bg)
+
+        progressTrack.translatesAutoresizingMaskIntoConstraints = false
+        progressTrack.backgroundColor = UIColor.white.withAlphaComponent(0.3)
+        progressTrack.layer.cornerRadius = 2
+        transportView.addSubview(progressTrack)
+
+        progressFill.translatesAutoresizingMaskIntoConstraints = false
+        progressFill.backgroundColor = .white
+        progressFill.layer.cornerRadius = 2
+        transportView.addSubview(progressFill)
+
+        elapsedLabel.translatesAutoresizingMaskIntoConstraints = false
+        elapsedLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        elapsedLabel.textColor = .white
+        elapsedLabel.text = "0:00"
+        transportView.addSubview(elapsedLabel)
+
+        remainingLabel.translatesAutoresizingMaskIntoConstraints = false
+        remainingLabel.font = .monospacedDigitSystemFont(ofSize: 13, weight: .medium)
+        remainingLabel.textColor = UIColor.white.withAlphaComponent(0.7)
+        remainingLabel.textAlignment = .right
+        remainingLabel.text = "-3:37"
+        transportView.addSubview(remainingLabel)
+
+        NSLayoutConstraint.activate([
+            transportView.leadingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.leadingAnchor, constant: 20),
+            transportView.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -20),
+            transportView.bottomAnchor.constraint(equalTo: view.safeAreaLayoutGuide.bottomAnchor, constant: -12),
+            transportView.heightAnchor.constraint(equalToConstant: 44),
+
+            bg.leadingAnchor.constraint(equalTo: transportView.leadingAnchor),
+            bg.trailingAnchor.constraint(equalTo: transportView.trailingAnchor),
+            bg.topAnchor.constraint(equalTo: transportView.topAnchor),
+            bg.bottomAnchor.constraint(equalTo: transportView.bottomAnchor),
+
+            elapsedLabel.leadingAnchor.constraint(equalTo: transportView.leadingAnchor, constant: 12),
+            elapsedLabel.centerYAnchor.constraint(equalTo: transportView.centerYAnchor, constant: -8),
+
+            remainingLabel.trailingAnchor.constraint(equalTo: transportView.trailingAnchor, constant: -12),
+            remainingLabel.centerYAnchor.constraint(equalTo: elapsedLabel.centerYAnchor),
+
+            progressTrack.leadingAnchor.constraint(equalTo: transportView.leadingAnchor, constant: 12),
+            progressTrack.trailingAnchor.constraint(equalTo: transportView.trailingAnchor, constant: -12),
+            progressTrack.topAnchor.constraint(equalTo: elapsedLabel.bottomAnchor, constant: 6),
+            progressTrack.heightAnchor.constraint(equalToConstant: 4),
+
+            progressFill.leadingAnchor.constraint(equalTo: progressTrack.leadingAnchor),
+            progressFill.topAnchor.constraint(equalTo: progressTrack.topAnchor),
+            progressFill.bottomAnchor.constraint(equalTo: progressTrack.bottomAnchor),
+        ])
+
+        progressFill.widthAnchor.constraint(equalToConstant: 0).isActive = true
+    }
+
+    @objc private func updateTransport() {
+        guard transportView.alpha > 0 else { return }
+        let t = isScrubbing ? scrubTime : renderer.currentTime
+        let duration = kDemoDuration
+        let fraction = CGFloat(t / duration)
+
+        let trackWidth = progressTrack.bounds.width
+        if trackWidth > 0 {
+            for c in progressFill.constraints where c.firstAttribute == .width {
+                c.constant = trackWidth * min(1, max(0, fraction))
+            }
+        }
+
+        elapsedLabel.text = formatTime(t)
+        remainingLabel.text = "-\(formatTime(duration - t))"
+    }
+
+    private func formatTime(_ seconds: Double) -> String {
+        let s = max(0, Int(seconds))
+        return String(format: "%d:%02d", s / 60, s % 60)
+    }
+
+    // MARK: - Transport Show/Hide
+
+    private func showTransport() {
+        hideTimer?.invalidate()
+        UIView.animate(withDuration: 0.25) { self.transportView.alpha = 1 }
+        scheduleHideTransport()
+    }
+
+    private func hideTransport() {
+        guard !isScrubbing else { return }
+        UIView.animate(withDuration: 0.4) { self.transportView.alpha = 0 }
+    }
+
+    private func scheduleHideTransport() {
+        hideTimer?.invalidate()
+        hideTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: false) { [weak self] _ in
+            self?.hideTransport()
+        }
+    }
+
+    // MARK: - Gestures
+
+    private func setupGestures() {
+        // Single tap: toggle play/pause + show transport
+        let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
+        view.addGestureRecognizer(tap)
+
+        // Pan on progress track area: scrub
+        let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        view.addGestureRecognizer(pan)
+
+        // Don't require tap to fail before pan fires
+        tap.require(toFail: pan)
     }
 
     @objc private func handleTap() {
-        if renderer.isPaused { renderer.resume(); synth.resume() }
-        else                 { renderer.pause();  synth.pause()  }
+        if transportView.alpha > 0.5 {
+            // Transport visible — tap toggles play/pause
+            if renderer.isPaused { renderer.resume(); synth.resume() }
+            else                 { renderer.pause(); synth.pause() }
+            scheduleHideTransport()
+        } else {
+            // Transport hidden — tap shows it
+            showTransport()
+        }
+    }
+
+    @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
+        let location = gesture.location(in: view)
+        let fraction = Double((location.x - 20) / (view.bounds.width - 40))
+        let time = max(0, min(fraction * kDemoDuration, kDemoDuration))
+
+        switch gesture.state {
+        case .began:
+            isScrubbing = true
+            scrubTime = time
+            showTransport()
+            hideTimer?.invalidate()
+            renderer.pause()
+            synth.pause()
+
+        case .changed:
+            scrubTime = time
+            renderer.seek(to: scrubTime)
+
+        case .ended, .cancelled:
+            isScrubbing = false
+            synth.seek(to: scrubTime)
+            renderer.resume()
+            synth.resume()
+            scheduleHideTransport()
+
+        default:
+            break
+        }
     }
 
     // MARK: - Background/Foreground
@@ -63,6 +238,8 @@ public class ViewController: UIViewController {
         renderer.resume()
         synth.resume()
     }
+
+    // MARK: - Audio Session
 
     private func activateAudioSession() {
         do {

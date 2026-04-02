@@ -305,7 +305,11 @@ public class Renderer: NSObject, MTKViewDelegate {
         let gbufDesc = MTLRenderPipelineDescriptor()
         gbufDesc.vertexFunction   = lib.makeFunction(name: "a")
         gbufDesc.fragmentFunction = lib.makeFunction(name: "b")
+        #if os(tvOS)
+        gbufDesc.colorAttachments[0].pixelFormat = .rgba16Float  // worldPos (half precision for perf)
+        #else
         gbufDesc.colorAttachments[0].pixelFormat = .rgba32Float  // worldPos
+        #endif
         gbufDesc.depthAttachmentPixelFormat = .depth32Float
         gbufferPSO = try! device.makeRenderPipelineState(descriptor: gbufDesc)
 
@@ -386,7 +390,12 @@ public class Renderer: NSObject, MTKViewDelegate {
             return device.makeTexture(descriptor: d)!
         }
 
+        // tvOS: rgba16Float halves memory bandwidth (sufficient precision for world pos)
+        #if os(tvOS)
+        gbufWorldPos = makeTex(.rgba16Float)
+        #else
         gbufWorldPos = makeTex(.rgba32Float)
+        #endif
         gbufDepth    = makeTex(.depth32Float, [.renderTarget])
         sceneColor   = makeTex(.bgra8Unorm)
     }
@@ -397,7 +406,14 @@ public class Renderer: NSObject, MTKViewDelegate {
         // D3DXTessellateNPatches(..., 512), which is substantially denser than
         // the baseline 256x256 grid. Match the extent first, then increase
         // density to test for water seams caused by coarse triangle interpolation.
-        let (vb, ib, ic) = makeTerrainMesh(device: device, size: 1024, scale: 104)
+        // tvOS uses 512 (vs 1024) to hit 60fps on A15 — negligible visual difference
+        // at TV viewing distances.
+        #if os(tvOS)
+        let meshSize = 512
+        #else
+        let meshSize = 1024
+        #endif
+        let (vb, ib, ic) = makeTerrainMesh(device: device, size: meshSize, scale: 104)
         terrainVBuf = vb; terrainIBuf = ib; terrainIndexCount = ic
     }
 
