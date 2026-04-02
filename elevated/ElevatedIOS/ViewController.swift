@@ -170,28 +170,35 @@ public class ViewController: UIViewController {
 
     // MARK: - Gestures
 
+    private var wasPausedBeforeScrub = false
+
     private func setupGestures() {
-        // Single tap: toggle play/pause + show transport
+        // Single tap: show transport, second tap toggles pause
         let tap = UITapGestureRecognizer(target: self, action: #selector(handleTap))
         view.addGestureRecognizer(tap)
 
-        // Pan on progress track area: scrub
+        // Pan: scrub (only activates in bottom third or when transport is visible)
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        pan.delegate = self
         view.addGestureRecognizer(pan)
-
-        // Don't require tap to fail before pan fires
-        tap.require(toFail: pan)
     }
 
-    @objc private func handleTap() {
-        if transportView.alpha > 0.5 {
+    @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
+        let location = gesture.location(in: view)
+        let inBottomArea = location.y > view.bounds.height * 0.7
+
+        if transportView.alpha < 0.5 {
+            // Transport hidden — show it (and pause if tapped in main area)
+            showTransport()
+            if !inBottomArea {
+                if renderer.isPaused { renderer.resume(); synth.resume() }
+                else                 { renderer.pause(); synth.pause() }
+            }
+        } else {
             // Transport visible — tap toggles play/pause
             if renderer.isPaused { renderer.resume(); synth.resume() }
             else                 { renderer.pause(); synth.pause() }
             scheduleHideTransport()
-        } else {
-            // Transport hidden — tap shows it
-            showTransport()
         }
     }
 
@@ -203,11 +210,14 @@ public class ViewController: UIViewController {
         switch gesture.state {
         case .began:
             isScrubbing = true
+            wasPausedBeforeScrub = renderer.isPaused
             scrubTime = time
             showTransport()
             hideTimer?.invalidate()
-            renderer.pause()
-            synth.pause()
+            if !renderer.isPaused {
+                renderer.pause()
+                synth.pause()
+            }
 
         case .changed:
             scrubTime = time
@@ -216,8 +226,10 @@ public class ViewController: UIViewController {
         case .ended, .cancelled:
             isScrubbing = false
             synth.seek(to: scrubTime)
-            renderer.resume()
-            synth.resume()
+            if !wasPausedBeforeScrub {
+                renderer.resume()
+                synth.resume()
+            }
             scheduleHideTransport()
 
         default:
@@ -227,16 +239,24 @@ public class ViewController: UIViewController {
 
     // MARK: - Background/Foreground
 
+    private var wasPlayingBeforeBackground = false
+
     func pausePlayback() {
-        guard !renderer.isPaused else { return }
-        renderer.pause()
-        synth.pause()
+        wasPlayingBeforeBackground = !renderer.isPaused
+        if !renderer.isPaused {
+            renderer.pause()
+            synth.pause()
+        }
+        // Stop GPU work entirely when backgrounded
+        (view.subviews.first as? MTKView)?.isPaused = true
     }
 
     func resumePlayback() {
-        guard renderer.isPaused else { return }
-        renderer.resume()
-        synth.resume()
+        (view.subviews.first as? MTKView)?.isPaused = false
+        if wasPlayingBeforeBackground {
+            renderer.resume()
+            synth.resume()
+        }
     }
 
     // MARK: - Audio Session
@@ -253,5 +273,13 @@ public class ViewController: UIViewController {
     public override var prefersStatusBarHidden: Bool { true }
     public override var prefersHomeIndicatorAutoHidden: Bool { true }
     public override var supportedInterfaceOrientations: UIInterfaceOrientationMask { .landscape }
+}
+
+extension ViewController: UIGestureRecognizerDelegate {
+    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        guard gestureRecognizer is UIPanGestureRecognizer else { return true }
+        // Only allow pan/scrub when transport is visible
+        return transportView.alpha > 0.5
+    }
 }
 #endif

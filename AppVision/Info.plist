@@ -22,23 +22,8 @@
     <array>
         <string>metal</string>
     </array>
-    <key>UIApplicationSceneManifest</key>
-    <dict>
-        <key>UIApplicationSupportsMultipleScenes</key>
-        <false/>
-        <key>UISceneConfigurations</key>
-        <dict>
-            <key>UIWindowSceneSessionRoleApplication</key>
-            <array>
-                <dict>
-                    <key>UISceneConfigurationName</key>
-                    <string>Default Configuration</string>
-                    <key>UISceneDelegateClassName</key>
-                    <string>ElevatedVision.SceneDelegate</string>
-                </dict>
-            </array>
-        </dict>
-    </dict>
+    <key>UIApplicationPreferredDefaultSceneSessionRole</key>
+    <string>UIWindowSceneSessionRoleImmersiveSpaceApplication</string>
     <key>UIBackgroundModes</key>
     <array>
         <string>audio</string>

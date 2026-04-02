@@ -235,16 +235,25 @@ public class ViewController: UIViewController {
 
     // MARK: - Background/Foreground
 
+    private var wasPlayingBeforeBackground = false
+
     func pausePlayback() {
-        guard !renderer.isPaused else { return }
-        renderer.pause()
-        synth.pause()
+        wasPlayingBeforeBackground = !renderer.isPaused
+        if !renderer.isPaused {
+            renderer.pause()
+            synth.pause()
+        }
+        // Stop GPU work entirely when backgrounded
+        (view.subviews.first as? MTKView)?.isPaused = true
     }
 
     func resumePlayback() {
-        guard renderer.isPaused else { return }
-        renderer.resume()
-        synth.resume()
+        // Restart GPU rendering
+        (view.subviews.first as? MTKView)?.isPaused = false
+        if wasPlayingBeforeBackground {
+            renderer.resume()
+            synth.resume()
+        }
     }
 
     // MARK: - Audio Session

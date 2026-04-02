@@ -172,8 +172,8 @@ public let kDemoDuration: Double = Double(ELEVATED_TOTAL_SAMPLES) / 44100.0
 
 // ─── Renderer ─────────────────────────────────────────────────────────────────
 public class Renderer: NSObject, MTKViewDelegate {
-    let device: MTLDevice
-    let cmdQueue: MTLCommandQueue
+    public let device: MTLDevice
+    public let cmdQueue: MTLCommandQueue
     public let shaderVariant: ShaderVariant
     var uniforms = Uniforms(
         q: (.zero,.zero,.zero,.zero,.zero,.zero,.zero,.zero,
@@ -305,11 +305,7 @@ public class Renderer: NSObject, MTKViewDelegate {
         let gbufDesc = MTLRenderPipelineDescriptor()
         gbufDesc.vertexFunction   = lib.makeFunction(name: "a")
         gbufDesc.fragmentFunction = lib.makeFunction(name: "b")
-        #if os(tvOS)
-        gbufDesc.colorAttachments[0].pixelFormat = .rgba16Float  // worldPos (half precision for perf)
-        #else
         gbufDesc.colorAttachments[0].pixelFormat = .rgba32Float  // worldPos
-        #endif
         gbufDesc.depthAttachmentPixelFormat = .depth32Float
         gbufferPSO = try! device.makeRenderPipelineState(descriptor: gbufDesc)
 
@@ -390,12 +386,7 @@ public class Renderer: NSObject, MTKViewDelegate {
             return device.makeTexture(descriptor: d)!
         }
 
-        // tvOS: rgba16Float halves memory bandwidth (sufficient precision for world pos)
-        #if os(tvOS)
-        gbufWorldPos = makeTex(.rgba16Float)
-        #else
         gbufWorldPos = makeTex(.rgba32Float)
-        #endif
         gbufDepth    = makeTex(.depth32Float, [.renderTarget])
         sceneColor   = makeTex(.bgra8Unorm)
     }
@@ -406,14 +397,7 @@ public class Renderer: NSObject, MTKViewDelegate {
         // D3DXTessellateNPatches(..., 512), which is substantially denser than
         // the baseline 256x256 grid. Match the extent first, then increase
         // density to test for water seams caused by coarse triangle interpolation.
-        // tvOS uses 512 (vs 1024) to hit 60fps on A15 — negligible visual difference
-        // at TV viewing distances.
-        #if os(tvOS)
-        let meshSize = 512
-        #else
-        let meshSize = 1024
-        #endif
-        let (vb, ib, ic) = makeTerrainMesh(device: device, size: meshSize, scale: 104)
+        let (vb, ib, ic) = makeTerrainMesh(device: device, size: 1024, scale: 104)
         terrainVBuf = vb; terrainIBuf = ib; terrainIndexCount = ic
     }
 
@@ -678,6 +662,109 @@ public class Renderer: NSObject, MTKViewDelegate {
     }
 #endif
 
+    // ── Headless rendering (visionOS immersive / external targets) ────────
+
+    /// Render one frame to an arbitrary output texture with a custom VP matrix.
+    /// Call `updateUniformsForTime(_:size:)` first, then this once per eye.
+    public func renderFrame(commandBuffer cmd: MTLCommandBuffer,
+                            outputTexture: MTLTexture,
+                            viewProjection vp: simd_float4x4,
+                            size: CGSize) {
+        rebuildOffscreen(size: size)
+        var u = uniforms
+        u.v = vp
+        u.vi = simd_inverse(vp)
+        u.resolution = SIMD2(Float(size.width), Float(size.height))
+
+        // Pass 1: G-buffer
+        let gbRPD = MTLRenderPassDescriptor()
+        gbRPD.colorAttachments[0].texture     = gbufWorldPos
+        gbRPD.colorAttachments[0].loadAction  = .clear
+        gbRPD.colorAttachments[0].storeAction = .store
+        gbRPD.colorAttachments[0].clearColor  = MTLClearColor(red:0,green:0,blue:0,alpha:0)
+        gbRPD.depthAttachment.texture         = gbufDepth
+        gbRPD.depthAttachment.loadAction      = .clear
+        gbRPD.depthAttachment.storeAction     = .dontCare
+        gbRPD.depthAttachment.clearDepth      = 1.0
+
+        if let enc = cmd.makeRenderCommandEncoder(descriptor: gbRPD) {
+            enc.setRenderPipelineState(gbufferPSO)
+            enc.setCullMode(.front)
+            enc.setDepthStencilState(depthState)
+            enc.setVertexBytes(&u, length: MemoryLayout<Uniforms>.size, index: 1)
+            enc.setVertexTexture(noiseTex, index: 0)
+            enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: terrainIndexCount)
+            enc.endEncoding()
+        }
+
+        // Pass 2: Deferred shading
+        let defRPD = MTLRenderPassDescriptor()
+        defRPD.colorAttachments[0].texture     = sceneColor
+        defRPD.colorAttachments[0].loadAction  = .dontCare
+        defRPD.colorAttachments[0].storeAction = .store
+
+        if let enc = cmd.makeRenderCommandEncoder(descriptor: defRPD) {
+            enc.setRenderPipelineState(deferredPSO)
+            enc.setFragmentBytes(&u, length: MemoryLayout<Uniforms>.size, index: 0)
+            enc.setFragmentTexture(noiseTex,    index: 0)
+            enc.setFragmentTexture(gbufWorldPos, index: 1)
+            enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+            enc.endEncoding()
+        }
+
+        // Pass 3: Post-processing → output
+        let postRPD = MTLRenderPassDescriptor()
+        postRPD.colorAttachments[0].texture     = outputTexture
+        postRPD.colorAttachments[0].loadAction  = .dontCare
+        postRPD.colorAttachments[0].storeAction = .store
+
+        if let enc = cmd.makeRenderCommandEncoder(descriptor: postRPD) {
+            enc.setRenderPipelineState(postPSO)
+            enc.setFragmentBytes(&u, length: MemoryLayout<Uniforms>.size, index: 0)
+            enc.setFragmentTexture(noiseTex,    index: 0)
+            enc.setFragmentTexture(gbufWorldPos, index: 1)
+            enc.setFragmentTexture(sceneColor,   index: 2)
+            enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 3)
+            enc.endEncoding()
+        }
+    }
+
+    /// Update sync-driven uniforms for a given time without VP matrix.
+    /// Call before renderFrame() to set up q[0..15], camera pos, instrument sync.
+    public func updateUniformsForTime(_ time: Double, size: CGSize) {
+        let savedStart = startTime
+        let savedPause = pauseTime
+        let savedPaused = isPaused
+
+        // Temporarily set time
+        startTime = CACurrentMediaTime() - time
+        pauseTime = time
+        isPaused = true
+
+        updateUniforms(size: size)
+
+        // Restore
+        startTime = savedStart
+        pauseTime = savedPause
+        isPaused = savedPaused
+    }
+
+    /// The camera world position at the current sync time (for VR head tracking).
+    public var demoCameraPosition: SIMD3<Float> {
+        let q4 = uniforms.getQ(4)
+        return SIMD3(q4.x, q4.y, q4.z)
+    }
+
+    /// The camera look-at target at the current sync time.
+    public var demoCameraTarget: SIMD3<Float> {
+        return m1Camera(xdot: 1.0)
+    }
+
+    /// The camera FOV in radians at the current sync time.
+    public var demoCameraFov: Float {
+        return uniforms.getQ(0).w
+    }
+
     // ── MTKViewDelegate ────────────────────────────────────────────────────
     public func mtkView(_ view: MTKView, drawableSizeWillChange size: CGSize) {
         rebuildOffscreen(size: size)
@@ -723,7 +810,7 @@ public class Renderer: NSObject, MTKViewDelegate {
             enc.setDepthStencilState(depthState)
             enc.setVertexBytes(&uCopy, length: MemoryLayout<Uniforms>.size, index: 1)
             enc.setVertexTexture(noiseTex, index: 0)
-            enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: 1023 * 1023 * 2 * 3)
+            enc.drawPrimitives(type: .triangle, vertexStart: 0, vertexCount: terrainIndexCount)
             enc.endEncoding()
         }
 
@@ -776,7 +863,7 @@ public class Renderer: NSObject, MTKViewDelegate {
 // Left-handed lookAt matching D3DXMatrixLookAtLH.
 // D3DX produces a row-major matrix for row-vector pre-multiply; transposed here
 // to column-major for Metal's post-multiply convention (u.v * worldCol).
-func lookAtLH(eye: SIMD3<Float>, center: SIMD3<Float>, up: SIMD3<Float>) -> simd_float4x4 {
+public func lookAtLH(eye: SIMD3<Float>, center: SIMD3<Float>, up: SIMD3<Float>) -> simd_float4x4 {
     let z = normalize(center - eye)       // forward (+Z in LH)
     let x = normalize(cross(up, z))       // right
     let y = cross(z, x)                   // up (reorthogonalized)
@@ -790,7 +877,7 @@ func lookAtLH(eye: SIMD3<Float>, center: SIMD3<Float>, up: SIMD3<Float>) -> simd
 
 // Left-handed perspective matching D3DXMatrixPerspectiveFovLH.
 // D3D NDC z range is [0,1] (near=0, far=1), same as Metal — no remapping needed.
-func projectionMatrixLH(fovY: Float, aspect: Float, near: Float, far: Float) -> simd_float4x4 {
+public func projectionMatrixLH(fovY: Float, aspect: Float, near: Float, far: Float) -> simd_float4x4 {
     let y = 1 / tan(fovY * 0.5)           // cot(fovY/2)
     let x = y / aspect
     let z = far / (far - near)             // zf/(zf-zn)

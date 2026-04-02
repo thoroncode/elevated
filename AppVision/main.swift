@@ -1,3 +1,8 @@
+#if os(visionOS)
+import ElevatedVision
+
+ElevatedApp.main()
+#else
 import UIKit
 import ElevatedVision
 
@@ -7,3 +12,4 @@ UIApplicationMain(
     nil,
     NSStringFromClass(AppDelegate.self)
 )
+#endif
