@@ -2,7 +2,7 @@
 # Stamp date-based version: YY.M.DD (HH.MM)
 # Run before local xcodebuild archive, or from Xcode Cloud ci_post_clone.
 
-shortver=$(printf '%s.%d.%s' $(date +%y) $(date +%-m) $(date +%d))
+shortver=$(printf '%s.%d.%d' $(date +%y) $(date +%-m) $(date +%-d))
 buildver=$(date +%H.%M)
 
 dir="$(cd "$(dirname "$0")" && pwd)"
