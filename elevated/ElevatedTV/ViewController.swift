@@ -23,6 +23,7 @@ public class ViewController: UIViewController {
 
         let mtkView = MTKView(frame: view.bounds, device: device)
         mtkView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        mtkView.contentScaleFactor = 1.0  // render at 1080p, not native 4K
         mtkView.preferredFramesPerSecond = 60
         mtkView.enableSetNeedsDisplay = false
         mtkView.isPaused = false

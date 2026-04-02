@@ -1,5 +1,43 @@
 default_platform(:ios)
 
+platform :appletv do
+  desc "Stamp version, build archive, and upload to App Store Connect"
+  lane :release do
+    # Stamp date-based version
+    sh("cd .. && ./stamp-version.sh")
+
+    # Archive unsigned (no tvOS devices registered for dev signing)
+    sh("cd .. && xcodebuild -project ElevatedTV.xcodeproj -scheme Elevated " \
+       "-destination 'generic/platform=tvOS' -configuration Release " \
+       "archive -archivePath /tmp/ElevatedTV.xcarchive " \
+       "-allowProvisioningUpdates " \
+       "CODE_SIGN_IDENTITY='-' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO")
+
+    # Export with distribution signing and upload directly
+    sh("cd .. && rm -rf /tmp/ElevatedTVExport && xcodebuild -exportArchive " \
+       "-archivePath /tmp/ElevatedTV.xcarchive " \
+       "-exportOptionsPlist ExportOptionsTV.plist " \
+       "-exportPath /tmp/ElevatedTVExport " \
+       "-allowProvisioningUpdates")
+  end
+
+  desc "Submit the latest TestFlight build for App Store review"
+  lane :submit do
+    deliver(
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_metadata: false,
+      submit_for_review: true,
+      automatic_release: false,
+      force: true,
+      platform: "appletvos",
+      submission_information: {
+        add_id_info_uses_idfa: false
+      }
+    )
+  end
+end
+
 platform :ios do
   desc "Stamp version, build archive, and upload to TestFlight"
   lane :release do

@@ -1008,3 +1008,108 @@ composition), t=95s (mid-demo), t=185s (icon frame — the best single frame).
 - TestFlight group: "Elevated Testers"
 - App Store Connect app ID: `6761337391`
 - Copyright: "Petri Koistinen et al."
+
+---
+
+## Apple TV (tvOS) Release
+
+### Setup (2026-04-02)
+
+**Bundle ID**: `com.nitor.elevated` — same as iOS, shared across all platforms under one
+App Store Connect app record ("Elevated Intro", ID: 6761337391).
+
+Team: Nitor Creations Oy (MU8NPY2D99).
+
+**First tvOS build uploaded**: 26.4.02 (21.52).
+
+Note: a separate `com.nitor.elevatedtv` app (ID: 6761554202) was created during initial
+setup but is unused — the tvOS binary ships under the unified `com.nitor.elevated` record.
+
+### tvOS-Specific Asset Requirements
+
+tvOS app icons use **image stacks** (layered images for parallax), not flat `.appiconset`
+files like iOS. The asset catalog uses a **Brand Assets** structure:
+
+```
+AppTV/Assets.xcassets/
+  App Icon & Top Shelf Image.brandassets/
+    Contents.json                          ← roles: primary-app-icon, top-shelf-image, top-shelf-image-wide
+    App Icon - Small.imagestack/           ← 400x240 home screen icon (2 layers, @1x + @2x)
+    App Icon - Large.imagestack/           ← 1280x768 App Store icon (2 layers)
+    Top Shelf Image.imageset/              ← 1920x720 standard top shelf
+    Top Shelf Image Wide.imageset/         ← 2320x720 wide top shelf
+```
+
+Key points:
+- Image stacks require **at least 2 layers** (front + back). Both layers use the same image
+  for now (no parallax effect). Can be improved later with separate foreground/background art.
+- The `role` for the App Store icon is `"primary-app-icon"` at `"size": "1280x768"` — there is
+  **no** separate `"app-store-icon"` role.
+- `Info.plist` must include `TVTopShelfImage` (with `TVTopShelfPrimaryImage` and
+  `TVTopShelfPrimaryImageWide` keys) and `CFBundleIcons` (with `CFBundlePrimaryIcon`).
+- Build setting: `ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image"`.
+
+### tvOS Code Signing Workaround
+
+The Nitor team has no registered tvOS devices, so Xcode's automatic signing cannot create
+a **development** provisioning profile during archive. Workaround: archive unsigned, then
+sign and upload during the export step:
+
+```sh
+# Step 1: Archive without code signing
+xcodebuild -project ElevatedTV.xcodeproj -scheme Elevated \
+    -destination 'generic/platform=tvOS' -configuration Release \
+    archive -archivePath /tmp/ElevatedTV.xcarchive \
+    -allowProvisioningUpdates \
+    CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+
+# Step 2: Export with distribution signing + upload
+xcodebuild -exportArchive \
+    -archivePath /tmp/ElevatedTV.xcarchive \
+    -exportOptionsPlist ExportOptionsTV.plist \
+    -exportPath /tmp/ElevatedTVExport \
+    -allowProvisioningUpdates
+```
+
+This is automated via `make tv-release` / `fastlane appletv release`.
+
+### Makefile Targets
+
+| Target | Description |
+|--------|-------------|
+| `make tv-release` | Stamp version, archive, sign, and upload tvOS to App Store Connect |
+| `make tv-submit` | Submit latest tvOS build for App Store review |
+
+### Configuration Files
+
+- `ExportOptionsTV.plist` — xcodebuild export settings for tvOS (method: app-store-connect, destination: upload)
+- `fastlane/Fastfile` — `platform :appletv` block with `release` and `submit` lanes
+- `fastlane/Appfile` — `for_platform :appletv` block (bundle ID, team, Apple ID)
+- `ElevatedTV.xcodeproj` — team MU8NPY2D99, bundle ID `com.nitor.elevated`
+
+### Performance: 1080p Render Scale
+
+Apple TV 4K (3rd gen, A15) renders at native 3840x2160 by default — too slow for the
+3-pass renderer with 1024-vertex terrain mesh and 16-sample motion blur. Fix:
+`contentScaleFactor = 1.0` in the tvOS ViewController renders at 1080p (upscaled to 4K
+by the display), giving a ~4x speedup with negligible visual loss on a TV viewing distance.
+
+### Lessons Learned
+
+1. **tvOS code signing**: No registered tvOS devices = no dev provisioning profiles.
+   Workaround: archive unsigned (`CODE_SIGNING_ALLOWED=NO`), sign at export time with
+   `-allowProvisioningUpdates`.
+2. **tvOS app icons are image stacks**, not flat PNGs. Minimum 2 layers (front + back).
+   Use a Brand Assets (`.brandassets`) structure with `primary-app-icon` role for both
+   home screen (400x240) and App Store (1280x768) sizes.
+3. **No separate `app-store-icon` role** — the App Store icon is a `primary-app-icon`
+   at 1280x768. This was the hardest to figure out.
+4. **Top Shelf images need both @1x and @2x**: Wide is 2320x720 (@1x) + 4640x1440 (@2x).
+5. **Export compliance** must be set on each build before it becomes testable. Set
+   `usesNonExemptEncryption: false` via API or App Store Connect.
+6. **Unified bundle ID** (`com.nitor.elevated`) works for all platforms under one
+   App Store Connect record. No need for separate bundle IDs per platform.
+7. **Free Apple Developer teams** (personal) cannot create App Store provisioning profiles.
+   Must use a paid team.
+8. **Fastlane 2.232.2** has broken `betaBuildMetrics` API — `pilot builds`, `pilot distribute`,
+   and `pilot list` all crash. Use Spaceship Ruby API or App Store Connect web UI as workaround.

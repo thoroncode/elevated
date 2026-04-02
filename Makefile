@@ -1,4 +1,4 @@
-.PHONY: all help build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots ios-submit ios-add-tester
+.PHONY: all help build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots ios-submit ios-add-tester tv-release tv-submit
 
 BIN       = elevated/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -34,6 +34,11 @@ help:
 	@echo "  ios-metadata      Upload metadata/icon/screenshots to App Store Connect"
 	@echo "  ios-submit        Submit latest build for App Store review"
 	@echo "  ios-add-tester    Add tester to TestFlight (EMAIL=user@example.com)"
+	@echo ""
+	@echo "Apple TV:"
+	@echo "  tv-release        Stamp version, archive, and upload tvOS to TestFlight"
+	@echo "  tv-submit         Submit latest tvOS build for App Store review"
+	@echo ""
 	@echo "  uninstall         Remove /Applications/Elevated.app"
 	@echo "  capture           Capture one PNG per second to /tmp/elevated_cap/"
 	@echo "  branch-frame      Capture one exact frame (use T=<sec> [BRANCHES='...'])"
@@ -257,6 +262,14 @@ ios-submit:
 ios-add-tester:
 	@test -n "$(EMAIL)" || (echo "Usage: make ios-add-tester EMAIL=user@example.com" && exit 1)
 	@$(FASTLANE) pilot add $(EMAIL) -a com.nitor.elevated -g "Internal Testers"
+
+# ── Apple TV (tvOS) ───────────────────────────────────────────────────────────
+
+tv-release:
+	@$(FASTLANE) appletv release
+
+tv-submit:
+	@$(FASTLANE) appletv submit
 
 # Remove the installed app from /Applications
 uninstall:

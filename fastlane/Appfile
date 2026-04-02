@@ -3,3 +3,9 @@ team_id "MU8NPY2D99"
 
 # Apple ID loaded from ~/.fastlane/credentials or FASTLANE_USER env var
 apple_id ENV["FASTLANE_USER"]
+
+for_platform :appletv do
+  app_identifier "com.nitor.elevated"
+  team_id "MU8NPY2D99"
+  apple_id "common@nitor.com"
+end
