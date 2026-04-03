@@ -21,6 +21,10 @@ public class ViewController: UIViewController {
     private var isScrubbing = false
     private var scrubTime: Double = 0
 
+    deinit {
+        setIdleTimerDisabled(false)
+    }
+
     public override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
@@ -45,6 +49,7 @@ public class ViewController: UIViewController {
             guard let self else { return }
             self.synth.seek(to: 0)
             self.renderer.start()
+            self.setIdleTimerDisabled(true)
         }
 
         setupTransport()
@@ -54,6 +59,7 @@ public class ViewController: UIViewController {
             guard let self, ok else { return }
             self.renderer.start()
             self.synth.play()
+            self.setIdleTimerDisabled(true)
         }
 
         let link = CADisplayLink(target: self, selector: #selector(updateTransport))
@@ -193,11 +199,13 @@ public class ViewController: UIViewController {
             if !inBottomArea {
                 if renderer.isPaused { renderer.resume(); synth.resume() }
                 else                 { renderer.pause(); synth.pause() }
+                updateIdleTimerForPlayback()
             }
         } else {
             // Transport visible — tap toggles play/pause
             if renderer.isPaused { renderer.resume(); synth.resume() }
             else                 { renderer.pause(); synth.pause() }
+            updateIdleTimerForPlayback()
             scheduleHideTransport()
         }
     }
@@ -218,6 +226,7 @@ public class ViewController: UIViewController {
                 renderer.pause()
                 synth.pause()
             }
+            updateIdleTimerForPlayback()
 
         case .changed:
             scrubTime = time
@@ -230,6 +239,7 @@ public class ViewController: UIViewController {
                 renderer.resume()
                 synth.resume()
             }
+            updateIdleTimerForPlayback()
             scheduleHideTransport()
 
         default:
@@ -247,6 +257,7 @@ public class ViewController: UIViewController {
             renderer.pause()
             synth.pause()
         }
+        setIdleTimerDisabled(false)
         // Stop GPU work entirely when backgrounded
         (view.subviews.first as? MTKView)?.isPaused = true
     }
@@ -257,6 +268,7 @@ public class ViewController: UIViewController {
             renderer.resume()
             synth.resume()
         }
+        updateIdleTimerForPlayback()
     }
 
     // MARK: - Audio Session
@@ -268,6 +280,16 @@ public class ViewController: UIViewController {
         } catch {
             print("[ViewController] AVAudioSession setup failed: \(error)")
         }
+    }
+
+    private func updateIdleTimerForPlayback() {
+        setIdleTimerDisabled(!renderer.isPaused)
+    }
+
+    // Custom Metal playback does not get AVPlayer's automatic sleep prevention.
+    private func setIdleTimerDisabled(_ isDisabled: Bool) {
+        guard UIApplication.shared.isIdleTimerDisabled != isDisabled else { return }
+        UIApplication.shared.isIdleTimerDisabled = isDisabled
     }
 
     public override var prefersStatusBarHidden: Bool { true }
