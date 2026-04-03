@@ -37,6 +37,7 @@ fastlane/Preview.html
 fastlane/test_output/
 fastlane/README.md
 fastlane/.env
+Config/Identifiers.local.xcconfig
 
 # macOS and scratch
 .DS_Store

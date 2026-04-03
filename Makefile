@@ -12,6 +12,15 @@ SRC_DIST_ARCHIVE = $(DIST_DIR)/$(SRC_DIST_NAME).zip
 SRC_DIST_OPTIONAL_FILES = LICENSE
 SRC_DIST_EXCLUDE_FILES = elevated_music.wav
 
+-include fastlane/.env
+
+ELEVATED_ASC_TEAM_ID ?= TEAMIDPLACEHOLDER
+ELEVATED_IOS_APP_IDENTIFIER ?= example.invalid.elevated.ios
+ELEVATED_TVOS_APP_IDENTIFIER ?= example.invalid.elevated.tvos
+ELEVATED_VISIONOS_APP_IDENTIFIER ?= example.invalid.elevated.visionos
+ELEVATED_MACOS_APP_IDENTIFIER ?= example.invalid.elevated.macos
+ELEVATED_TESTFLIGHT_GROUP ?= Internal Testers
+
 all: build
 
 help:
@@ -122,11 +131,11 @@ app: build
 	@cp $(ICON_ICNS) $(APP)/Contents/Resources/
 	@cp LICENSE $(APP)/Contents/Resources/
 	@shortver=$$(printf '%s.%d.%s' $$(date +%y) $$(date +%-m) $$(date +%d)); \
-	 buildver=$$(date +%H.%M); \
-	 /usr/libexec/PlistBuddy \
-	    -c "Add :CFBundleName           string Elevated" \
-	    -c "Add :CFBundleIdentifier     string com.nitor.elevated" \
-	    -c "Add :CFBundleVersion        string $$buildver" \
+	    buildver=$$(date +%H.%M); \
+	    /usr/libexec/PlistBuddy \
+	        -c "Add :CFBundleName           string Elevated" \
+	        -c "Add :CFBundleIdentifier     string $(ELEVATED_MACOS_APP_IDENTIFIER)" \
+	        -c "Add :CFBundleVersion        string $$buildver" \
 	    -c "Add :CFBundleShortVersionString string $$shortver" \
 	    -c "Add :CFBundleExecutable     string ElevatedMac" \
 	    -c "Add :CFBundlePackageType    string APPL" \
@@ -197,7 +206,7 @@ pkg:
 	@pkgbuild \
 	    --install-location /Applications \
 	    --component /tmp/elevated_pkg_stage \
-	    --identifier com.nitor.elevated \
+	    --identifier $(ELEVATED_MACOS_APP_IDENTIFIER) \
 	    --version 1.0 \
 	    Elevated.pkg
 	@rm -rf /tmp/elevated_pkg_stage
@@ -207,6 +216,7 @@ pkg:
 
 IOS_ARCHIVE = /tmp/Elevated.xcarchive
 IOS_EXPORT  = /tmp/ElevatedExport
+IOS_EXPORT_OPTIONS = /tmp/ElevatedExportOptions.plist
 
 # Archive the iOS app with date-stamped version
 ios-archive:
@@ -220,8 +230,10 @@ ios-archive:
 # Upload the most recent iOS archive to App Store Connect / TestFlight
 ios-upload:
 	@echo "Uploading to App Store Connect..."
+	@./scripts/write_export_options_plist.sh $(IOS_EXPORT_OPTIONS)
 	@xcodebuild -exportArchive -archivePath $(IOS_ARCHIVE) \
-	    -exportOptionsPlist ExportOptions.plist \
+	    -exportOptionsPlist $(IOS_EXPORT_OPTIONS) \
+	    -exportPath $(IOS_EXPORT) \
 	    -allowProvisioningUpdates 2>&1 | tail -3
 	@echo "  Upload complete — check App Store Connect for processing status"
 
@@ -261,7 +273,7 @@ ios-submit:
 # Usage: make ios-add-tester EMAIL=user@example.com
 ios-add-tester:
 	@test -n "$(EMAIL)" || (echo "Usage: make ios-add-tester EMAIL=user@example.com" && exit 1)
-	@$(FASTLANE) pilot add $(EMAIL) -a com.nitor.elevated -g "Internal Testers"
+	@$(FASTLANE) pilot add $(EMAIL) -a $(ELEVATED_IOS_APP_IDENTIFIER) -g "$(ELEVATED_TESTFLIGHT_GROUP)"
 
 # ── Apple TV (tvOS) ───────────────────────────────────────────────────────────
 

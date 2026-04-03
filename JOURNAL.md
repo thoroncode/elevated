@@ -876,26 +876,19 @@ the image.
 
 ### Apple Developer Setup
 
-- **Developer Program**: Nitor Creations Oy (Team ID: `MU8NPY2D99`)
+- **Developer Program**: configure locally in gitignored release config
 - **Release Apple ID**: local `FASTLANE_USER` in `fastlane/.env` (gitignored)
 - **Signing identities**: supplied by the local Xcode/Keychain setup for the selected Apple ID
 - Note: a contributor may also have a separate personal team. Xcode projects and Fastlane config
-  must continue to use the organization team ID `MU8NPY2D99`.
+  should resolve team IDs from local config rather than tracked literals.
 
 ### Bundle Identifiers
 
-Registered under Nitor Creations Oy in Certificates, Identifiers & Profiles:
+Bundle/team identifiers are local release config now, not tracked repo data.
 
-| Platform  | Bundle ID                   |
-|-----------|-----------------------------|
-| iOS/iPad  | `com.nitor.elevated`        |
-| tvOS      | `com.nitor.elevated.tv`     |
-| visionOS  | `com.nitor.elevated.vision` |
-| macOS     | `com.nitor.elevated` (Makefile) |
-
-**Why `com.nitor`?** The `fi.iki.thoron.elevated` and `fi.iki.thoron.elevated.intro` identifiers were
-rejected as "not available" — bundle IDs are globally unique across all Apple developers. The Nitor
-domain prefix matched the team's existing identifiers.
+- Xcode projects read them from `Config/Identifiers.local.xcconfig` (gitignored)
+- Fastlane and Makefile release steps read them from `fastlane/.env` (gitignored)
+- Templates live in `Config/Identifiers.local.xcconfig.example` and `fastlane/.env.default`
 
 ### App Store Connect
 
@@ -978,11 +971,13 @@ usable binary was `/opt/homebrew/lib/ruby/gems/4.0.0/bin/fastlane`. Fastlane 2.2
 | `make ios-add-tester` | Add tester via `pilot` (currently broken — use App Store Connect web UI) |
 
 **Configuration:**
-- `fastlane/Appfile` — app identifier and organization team ID; Apple IDs are read from env vars
-- `fastlane/.env` — `FASTLANE_USER`, optional `FASTLANE_APPLETV_USER` (gitignored, copy from `.env.default`)
+- `Config/Identifiers.xcconfig` — tracked generic defaults plus optional local Xcode override include
+- `Config/Identifiers.local.xcconfig` — local bundle/team IDs for Xcode builds (gitignored; copy from `.example`)
+- `fastlane/Appfile` — reads bundle/team IDs from env vars instead of tracked literals
+- `fastlane/.env` — Apple IDs plus shell/Fastlane release identifiers (gitignored, copy from `.env.default`)
 - `fastlane/metadata/en-GB/` — description, keywords, copyright, URLs
 - `fastlane/screenshots/en-GB/` — generated screenshots (5 iPhone + 5 iPad)
-- `ExportOptions.plist` — xcodebuild export settings for App Store Connect upload
+- `scripts/write_export_options_plist.sh` — generates the temporary export plist from local env
 
 **Screenshot timestamps:** t=5s (mountains+water), t=17s (dramatic mountains), t=48s (mountain
 composition), t=95s (mid-demo), t=185s (icon frame — the best single frame).
@@ -1010,14 +1005,12 @@ composition), t=95s (mid-demo), t=185s (icon frame — the best single frame).
   checkout.
 
 **Config boundary:**
-- Keep personal Apple IDs, login emails, API keys, sessions, and other operator-specific release
-  settings in gitignored local config such as `fastlane/.env`.
-- Keep shared project identifiers in the repo: bundle IDs, organization team ID, scheme names,
-  export method, and the App Store Connect app ID. Those are part of the reproducible release
-  configuration rather than secrets.
-- Tester group names are not secrets, but if distribution automation starts depending on them again,
-  prefer loading them from local env/config so account-specific naming does not leak into release
-  scripts.
+- Keep Apple IDs, team IDs, bundle IDs, App Store Connect numeric app IDs, tester group names,
+  API keys, sessions, and other operator/org-specific release settings in gitignored local config.
+- Keep only the release workflow, variable names, templates, and generic placeholder defaults in
+  the repo.
+- The tracked repo should remain portable across contributors and Apple teams without embedding one
+  organization's identifiers.
 
 ### Web Presence
 
@@ -1031,8 +1024,7 @@ composition), t=95s (mid-demo), t=185s (icon frame — the best single frame).
 - First build **26.3.30 (10.47)** uploaded and verified running on device.
 - Latest build **26.4.3 (18.42)** uploaded on 2026-04-03 via direct `xcodebuild` export after the
   Fastlane lane failed.
-- TestFlight group: "Elevated Testers"
-- App Store Connect app ID: `6761337391`
+- Active TestFlight group and App Store Connect app ID live in local release config, not tracked docs.
 - Copyright: "Petri Koistinen et al."
 
 ---
@@ -1041,15 +1033,12 @@ composition), t=95s (mid-demo), t=185s (icon frame — the best single frame).
 
 ### Setup (2026-04-02)
 
-**Bundle ID**: `com.nitor.elevated` — same as iOS, shared across all platforms under one
-App Store Connect app record ("Elevated Intro", ID: 6761337391).
-
-Team: Nitor Creations Oy (MU8NPY2D99).
+**Bundle/team identifiers**: loaded from local release config. A unified bundle identifier can still
+be used across platforms if the local App Store Connect setup is structured that way.
 
 **First tvOS build uploaded**: 26.4.02 (21.52).
 
-Note: a separate `com.nitor.elevatedtv` app (ID: 6761554202) was created during initial
-setup but is unused — the tvOS binary ships under the unified `com.nitor.elevated` record.
+Note: App Store Connect record choices are local/operator data and are no longer tracked here.
 
 ### tvOS-Specific Asset Requirements
 
@@ -1090,9 +1079,10 @@ xcodebuild -project ElevatedTV.xcodeproj -scheme Elevated \
     CODE_SIGN_IDENTITY="-" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
 
 # Step 2: Export with distribution signing + upload
+./scripts/write_export_options_plist.sh /tmp/ElevatedTVExportOptions.plist
 xcodebuild -exportArchive \
     -archivePath /tmp/ElevatedTV.xcarchive \
-    -exportOptionsPlist ExportOptionsTV.plist \
+    -exportOptionsPlist /tmp/ElevatedTVExportOptions.plist \
     -exportPath /tmp/ElevatedTVExport \
     -allowProvisioningUpdates
 ```
@@ -1108,10 +1098,12 @@ This is automated via `make tv-release` / `fastlane appletv release`.
 
 ### Configuration Files
 
-- `ExportOptionsTV.plist` — xcodebuild export settings for tvOS (method: app-store-connect, destination: upload)
+- `scripts/write_export_options_plist.sh` — generates the temporary export plist from local env
+- `Config/Identifiers.xcconfig` — tracked defaults for team/bundle settings with optional local override
+- `Config/Identifiers.local.xcconfig.example` — template for gitignored local Apple identifiers
 - `fastlane/Fastfile` — `platform :appletv` block with `release` and `submit` lanes
-- `fastlane/Appfile` — `for_platform :appletv` block (bundle ID, team, Apple ID)
-- `ElevatedTV.xcodeproj` — team MU8NPY2D99, bundle ID `com.nitor.elevated`
+- `fastlane/Appfile` — `for_platform :appletv` block (bundle/team IDs from env, Apple ID from env)
+- `fastlane/.env.default` — template for gitignored shell/Fastlane release identifiers
 
 ### Performance: Forced Drawable Size
 
@@ -1149,8 +1141,8 @@ hurt visual quality. Reverted to full quality settings.
 4. **Top Shelf images need both @1x and @2x**: Wide is 2320x720 (@1x) + 4640x1440 (@2x).
 5. **Export compliance** must be set on each build before it becomes testable. Set
    `usesNonExemptEncryption: false` via API or App Store Connect.
-6. **Unified bundle ID** (`com.nitor.elevated`) works for all platforms under one
-   App Store Connect record. No need for separate bundle IDs per platform.
+6. **A unified bundle ID can work across multiple platforms** under one
+   App Store Connect record if the local identifiers are configured that way.
 7. **Free Apple Developer teams** (personal) cannot create App Store provisioning profiles.
    Must use a paid team.
 8. **Fastlane 2.232.2** has broken `betaBuildMetrics` API — `pilot builds`, `pilot distribute`,

@@ -13,10 +13,11 @@
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
-		A3000001000000000000AA01 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
-		A3000001000000000000AA05 /* Elevated.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Elevated.app; sourceTree = BUILT_PRODUCTS_DIR; };
-		A3000001000000000000AA06 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
-		A3000001000000000000AA17 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+			A3000001000000000000AA01 /* main.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = main.swift; sourceTree = "<group>"; };
+			A3000001000000000000AA05 /* Elevated.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Elevated.app; sourceTree = BUILT_PRODUCTS_DIR; };
+			A3000001000000000000AA06 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
+			A3000001000000000000AA17 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
+			A3000001000000000000AA18 /* Identifiers.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Identifiers.xcconfig; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -39,24 +40,33 @@
 			name = Products;
 			sourceTree = "<group>";
 		};
-		A3000001000000000000AA09 /* AppVision */ = {
-			isa = PBXGroup;
-			children = (
-				A3000001000000000000AA01 /* main.swift */,
-				A3000001000000000000AA06 /* Info.plist */,
-				A3000001000000000000AA17 /* Assets.xcassets */,
-			);
-			path = AppVision;
-			sourceTree = SOURCE_ROOT;
-		};
-		A3000001000000000000AA0A = {
-			isa = PBXGroup;
-			children = (
-				A3000001000000000000AA09 /* AppVision */,
-				A3000001000000000000AA08 /* Products */,
-			);
-			sourceTree = "<group>";
-		};
+			A3000001000000000000AA09 /* AppVision */ = {
+				isa = PBXGroup;
+				children = (
+					A3000001000000000000AA01 /* main.swift */,
+					A3000001000000000000AA06 /* Info.plist */,
+					A3000001000000000000AA17 /* Assets.xcassets */,
+				);
+				path = AppVision;
+				sourceTree = SOURCE_ROOT;
+			};
+			A3000001000000000000AA19 /* Config */ = {
+				isa = PBXGroup;
+				children = (
+					A3000001000000000000AA18 /* Identifiers.xcconfig */,
+				);
+				path = Config;
+				sourceTree = SOURCE_ROOT;
+			};
+			A3000001000000000000AA0A = {
+				isa = PBXGroup;
+				children = (
+					A3000001000000000000AA09 /* AppVision */,
+					A3000001000000000000AA19 /* Config */,
+					A3000001000000000000AA08 /* Products */,
+				);
+				sourceTree = "<group>";
+			};
 /* End PBXGroup section */
 
 /* Begin PBXNativeTarget section */
@@ -139,9 +149,10 @@
 /* End PBXSourcesBuildPhase section */
 
 /* Begin XCBuildConfiguration section */
-		A3000001000000000000AA0F /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
+			A3000001000000000000AA0F /* Debug */ = {
+				isa = XCBuildConfiguration;
+				baseConfigurationReference = A3000001000000000000AA18 /* Identifiers.xcconfig */;
+				buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -172,7 +183,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = dwarf;
-				DEVELOPMENT_TEAM = 536299P3P6;
+					DEVELOPMENT_TEAM = "$(ELEVATED_VISIONOS_TEAM_ID)";
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_TESTABILITY = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -202,9 +213,10 @@
 			};
 			name = Debug;
 		};
-		A3000001000000000000AA10 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
+			A3000001000000000000AA10 /* Release */ = {
+				isa = XCBuildConfiguration;
+				baseConfigurationReference = A3000001000000000000AA18 /* Identifiers.xcconfig */;
+				buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
 				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
 				CLANG_ANALYZER_NONNULL = YES;
@@ -236,7 +248,7 @@
 				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
 				COPY_PHASE_STRIP = NO;
 				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
-				DEVELOPMENT_TEAM = 536299P3P6;
+					DEVELOPMENT_TEAM = "$(ELEVATED_VISIONOS_TEAM_ID)";
 				ENABLE_NS_ASSERTIONS = NO;
 				ENABLE_STRICT_OBJC_MSGSEND = YES;
 				ENABLE_USER_SCRIPT_SANDBOXING = YES;
@@ -259,9 +271,10 @@
 			};
 			name = Release;
 		};
-		A3000001000000000000AA11 /* Debug */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
+			A3000001000000000000AA11 /* Debug */ = {
+				isa = XCBuildConfiguration;
+				baseConfigurationReference = A3000001000000000000AA18 /* Identifiers.xcconfig */;
+				buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 23.22;
@@ -272,7 +285,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 26.4.2;
-				PRODUCT_BUNDLE_IDENTIFIER = com.nitor.elevated.vision;
+					PRODUCT_BUNDLE_IDENTIFIER = "$(ELEVATED_VISIONOS_APP_IDENTIFIER)";
 				PRODUCT_NAME = Elevated;
 				SDKROOT = xros;
 				SWIFT_EMIT_LOC_STRINGS = YES;
@@ -282,9 +295,10 @@
 			};
 			name = Debug;
 		};
-		A3000001000000000000AA12 /* Release */ = {
-			isa = XCBuildConfiguration;
-			buildSettings = {
+			A3000001000000000000AA12 /* Release */ = {
+				isa = XCBuildConfiguration;
+				baseConfigurationReference = A3000001000000000000AA18 /* Identifiers.xcconfig */;
+				buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 23.22;
@@ -295,7 +309,7 @@
 					"@executable_path/Frameworks",
 				);
 				MARKETING_VERSION = 26.4.2;
-				PRODUCT_BUNDLE_IDENTIFIER = com.nitor.elevated.vision;
+					PRODUCT_BUNDLE_IDENTIFIER = "$(ELEVATED_VISIONOS_APP_IDENTIFIER)";
 				PRODUCT_NAME = Elevated;
 				SDKROOT = xros;
 				SWIFT_EMIT_LOC_STRINGS = YES;

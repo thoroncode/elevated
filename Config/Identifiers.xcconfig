@@ -1,0 +1,12 @@
+// Generic defaults for local Apple team and bundle identifiers.
+// Override these in Config/Identifiers.local.xcconfig, which is gitignored.
+
+ELEVATED_IOS_TEAM_ID = TEAMIDPLACEHOLDER
+ELEVATED_TVOS_TEAM_ID = TEAMIDPLACEHOLDER
+ELEVATED_VISIONOS_TEAM_ID = TEAMIDPLACEHOLDER
+
+ELEVATED_IOS_APP_IDENTIFIER = example.invalid.elevated.ios
+ELEVATED_TVOS_APP_IDENTIFIER = example.invalid.elevated.tvos
+ELEVATED_VISIONOS_APP_IDENTIFIER = example.invalid.elevated.visionos
+
+#include? "Identifiers.local.xcconfig"
