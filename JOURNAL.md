@@ -877,10 +877,10 @@ the image.
 ### Apple Developer Setup
 
 - **Developer Program**: Nitor Creations Oy (Team ID: `MU8NPY2D99`)
-- **Account**: `petri.koistinen@iki.fi`
-- **Personal signing cert**: `Apple Development: petri.koistinen@iki.fi (B8KD8TW482)`, OU=536299P3P6
-- Note: The personal team ID (536299P3P6) is different from the organization team ID (MU8NPY2D99).
-  Xcode Cloud requires the organization team ID in `DEVELOPMENT_TEAM`.
+- **Release Apple ID**: local `FASTLANE_USER` in `fastlane/.env` (gitignored)
+- **Signing identities**: supplied by the local Xcode/Keychain setup for the selected Apple ID
+- Note: a contributor may also have a separate personal team. Xcode projects and Fastlane config
+  must continue to use the organization team ID `MU8NPY2D99`.
 
 ### Bundle Identifiers
 
@@ -962,7 +962,8 @@ authorization.
 
 ### Fastlane Automation
 
-Installed via Homebrew Ruby (`/opt/homebrew/opt/ruby/bin`). Fastlane 2.232.2.
+Installed locally via Ruby. The executable path may vary by machine; on this workstation the
+usable binary was `/opt/homebrew/lib/ruby/gems/4.0.0/bin/fastlane`. Fastlane 2.232.2.
 
 **Makefile targets:**
 
@@ -977,8 +978,8 @@ Installed via Homebrew Ruby (`/opt/homebrew/opt/ruby/bin`). Fastlane 2.232.2.
 | `make ios-add-tester` | Add tester via `pilot` (currently broken — use App Store Connect web UI) |
 
 **Configuration:**
-- `fastlane/Appfile` — app identifier, team ID
-- `fastlane/.env` — `FASTLANE_USER` (gitignored, copy from `.env.default`)
+- `fastlane/Appfile` — app identifier and organization team ID; Apple IDs are read from env vars
+- `fastlane/.env` — `FASTLANE_USER`, optional `FASTLANE_APPLETV_USER` (gitignored, copy from `.env.default`)
 - `fastlane/metadata/en-GB/` — description, keywords, copyright, URLs
 - `fastlane/screenshots/en-GB/` — generated screenshots (5 iPhone + 5 iPad)
 - `ExportOptions.plist` — xcodebuild export settings for App Store Connect upload
@@ -995,6 +996,29 @@ composition), t=95s (mid-demo), t=185s (icon frame — the best single frame).
 - Fastlane auto-detects `Elevated.pkg` in repo root and forces `platform: osx`. Workaround:
   Makefile temporarily moves pkg out of the way during `ios-metadata`.
 
+**Observed release hurdles (2026-04-03):**
+- `fastlane ios release` stamped version `26.4.3 (18.42)` but failed in `build_app` because
+  `xcpretty` was not installed (`sh: xcpretty: command not found`, exit 127).
+- In the same failed run, `gym` reported scheme `ElevatedIOS` even though `fastlane/Fastfile`
+  requested `scheme: "Elevated"`. `xcodebuild -list -project ElevatedIOS.xcodeproj` confirmed that
+  `Elevated` is the shared app scheme. When Fastlane output looks contradictory, verify with
+  direct `xcodebuild -list`.
+- The direct release path succeeded: `xcodebuild archive` followed by `xcodebuild -exportArchive`
+  uploaded build `26.4.3 (18.42)` to TestFlight.
+- `stamp-version.sh` rewrites all `Elevated*.xcodeproj/project.pbxproj` files. Run release
+  automation in a disposable worktree if you do not want local version bumps left in the main
+  checkout.
+
+**Config boundary:**
+- Keep personal Apple IDs, login emails, API keys, sessions, and other operator-specific release
+  settings in gitignored local config such as `fastlane/.env`.
+- Keep shared project identifiers in the repo: bundle IDs, organization team ID, scheme names,
+  export method, and the App Store Connect app ID. Those are part of the reproducible release
+  configuration rather than secrets.
+- Tester group names are not secrets, but if distribution automation starts depending on them again,
+  prefer loading them from local env/config so account-specific naming does not leak into release
+  scripts.
+
 ### Web Presence
 
 - **Support page**: https://thoron.iki.fi/elevated/
@@ -1002,9 +1026,11 @@ composition), t=95s (mid-demo), t=185s (icon frame — the best single frame).
 - Hosted at `ssh://thoron@thoron.iki.fi/public_html/elevated/`
 - The app collects no data, has no network access, no analytics, no tracking.
 
-### TestFlight Status (2026-03-31)
+### TestFlight Status (2026-04-03)
 
 - First build **26.3.30 (10.47)** uploaded and verified running on device.
+- Latest build **26.4.3 (18.42)** uploaded on 2026-04-03 via direct `xcodebuild` export after the
+  Fastlane lane failed.
 - TestFlight group: "Elevated Testers"
 - App Store Connect app ID: `6761337391`
 - Copyright: "Petri Koistinen et al."

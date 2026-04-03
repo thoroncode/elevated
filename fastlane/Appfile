@@ -1,11 +1,14 @@
+ios_apple_id = ENV["FASTLANE_USER"]
+appletv_apple_id = ENV["FASTLANE_APPLETV_USER"] || ios_apple_id
+
 app_identifier "com.nitor.elevated"
 team_id "MU8NPY2D99"
 
-# Apple ID loaded from ~/.fastlane/credentials or FASTLANE_USER env var
-apple_id ENV["FASTLANE_USER"]
+# Apple IDs are local release config, not tracked repo config.
+apple_id ios_apple_id if ios_apple_id && !ios_apple_id.empty?
 
 for_platform :appletv do
   app_identifier "com.nitor.elevated"
   team_id "MU8NPY2D99"
-  apple_id "common@nitor.com"
+  apple_id appletv_apple_id if appletv_apple_id && !appletv_apple_id.empty?
 end
