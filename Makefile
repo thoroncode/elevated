@@ -130,7 +130,7 @@ app: build
 	@rm -f /tmp/Shaders.air /tmp/ShadersBaseline.air
 	@cp $(ICON_ICNS) $(APP)/Contents/Resources/
 	@cp LICENSE $(APP)/Contents/Resources/
-	@shortver=$$(printf '%s.%d.%s' $$(date +%y) $$(date +%-m) $$(date +%d)); \
+	@shortver=$$(printf '%s.%d.%d' $$(date +%y) $$(date +%-m) $$(date +%-d)); \
 	    buildver=$$(date +%H.%M); \
 	    /usr/libexec/PlistBuddy \
 	        -c "Add :CFBundleName           string Elevated" \
@@ -203,12 +203,13 @@ pkg:
 	@$(MAKE) app
 	@echo "Building Elevated.pkg..."
 	@rm -rf /tmp/elevated_pkg_stage && cp -r $(APP) /tmp/elevated_pkg_stage
-	@pkgbuild \
-	    --install-location /Applications \
-	    --component /tmp/elevated_pkg_stage \
-	    --identifier $(ELEVATED_MACOS_APP_IDENTIFIER) \
-	    --version 1.0 \
-	    Elevated.pkg
+	@shortver=$$(printf '%s.%d.%d' $$(date +%y) $$(date +%-m) $$(date +%-d)); \
+	    pkgbuild \
+	        --install-location /Applications \
+	        --component /tmp/elevated_pkg_stage \
+	        --identifier $(ELEVATED_MACOS_APP_IDENTIFIER) \
+	        --version $$shortver \
+	        Elevated.pkg
 	@rm -rf /tmp/elevated_pkg_stage
 	@echo ""
 	@echo "  Installer: $(CURDIR)/Elevated.pkg"
