@@ -278,7 +278,7 @@
 				buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23.22;
+				CURRENT_PROJECT_VERSION = 18.42;
 					DEVELOPMENT_TEAM = "$(ELEVATED_IOS_TEAM_ID)";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = App/Info.plist;
@@ -287,7 +287,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 26.4.2;
+				MARKETING_VERSION = 26.4.3;
 					PRODUCT_BUNDLE_IDENTIFIER = "$(ELEVATED_IOS_APP_IDENTIFIER)";
 				PRODUCT_NAME = Elevated;
 				SDKROOT = iphoneos;
@@ -303,7 +303,7 @@
 				buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 23.22;
+				CURRENT_PROJECT_VERSION = 18.42;
 					DEVELOPMENT_TEAM = "$(ELEVATED_IOS_TEAM_ID)";
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = App/Info.plist;
@@ -312,7 +312,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 26.4.2;
+				MARKETING_VERSION = 26.4.3;
 					PRODUCT_BUNDLE_IDENTIFIER = "$(ELEVATED_IOS_APP_IDENTIFIER)";
 				PRODUCT_NAME = Elevated;
 				SDKROOT = iphoneos;

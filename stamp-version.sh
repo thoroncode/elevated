@@ -1,11 +1,11 @@
 #!/bin/sh
-# Stamp date-based version: YY.M.DD (HH.MM)
+# Stamp date-based version: YY.M.D (HH.MM)
 # Run before local xcodebuild archive, or from Xcode Cloud ci_post_clone.
-
-shortver=$(printf '%s.%d.%d' $(date +%y) $(date +%-m) $(date +%-d))
-buildver=$(date +%H.%M)
+set -eu
 
 dir="$(cd "$(dirname "$0")" && pwd)"
+shortver=$("$dir/scripts/version.sh" short)
+buildver=$("$dir/scripts/version.sh" build)
 
 for proj in "$dir"/Elevated*.xcodeproj; do
     pbx="$proj/project.pbxproj"

@@ -316,24 +316,24 @@ The app bundle uses a date+time versioning scheme that stamps itself at build ti
 
 | Key | Format | Example |
 |-----|--------|---------|
-| `CFBundleShortVersionString` | `YY.M.DD` | `26.3.24` |
-| `CFBundleVersion` | `HH.MM` | `18.33` |
+| `CFBundleShortVersionString` | `YY.M.D` | `26.4.3` |
+| `CFBundleVersion` | `HH.MM` | `18.42` |
 
-The About panel (`⌘+About Elevated`) shows **"Version 26.3.24 (18.33)"**.
+The About panel (`⌘+About Elevated`) shows **"Version 26.4.3 (18.42)"**.
 
-Both are valid macOS version formats (sequences of up to three non-negative integers). The short version is stamped per-day; the build number is stamped per-minute — so every `make app`/`zip`/`pkg` run produces a unique, human-readable version that encodes exactly when the binary was assembled.
+Both are valid macOS version formats. The short version is date-based; the build number is minute-based. When a target only has one version field, use the short version only. When it has two fields, present them as `YY.M.D (HH.MM)`.
 
-**Makefile implementation** — shell fragment inside the `app` target:
+**Shared implementation** — `scripts/version.sh` is the single source of truth:
 ```makefile
-shortver=$$(printf '%s.%d.%s' $$(date +%y) $$(date +%-m) $$(date +%d)); \
-buildver=$$(date +%H.%M); \
+shortver=$$($(VERSION_SCRIPT) short); \
+buildver=$$($(VERSION_SCRIPT) build); \
 /usr/libexec/PlistBuddy \
     -c "Add :CFBundleShortVersionString string $$shortver" \
     -c "Add :CFBundleVersion string $$buildver" \
     ...
 ```
 
-`%-m` strips the leading zero from the month (March → `3`, not `03`).
+That keeps the Xcode stamps, macOS app bundle, zip naming, and `.pkg` versioning aligned.
 
 ### Color/Tone Differences
 Our capture is slightly warmer/more orange-tinted at some timestamps vs the cooler blue reference. Likely a minor difference in sun direction or color computation. Low priority.
@@ -902,7 +902,7 @@ Bundle/team identifiers are local release config now, not tracked repo data.
 
 Date-based scheme matching the macOS Makefile:
 
-- **MARKETING_VERSION** (CFBundleShortVersionString): `YY.M.DD` (e.g. `26.3.30`)
+- **MARKETING_VERSION** (CFBundleShortVersionString): `YY.M.D` (e.g. `26.4.3`)
 - **CURRENT_PROJECT_VERSION** (CFBundleVersion): `HH.MM` (e.g. `10.47`)
 
 **Local builds**: Run `./stamp-version.sh` before archiving. It updates all `.xcodeproj` files via sed.

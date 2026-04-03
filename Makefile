@@ -1,4 +1,4 @@
-.PHONY: all help build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots ios-submit ios-add-tester tv-release tv-submit
+.PHONY: all help version build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots ios-submit ios-add-tester tv-release tv-submit
 
 BIN       = elevated/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -11,6 +11,7 @@ SRC_DIST_NAME ?= elevated-src-$(shell date +%Y%m%d-%H%M%S)
 SRC_DIST_ARCHIVE = $(DIST_DIR)/$(SRC_DIST_NAME).zip
 SRC_DIST_OPTIONAL_FILES = LICENSE
 SRC_DIST_EXCLUDE_FILES = elevated_music.wav
+VERSION_SCRIPT = ./scripts/version.sh
 
 -include fastlane/.env
 
@@ -27,13 +28,14 @@ help:
 	@echo "Available targets:"
 	@echo "  all               Build release binary (default)"
 	@echo "  help              Show this help"
+	@echo "  version           Print the current release version stamp"
 	@echo "  build             Build release binary"
 	@echo "  run               Run demo fullscreen with a 5s startup delay"
 	@echo "  debug             Run demo with debug overlay"
 	@echo "  debug-compare     Run debug split view: baseline vs current shader"
 	@echo "  app-icon          Regenerate app icon assets"
 	@echo "  app               Build Elevated.app bundle"
-	@echo "  zip               Zip Elevated.app to ~/Desktop/Elevated-YY.M.DD.zip"
+	@echo "  zip               Zip Elevated.app to ~/Desktop/Elevated-YY.M.D.zip"
 	@echo "  src-distribution  Create source zip in dist/"
 	@echo "  pkg               Build Elevated.pkg installer"
 	@echo "  ios-archive       Build iOS archive"
@@ -67,6 +69,9 @@ help:
 	@echo "  4k-run            Build and run the 4K version (uncompressed)"
 	@echo "  4k-pack-run       Pack with xz and run the self-extracting binary"
 	@echo "  4k-clean          Clean 4K build artifacts"
+
+version:
+	@$(VERSION_SCRIPT) display
 
 build:
 	swift build -c release --package-path elevated --product ElevatedMac
@@ -130,8 +135,8 @@ app: build
 	@rm -f /tmp/Shaders.air /tmp/ShadersBaseline.air
 	@cp $(ICON_ICNS) $(APP)/Contents/Resources/
 	@cp LICENSE $(APP)/Contents/Resources/
-	@shortver=$$(printf '%s.%d.%d' $$(date +%y) $$(date +%-m) $$(date +%-d)); \
-	    buildver=$$(date +%H.%M); \
+	@shortver=$$($(VERSION_SCRIPT) short); \
+	    buildver=$$($(VERSION_SCRIPT) build); \
 	    /usr/libexec/PlistBuddy \
 	        -c "Add :CFBundleName           string Elevated" \
 	        -c "Add :CFBundleIdentifier     string $(ELEVATED_MACOS_APP_IDENTIFIER)" \
@@ -154,7 +159,7 @@ app: build
 	@echo "  Run compare:      open $(CURDIR)/$(APP) --args --debug-compare"
 
 # Zip Elevated.app and drop it on the Desktop with the stamped short version
-# in the filename, e.g. Elevated-26.3.24.zip.
+# in the filename, e.g. Elevated-26.4.3.zip.
 zip: app
 	@shortver=$$(/usr/libexec/PlistBuddy -c 'Print :CFBundleShortVersionString' $(APP)/Contents/Info.plist); \
 	 zipname=Elevated-$$shortver.zip; \
@@ -203,7 +208,7 @@ pkg:
 	@$(MAKE) app
 	@echo "Building Elevated.pkg..."
 	@rm -rf /tmp/elevated_pkg_stage && cp -r $(APP) /tmp/elevated_pkg_stage
-	@shortver=$$(printf '%s.%d.%d' $$(date +%y) $$(date +%-m) $$(date +%-d)); \
+	@shortver=$$($(VERSION_SCRIPT) short); \
 	    pkgbuild \
 	        --install-location /Applications \
 	        --component /tmp/elevated_pkg_stage \

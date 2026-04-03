@@ -10,7 +10,7 @@ Full technical journal: `JOURNAL.md`
 - **Local release config**: Xcode identifiers live in `Config/Identifiers.local.xcconfig` (gitignored); Fastlane/Makefile identifiers live in `fastlane/.env` (gitignored)
 - **Templates**: `Config/Identifiers.local.xcconfig.example` and `fastlane/.env.default`
 - **App name**: "Elevated Intro"
-- **Versioning**: `YY.M.D` (HH.MM) — `./stamp-version.sh` stamps all Xcode projects
+- **Versioning**: `YY.M.D` plus optional `HH.MM` build metadata where the platform has a second field — `./stamp-version.sh` stamps all Xcode projects, and macOS `.pkg` uses the short version only
 - **Export compliance**: Must set `usesNonExemptEncryption: false` on each build via API or ASC web UI
 - **TestFlight group/app IDs**: treat as local release config, not tracked repo data
 - **Fastlane 2.232.2**: `pilot builds/distribute/list` broken due to `betaBuildMetrics` API change. Use Spaceship Ruby API directly.
