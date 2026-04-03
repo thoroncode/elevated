@@ -1087,12 +1087,28 @@ This is automated via `make tv-release` / `fastlane appletv release`.
 - `fastlane/Appfile` — `for_platform :appletv` block (bundle ID, team, Apple ID)
 - `ElevatedTV.xcodeproj` — team MU8NPY2D99, bundle ID `com.nitor.elevated`
 
-### Performance: 1080p Render Scale
+### Performance: Forced Drawable Size
 
 Apple TV 4K (3rd gen, A15) renders at native 3840x2160 by default — too slow for the
-3-pass renderer with 1024-vertex terrain mesh and 16-sample motion blur. Fix:
-`contentScaleFactor = 1.0` in the tvOS ViewController renders at 1080p (upscaled to 4K
-by the display), giving a ~4x speedup with negligible visual loss on a TV viewing distance.
+3-pass renderer with 1024-vertex terrain mesh and 16-sample motion blur.
+
+**Key finding**: `contentScaleFactor = 1.0` alone does NOT reliably force the resolution.
+The correct approach is:
+```swift
+mtkView.autoResizeDrawable = false
+mtkView.drawableSize = CGSize(width: 1920, height: 1080)
+```
+This guarantees the GPU renders at the specified resolution regardless of the TV's native
+resolution. The display upscales from 1080p to 4K automatically.
+
+**Tested resolutions on Apple TV 4K (A15)**:
+- 3840×2160 (native 4K): extremely slow, unusable
+- 1920×1080 (forced): smooth 60fps ← **shipped**
+- 1280×720 (forced): smooth 60fps, confirmed resolution is the bottleneck
+
+**Not the bottleneck**: the 1024×1024 terrain mesh and rgba32Float G-buffer are fine at 1080p.
+Reducing mesh to 512 or switching to rgba16Float showed no visible improvement at 1080p and
+hurt visual quality. Reverted to full quality settings.
 
 ### Lessons Learned
 
