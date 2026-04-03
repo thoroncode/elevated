@@ -4,6 +4,8 @@ elevated/.swiftpm/
 # Xcode-generated per-user and workspace state
 ElevatedIOS.xcodeproj/xcuserdata/
 ElevatedIOS.xcodeproj/project.xcworkspace/
+ElevatedTV.xcodeproj/xcuserdata/
+ElevatedTV.xcodeproj/project.xcworkspace/
 Elevated.app/
 Elevated.pkg
 
