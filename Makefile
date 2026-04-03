@@ -134,7 +134,7 @@ app: build
 	@cp $(BIN) $(APP)/Contents/MacOS/
 	@xcrun -sdk macosx metal -c elevated/ElevatedCore/Shaders.metal -o /tmp/Shaders.air
 	@xcrun -sdk macosx metallib /tmp/Shaders.air -o $(APP)/Contents/Resources/default.metallib
-	@xcrun -sdk macosx metal -c elevated/ElevatedCore/ShadersBaseline.metal -o /tmp/ShadersBaseline.air
+	@xcrun -sdk macosx metal -x metal -c elevated/ElevatedCore/ShadersBaseline.txt -o /tmp/ShadersBaseline.air
 	@xcrun -sdk macosx metallib /tmp/ShadersBaseline.air -o $(APP)/Contents/Resources/baseline.metallib
 	@rm -f /tmp/Shaders.air /tmp/ShadersBaseline.air
 	@cp $(ICON_ICNS) $(APP)/Contents/Resources/
