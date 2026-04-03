@@ -4,15 +4,21 @@ def elevated_env!(key)
   ENV.fetch(key) { UI.user_error!("Missing #{key} in fastlane/.env") }
 end
 
+def release_version
+  short, build = sh("cd .. && ./scripts/version.sh pair").strip.split(" ", 2)
+  { short: short, build: build }
+end
+
 platform :appletv do
-  desc "Stamp version, build archive, and upload to App Store Connect"
+  desc "Build archive with the current version and upload to App Store Connect"
   lane :release do
-    # Stamp date-based version
-    sh("cd .. && ./stamp-version.sh")
+    version = release_version
+    UI.message("Using version #{version[:short]} (#{version[:build]})")
 
     # Archive unsigned (no tvOS devices registered for dev signing)
     sh("cd .. && xcodebuild -project ElevatedTV.xcodeproj -scheme Elevated " \
        "-destination 'generic/platform=tvOS' -configuration Release " \
+       "MARKETING_VERSION=#{version[:short]} CURRENT_PROJECT_VERSION=#{version[:build]} " \
        "archive -archivePath /tmp/ElevatedTV.xcarchive " \
        "-allowProvisioningUpdates " \
        "CODE_SIGN_IDENTITY='-' CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO")
@@ -44,10 +50,10 @@ platform :appletv do
 end
 
 platform :ios do
-  desc "Stamp version, build archive, and upload to TestFlight"
+  desc "Build archive with the current version and upload to TestFlight"
   lane :release do
-    # Stamp date-based version
-    sh("cd .. && ./stamp-version.sh")
+    version = release_version
+    UI.message("Using version #{version[:short]} (#{version[:build]})")
 
     # Build archive
     build_app(
@@ -57,7 +63,8 @@ platform :ios do
       destination: "generic/platform=iOS",
       export_method: "app-store",
       export_team_id: elevated_env!("ELEVATED_ASC_TEAM_ID"),
-      clean: true
+      clean: true,
+      xcargs: "MARKETING_VERSION=#{version[:short]} CURRENT_PROJECT_VERSION=#{version[:build]}"
     )
 
     # Upload to TestFlight

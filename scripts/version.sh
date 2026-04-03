@@ -5,7 +5,7 @@ shortver=${ELEVATED_SHORT_VERSION:-$(printf '%s.%d.%d' "$(date +%y)" "$(date +%-
 buildver=${ELEVATED_BUILD_VERSION:-$(date +%H.%M)}
 
 usage() {
-    echo "usage: $0 [short|build|display]" >&2
+    echo "usage: $0 [short|build|pair|display]" >&2
     exit 1
 }
 
@@ -15,6 +15,9 @@ case "${1:-display}" in
         ;;
     build)
         printf '%s\n' "$buildver"
+        ;;
+    pair)
+        printf '%s %s\n' "$shortver" "$buildver"
         ;;
     display)
         printf '%s (%s)\n' "$shortver" "$buildver"

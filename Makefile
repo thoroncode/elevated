@@ -1,4 +1,4 @@
-.PHONY: all help version build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots ios-submit ios-add-tester tv-release tv-submit
+.PHONY: all help version stamp-version build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots ios-submit ios-add-tester tv-release tv-submit
 
 BIN       = elevated/.build/release/ElevatedMac
 APP       = Elevated.app
@@ -29,6 +29,7 @@ help:
 	@echo "  all               Build release binary (default)"
 	@echo "  help              Show this help"
 	@echo "  version           Print the current release version stamp"
+	@echo "  stamp-version     Write the current release version into Xcode projects"
 	@echo "  build             Build release binary"
 	@echo "  run               Run demo fullscreen with a 5s startup delay"
 	@echo "  debug             Run demo with debug overlay"
@@ -40,14 +41,14 @@ help:
 	@echo "  pkg               Build Elevated.pkg installer"
 	@echo "  ios-archive       Build iOS archive"
 	@echo "  ios-upload        Upload iOS archive to TestFlight"
-	@echo "  ios-release       Stamp version, archive, and upload to TestFlight"
+	@echo "  ios-release       Archive with the current version and upload to TestFlight"
 	@echo "  ios-screenshots    Generate App Store screenshots from the demo"
 	@echo "  ios-metadata      Upload metadata/icon/screenshots to App Store Connect"
 	@echo "  ios-submit        Submit latest build for App Store review"
 	@echo "  ios-add-tester    Add tester to TestFlight (EMAIL=user@example.com)"
 	@echo ""
 	@echo "Apple TV:"
-	@echo "  tv-release        Stamp version, archive, and upload tvOS to TestFlight"
+	@echo "  tv-release        Archive with the current version and upload tvOS to TestFlight"
 	@echo "  tv-submit         Submit latest tvOS build for App Store review"
 	@echo ""
 	@echo "  uninstall         Remove /Applications/Elevated.app"
@@ -72,6 +73,9 @@ help:
 
 version:
 	@$(VERSION_SCRIPT) display
+
+stamp-version:
+	@./stamp-version.sh
 
 build:
 	swift build -c release --package-path elevated --product ElevatedMac
@@ -135,8 +139,9 @@ app: build
 	@rm -f /tmp/Shaders.air /tmp/ShadersBaseline.air
 	@cp $(ICON_ICNS) $(APP)/Contents/Resources/
 	@cp LICENSE $(APP)/Contents/Resources/
-	@shortver=$$($(VERSION_SCRIPT) short); \
-	    buildver=$$($(VERSION_SCRIPT) build); \
+	@set -- $$($(VERSION_SCRIPT) pair); \
+	    shortver=$$1; \
+	    buildver=$$2; \
 	    /usr/libexec/PlistBuddy \
 	        -c "Add :CFBundleName           string Elevated" \
 	        -c "Add :CFBundleIdentifier     string $(ELEVATED_MACOS_APP_IDENTIFIER)" \
@@ -208,7 +213,8 @@ pkg:
 	@$(MAKE) app
 	@echo "Building Elevated.pkg..."
 	@rm -rf /tmp/elevated_pkg_stage && cp -r $(APP) /tmp/elevated_pkg_stage
-	@shortver=$$($(VERSION_SCRIPT) short); \
+	@set -- $$($(VERSION_SCRIPT) pair); \
+	    shortver=$$1; \
 	    pkgbuild \
 	        --install-location /Applications \
 	        --component /tmp/elevated_pkg_stage \
@@ -226,10 +232,13 @@ IOS_EXPORT_OPTIONS = /tmp/ElevatedExportOptions.plist
 
 # Archive the iOS app with date-stamped version
 ios-archive:
-	@./stamp-version.sh
-	@echo "Archiving iOS..."
-	@xcodebuild -project ElevatedIOS.xcodeproj -scheme Elevated \
+	@set -- $$($(VERSION_SCRIPT) pair); \
+	    shortver=$$1; \
+	    buildver=$$2; \
+	    echo "Archiving iOS $$shortver ($$buildver)..."; \
+	    xcodebuild -project ElevatedIOS.xcodeproj -scheme Elevated \
 	    -destination 'generic/platform=iOS' -configuration Release \
+	    MARKETING_VERSION=$$shortver CURRENT_PROJECT_VERSION=$$buildver \
 	    archive -archivePath $(IOS_ARCHIVE) 2>&1 | tail -1
 	@echo "  Archive: $(IOS_ARCHIVE)"
 
@@ -243,7 +252,7 @@ ios-upload:
 	    -allowProvisioningUpdates 2>&1 | tail -3
 	@echo "  Upload complete — check App Store Connect for processing status"
 
-# One-step: stamp version, archive, upload to TestFlight
+# One-step: archive with the current version and upload to TestFlight
 ios-release: ios-archive ios-upload
 
 FASTLANE = PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/lib/ruby/gems/4.0.0/bin:$$PATH" fastlane

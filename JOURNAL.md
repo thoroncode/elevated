@@ -905,7 +905,12 @@ Date-based scheme matching the macOS Makefile:
 - **MARKETING_VERSION** (CFBundleShortVersionString): `YY.M.D` (e.g. `26.4.3`)
 - **CURRENT_PROJECT_VERSION** (CFBundleVersion): `HH.MM` (e.g. `10.47`)
 
-**Local builds**: Run `./stamp-version.sh` before archiving. It updates all `.xcodeproj` files via sed.
+**Local CLI releases**: `make ios-archive`, `make ios-release`, and `fastlane appletv/ios release`
+inject `MARKETING_VERSION` and `CURRENT_PROJECT_VERSION` at archive time, so App Store Connect sees
+the current version without dirtying the repo.
+
+**Explicit project stamp**: Run `make stamp-version` (or `./stamp-version.sh`) only when you want the
+tracked `.xcodeproj` files themselves updated.
 
 **Xcode Cloud**: `ci_scripts/ci_post_clone.sh` calls `stamp-version.sh` automatically after cloning,
 before the build starts.
@@ -963,9 +968,9 @@ usable binary was `/opt/homebrew/lib/ruby/gems/4.0.0/bin/fastlane`. Fastlane 2.2
 | Target | Description |
 |--------|-------------|
 | `make ios-screenshots` | Render 5 key demo frames, scale to iPhone 6.9" + iPad 13" |
-| `make ios-archive` | Stamp version + build iOS archive |
+| `make ios-archive` | Build iOS archive with the current date-based version |
 | `make ios-upload` | Upload archive to TestFlight via `xcodebuild -exportArchive` |
-| `make ios-release` | One-step: stamp + archive + upload |
+| `make ios-release` | One-step: archive with the current version + upload |
 | `make ios-metadata` | Upload screenshots to App Store Connect (hides `Elevated.pkg` to prevent macOS detection) |
 | `make ios-submit` | Submit latest build for App Store review |
 | `make ios-add-tester` | Add tester via `pilot` (currently broken — use App Store Connect web UI) |
@@ -1093,7 +1098,7 @@ This is automated via `make tv-release` / `fastlane appletv release`.
 
 | Target | Description |
 |--------|-------------|
-| `make tv-release` | Stamp version, archive, sign, and upload tvOS to App Store Connect |
+| `make tv-release` | Archive with the current version, sign, and upload tvOS to App Store Connect |
 | `make tv-submit` | Submit latest tvOS build for App Store review |
 
 ### Configuration Files
