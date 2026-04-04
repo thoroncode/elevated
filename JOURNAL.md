@@ -1179,3 +1179,17 @@ AVPlayerViewController and not available to third-party apps.
 Both iOS and tvOS now pause renderer + audio when the app enters background, and resume on
 foreground return. Implemented via `sceneDidEnterBackground` / `sceneWillEnterForeground` in
 the SceneDelegates, calling `pausePlayback()` / `resumePlayback()` on the ViewController.
+
+### Preserved 4K Shader Experiment Branches (2026-04-04)
+
+Three old 4K shader experiment worktrees were still present off commit `d784d84`, each with
+small uncommitted `elevated/ElevatedCore/Shaders.metal` edits. They were not merged into `main`,
+but they were intentionally preserved and pushed to GitHub so they remain revisit-able instead of
+silently disappearing during cleanup:
+
+- `exp/shader-grain-only` @ `bbb7f10` — simplified film-grain path only
+- `exp/shader-size-safe` @ `6d91038` — grain simplification plus the terrain-lighting normal shortcut
+- `exp/shader-size` @ `0fb5591` — the above plus a more aggressive motion-blur simplification
+
+These are archival experiment branches, not current release candidates. The main 4K line had
+already moved well past their common base commit before they were pushed.
