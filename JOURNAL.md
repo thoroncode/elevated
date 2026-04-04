@@ -1193,3 +1193,10 @@ silently disappearing during cleanup:
 
 These are archival experiment branches, not current release candidates. The main 4K line had
 already moved well past their common base commit before they were pushed.
+
+### Local Codex Memory Check (2026-04-04)
+
+Checked the local Codex memory store under `~/.codex/memories` for entries referencing this
+project (`elevated`, `/Users/pk/src/elevated`, `thoroncode/elevated`, and the Apple target names).
+That search returned no hits, so there was no Elevated-specific local Codex memory to dump or
+clear.
