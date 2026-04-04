@@ -267,13 +267,8 @@ fragment float4 e(
     // Chromatic aberration (subtle red/blue shift)
     c.xz *= 0.98;
 
-    // Film grain
-    float w = t0.sample(s0, u.q[3].w * 0.1).r;
-    o += w;
-    c -= 0.005*w;
-    c.x += 0.01 * t0.sample(s0, o + float2(0.1, 0)).r;
-    c.y += 0.01 * t0.sample(s0, o + float2(0.2, 0)).r;
-    c.z += 0.01 * t0.sample(s0, o + float2(0.3, 0)).r;
+    float w = t0.sample(s0, o + float2(u.q[3].w * 0.1, 0)).r - 0.5;
+    c += w * 0.01;
 
     return float4(c, 0);
 }
