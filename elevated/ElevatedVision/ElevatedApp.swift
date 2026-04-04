@@ -6,10 +6,16 @@ import SwiftUI
 import CompositorServices
 
 public struct ElevatedApp: App {
+    @State private var immersionStyle: ImmersionStyle = .full
+
     public init() {}
 
     public var body: some Scene {
-        ImmersiveSpace {
+        WindowGroup {
+            ImmersiveLauncher()
+        }
+
+        ImmersiveSpace(id: "elevated") {
             CompositorLayer(configuration: ContentConfiguration()) { layerRenderer in
                 Task { @MainActor in
                     do {
@@ -22,7 +28,22 @@ public struct ElevatedApp: App {
                 }
             }
         }
-        .immersionStyle(selection: .constant(.full), in: .full)
+        .immersionStyle(selection: $immersionStyle, in: .full)
+    }
+}
+
+struct ImmersiveLauncher: View {
+    @Environment(\.openImmersiveSpace) private var openImmersiveSpace
+    @Environment(\.dismissWindow) private var dismissWindow
+
+    var body: some View {
+        Color.clear
+            .task {
+                let result = await openImmersiveSpace(id: "elevated")
+                if case .opened = result {
+                    dismissWindow()
+                }
+            }
     }
 }
 

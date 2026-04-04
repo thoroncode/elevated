@@ -17,7 +17,7 @@ public class ImmersiveRenderer {
     private let synth = SynthPlayer()
     private let arSession = ARKitSession()
     private let worldTracking = WorldTrackingProvider()
-    private var isRunning = false
+    nonisolated(unsafe) private var isRunning = false
 
     public init(layerRenderer: LayerRenderer) throws {
         guard let device = MTLCreateSystemDefaultDevice() else {
@@ -80,10 +80,11 @@ public class ImmersiveRenderer {
 
             frame.endUpdate()
             guard let timing = frame.predictTiming() else { continue }
-            LayerRenderer.Clock().sleep(until: timing.optimalInputTime)
+            LayerRenderer.Clock().wait(until: timing.optimalInputTime, tolerance: nil)
 
             guard let drawable = frame.queryDrawable() else { continue }
-            drawable.encodeWaitForPresentation(using: drawable.commandBuffer!)
+
+            frame.startSubmission()
 
             let time = renderer.currentTime
             if time >= kDemoDuration && isRunning {
@@ -107,26 +108,29 @@ public class ImmersiveRenderer {
             let demoUp = cross(demoForward, demoRight)
             let demoBasis = simd_float3x3(columns: (demoRight, demoUp, demoForward))
 
+            // Set device anchor on drawable for reprojection
+            drawable.deviceAnchor = deviceAnchor
+
+            guard let presentCmd = renderer.cmdQueue.makeCommandBuffer() else { continue }
+
             for viewIndex in 0..<drawable.views.count {
-                let view = drawable.views[viewIndex]
                 let texture = drawable.colorTextures[viewIndex]
 
-                // Per-eye projection from tangents
-                let tangents = view.tangents
-                let projMatrix = makeProjection(
-                    left: tangents.left, right: tangents.right,
-                    top: tangents.top, bottom: tangents.bottom,
-                    near: 0.03125, far: 256.0
-                )
+                // Per-eye projection from CompositorServices (LH, near=0 far=1)
+                let projMatrix = drawable.computeProjection(
+                    convention: .rightUpForward, viewIndex: viewIndex)
 
                 // View matrix from head tracking
                 var viewMatrix: simd_float4x4
                 if let anchor = deviceAnchor {
                     let headTransform = anchor.originFromAnchorTransform
+                    // Per-eye view offset
+                    let eyeTransform = drawable.views[viewIndex].transform
+                    let viewTransform = headTransform * eyeTransform
                     let headRotation = simd_float3x3(
-                        SIMD3(headTransform.columns.0.x, headTransform.columns.0.y, headTransform.columns.0.z),
-                        SIMD3(headTransform.columns.1.x, headTransform.columns.1.y, headTransform.columns.1.z),
-                        SIMD3(headTransform.columns.2.x, headTransform.columns.2.y, headTransform.columns.2.z)
+                        SIMD3(viewTransform.columns.0.x, viewTransform.columns.0.y, viewTransform.columns.0.z),
+                        SIMD3(viewTransform.columns.1.x, viewTransform.columns.1.y, viewTransform.columns.1.z),
+                        SIMD3(viewTransform.columns.2.x, viewTransform.columns.2.y, viewTransform.columns.2.z)
                     )
 
                     // Combine demo camera direction with head rotation
@@ -149,29 +153,12 @@ public class ImmersiveRenderer {
                 cmd.commit()
             }
 
-            drawable.encodePresent(using: drawable.commandBuffer!)
-            drawable.commandBuffer!.commit()
+            drawable.encodePresent(commandBuffer: presentCmd)
+            presentCmd.commit()
+
+            frame.endSubmission()
         }
     }
 
-    /// Build a perspective projection from asymmetric tangent values.
-    private nonisolated func makeProjection(left: Float, right: Float,
-                                            top: Float, bottom: Float,
-                                            near: Float, far: Float) -> simd_float4x4 {
-        let l = left * near
-        let r = right * near
-        let t = top * near
-        let b = bottom * near
-        let w = r - l
-        let h = t - b
-        let d = far - near
-
-        return simd_float4x4(columns: (
-            SIMD4(2 * near / w, 0, 0, 0),
-            SIMD4(0, 2 * near / h, 0, 0),
-            SIMD4((r + l) / w, (t + b) / h, far / d, 1),
-            SIMD4(0, 0, -near * far / d, 0)
-        ))
-    }
 }
 #endif

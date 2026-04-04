@@ -4,6 +4,26 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 
 ---
 
+## 2026-04-03 — Multi-account Git/SSH setup (new machine)
+
+**Problem**: Two GitHub accounts (`pkoistin` for work, `thoroncode` for personal) share one machine. Default SSH key `id_ed25519` belongs to `pkoistin`. Elevated repo needs to authenticate and commit as `thoroncode`.
+
+**Approach 1 — SSH host alias (`~/.ssh/config`)**:
+Created a `github-thoroncode` host alias pointing to `github.com` with `IdentityFile ~/.ssh/thoroncode-m3`. Initially forgot `IdentitiesOnly yes`, which caused the SSH agent to offer `id_ed25519` first — GitHub accepted it and authenticated as `pkoistin`. Adding `IdentitiesOnly yes` fixed SSH auth.
+
+**Approach 2 — `includeIf hasconfig:remote.*.url` in `~/.gitconfig`**:
+Attempted to auto-apply the thoroncode identity based on remote URL pattern. Tried multiple patterns (`git@github-thoroncode:*`, `git@github-thoroncode**`, `git@github-thoroncode:**`) and both `remote.*.url` and `remote.origin.url`. None worked — the `includeIf` was registered in config but never triggered the include. Root cause unclear; may be a glob/colon parsing issue in `hasconfig`. Abandoned.
+
+**Approach 3 — per-repo `.git/config` (final)**:
+Set `core.sshCommand`, `user.name`, and `user.email` directly in the repo's `.git/config`. This is the simplest and most explicit approach:
+- No SSH host aliases needed — remote URL is plain `git@github.com:thoroncode/elevated.git`
+- No global config magic — everything is local to the repo
+- For initial clone, pass `GIT_SSH_COMMAND="ssh -i ~/.ssh/thoroncode-m3"`
+
+Removed the `github-thoroncode` alias from `~/.ssh/config` and the `hasconfig` includeIf from `~/.gitconfig`. Updated `CLAUDE.md` with clone instructions.
+
+---
+
 ## Project Overview
 
 **Goal**: Pixel-perfect Metal/Swift port of the Elevated 4KB intro (rgba/tbc, Breakpoint 2009).

@@ -5,6 +5,26 @@ Multi-platform: macOS, iOS/iPad, Apple TV, visionOS (WIP).
 
 Full technical journal: `JOURNAL.md`
 
+## Git Identity and SSH Setup
+
+This repo belongs to the `thoroncode` GitHub account. Commits must use the identity:
+
+    Petri Koistinen <thoron@iki.fi>
+
+The default SSH key (`id_ed25519`) belongs to the `pkoistin` work account. This repo needs the `thoroncode-m3` key instead. Both identity and SSH key are configured per-repo in `.git/config` — no SSH host aliases needed.
+
+### Clone and configure
+
+```bash
+GIT_SSH_COMMAND="ssh -i ~/.ssh/thoroncode-m3" git clone git@github.com:thoroncode/elevated.git
+cd elevated
+git config user.name "Petri Koistinen"
+git config user.email "thoron@iki.fi"
+git config core.sshCommand "ssh -i ~/.ssh/thoroncode-m3"
+```
+
+This sets `core.sshCommand` in `.git/config` so all subsequent git operations (fetch, push, pull) use the correct key automatically.
+
 ## App Store / TestFlight
 
 - **Local release config**: Xcode identifiers live in `Config/Identifiers.local.xcconfig` (gitignored); Fastlane/Makefile identifiers live in `fastlane/.env` (gitignored)
