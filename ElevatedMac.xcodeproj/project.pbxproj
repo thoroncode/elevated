@@ -18,6 +18,7 @@
 		A3000001000000000000AA06 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; path = Info.plist; sourceTree = "<group>"; };
 		A3000001000000000000AA17 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		A3000001000000000000AA18 /* Identifiers.xcconfig */ = {isa = PBXFileReference; lastKnownFileType = text.xcconfig; path = Identifiers.xcconfig; sourceTree = "<group>"; };
+		A3000001000000000000AA20 /* Elevated.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Elevated.entitlements; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -46,6 +47,7 @@
 				A3000001000000000000AA01 /* main.swift */,
 				A3000001000000000000AA06 /* Info.plist */,
 				A3000001000000000000AA17 /* Assets.xcassets */,
+				A3000001000000000000AA20 /* Elevated.entitlements */,
 			);
 			path = AppMac;
 			sourceTree = SOURCE_ROOT;
@@ -276,8 +278,10 @@
 			baseConfigurationReference = A3000001000000000000AA18 /* Identifiers.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = AppMac/Elevated.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_APP_SANDBOX = YES;
 				CURRENT_PROJECT_VERSION = 18.42;
 				DEVELOPMENT_TEAM = "$(ELEVATED_APPLE_TEAM_ID)";
 				GENERATE_INFOPLIST_FILE = NO;
@@ -301,8 +305,10 @@
 			baseConfigurationReference = A3000001000000000000AA18 /* Identifiers.xcconfig */;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				CODE_SIGN_ENTITLEMENTS = AppMac/Elevated.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				COMBINE_HIDPI_IMAGES = YES;
+				ENABLE_APP_SANDBOX = YES;
 				CURRENT_PROJECT_VERSION = 18.42;
 				DEVELOPMENT_TEAM = "$(ELEVATED_APPLE_TEAM_ID)";
 				GENERATE_INFOPLIST_FILE = NO;
