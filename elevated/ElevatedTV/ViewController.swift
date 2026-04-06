@@ -21,6 +21,13 @@ public class ViewController: UIViewController {
     private var isScrubbing = false
     private var scrubTime: Double = 0
 
+    // FPS debug overlay
+    private let fpsLabel = UILabel()
+    private var fpsVisible = false
+    private var lastFrameTime: CFTimeInterval = 0
+    private var frameCount: Int = 0
+    private var currentFPS: Double = 0
+
     public override func viewDidLoad() {
         super.viewDidLoad()
         view.backgroundColor = .black
@@ -37,9 +44,9 @@ public class ViewController: UIViewController {
         mtkView.autoResizeDrawable = false
         // A8 (Apple TV HD/4th gen) can't handle 1080p; A15+ (4K) can.
         let is4K = UIScreen.main.nativeBounds.height >= 2160
-        let renderSize = is4K ? CGSize(width: 1920, height: 1080) : CGSize(width: 960, height: 540)
+        let renderSize = is4K ? CGSize(width: 1920, height: 1080) : CGSize(width: 256, height: 144)
         mtkView.drawableSize = renderSize
-        mtkView.preferredFramesPerSecond = is4K ? 60 : 30
+        mtkView.preferredFramesPerSecond = 60
         print("[ElevatedTV] drawableSize: \(mtkView.drawableSize), scaleFactor: \(mtkView.contentScaleFactor), screen: \(UIScreen.main.bounds)")
         mtkView.enableSetNeedsDisplay = false
         mtkView.isPaused = false
@@ -142,6 +149,7 @@ public class ViewController: UIViewController {
     }
 
     @objc private func updateTransport() {
+        updateFPS()
         guard transportView.alpha > 0 else { return }
         let t = isScrubbing ? scrubTime : renderer.currentTime
         let duration = kDemoDuration
@@ -184,6 +192,39 @@ public class ViewController: UIViewController {
         }
     }
 
+    // MARK: - FPS Overlay
+
+    private func setupFPSOverlay() {
+        fpsLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 24, weight: .medium)
+        fpsLabel.textColor = .white
+        fpsLabel.backgroundColor = UIColor.black.withAlphaComponent(0.5)
+        fpsLabel.textAlignment = .center
+        fpsLabel.layer.cornerRadius = 6
+        fpsLabel.clipsToBounds = true
+        fpsLabel.translatesAutoresizingMaskIntoConstraints = false
+        fpsLabel.isHidden = true
+        view.addSubview(fpsLabel)
+        NSLayoutConstraint.activate([
+            fpsLabel.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 16),
+            fpsLabel.trailingAnchor.constraint(equalTo: view.safeAreaLayoutGuide.trailingAnchor, constant: -16),
+            fpsLabel.widthAnchor.constraint(equalToConstant: 120),
+            fpsLabel.heightAnchor.constraint(equalToConstant: 36),
+        ])
+    }
+
+    private func updateFPS() {
+        guard fpsVisible else { return }
+        frameCount += 1
+        let now = CACurrentMediaTime()
+        let elapsed = now - lastFrameTime
+        if elapsed >= 1.0 {
+            currentFPS = Double(frameCount) / elapsed
+            fpsLabel.text = String(format: "%.1f fps", currentFPS)
+            frameCount = 0
+            lastFrameTime = now
+        }
+    }
+
     // MARK: - Gestures
 
     private func setupGestures() {
@@ -197,9 +238,27 @@ public class ViewController: UIViewController {
         playPause.allowedPressTypes = [NSNumber(value: UIPress.PressType.playPause.rawValue)]
         view.addGestureRecognizer(playPause)
 
+        // Long press: toggle FPS debug overlay
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
+        longPress.allowedPressTypes = [NSNumber(value: UIPress.PressType.select.rawValue)]
+        view.addGestureRecognizer(longPress)
+
         // Pan: scrub through the demo
         let pan = UIPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
         view.addGestureRecognizer(pan)
+    }
+
+    @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
+        guard gesture.state == .began else { return }
+        fpsVisible.toggle()
+        if fpsVisible {
+            setupFPSOverlay()
+            fpsLabel.isHidden = false
+            lastFrameTime = CACurrentMediaTime()
+            frameCount = 0
+        } else {
+            fpsLabel.isHidden = true
+        }
     }
 
     @objc private func handleTap() {
