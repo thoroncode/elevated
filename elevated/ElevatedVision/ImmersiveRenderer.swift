@@ -93,9 +93,11 @@ public class ImmersiveRenderer {
 
             let time = renderer.currentTime
             if time >= kDemoDuration && isRunning {
+                isRunning = false  // prevent repeated restart dispatches
                 Task { @MainActor in
-                    synth.seek(to: 0)
-                    renderer.start()
+                    self.synth.seek(to: 0)
+                    self.renderer.start()
+                    self.isRunning = true
                 }
             }
 
