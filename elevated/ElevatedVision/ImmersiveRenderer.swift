@@ -31,9 +31,9 @@ public class ImmersiveRenderer {
         tempView.colorPixelFormat = .bgra8Unorm_srgb
         tempView.depthStencilPixelFormat = .depth32Float
         renderer = Renderer(mtkView: tempView, debug: false, capture: false)
-        // sRGB texture applies linear→sRGB encoding automatically.
-        // Set gamma=1.0 so shader outputs linear values for sRGB to encode.
-        renderer.outputGamma = 1.0
+        // sRGB texture auto-applies pow(1/2.4) encoding. Set 2.4 so the
+        // shader pre-applies pow(c, 2.4) to cancel it, matching macOS output.
+        renderer.outputGamma = 2.4
 
         // Audio
         do {

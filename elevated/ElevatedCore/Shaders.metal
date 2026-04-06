@@ -259,9 +259,7 @@ fragment float4 e(
     }
 
     // Gamma + brightness/contrast
-    // q[15].x: gamma exponent (0.45 for non-sRGB output, 1.0 for sRGB targets)
-    float gamma = u.q[15].x > 0 ? u.q[15].x : 0.45;
-    c = pow(c, gamma) * u.q[2].z + u.q[2].y;
+    c = pow(c, 0.45) * u.q[2].z + u.q[2].y;
 
     // Vignette
     c *= 0.4 + 9.6*o.x*o.y*(1-o.x)*(1-o.y);
@@ -276,6 +274,12 @@ fragment float4 e(
     c.x += 0.01 * t0.sample(s0, o + float2(0.1, 0)).r;
     c.y += 0.01 * t0.sample(s0, o + float2(0.2, 0)).r;
     c.z += 0.01 * t0.sample(s0, o + float2(0.3, 0)).r;
+
+    // q[15].x > 0: rendering to sRGB texture (visionOS). Metal auto-applies
+    // pow(1/2.4) sRGB encoding, so pre-apply pow(2.4) to cancel it out.
+    // This preserves the exact macOS look (gamma, brightness, vignette, grain).
+    if (u.q[15].x > 0)
+        c = pow(saturate(c), u.q[15].x);
 
     return float4(c, 0);
 }
