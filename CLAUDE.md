@@ -76,6 +76,16 @@ This sets `core.sshCommand` in `.git/config` so all subsequent git operations (f
 - **Background muting**: iOS + tvOS pause renderer + audio + stop MTKView on background
 - **visionOS immersive (WIP)**: CompositorServices + ARKit head tracking, demo camera position + head orientation, needs API fixes
 
+## Xcode Cloud Build Strategy
+
+Current: all workflows trigger on every push to `main` (wasteful).
+
+Planned: single `release` branch triggers all workflows. Develop freely on `main` with no CI builds.
+- To release: `git push origin main:release`
+- Configure each workflow's Start Conditions in App Store Connect to watch `release` branch only
+- Manual trigger in ASC available for ad-hoc builds during development
+- TODO: implement once all platforms build cleanly
+
 ## iOS Simulator
 
 - **Landscape orientation**: iPhone always launches in portrait (Apple TN2244). The app rotates to landscape automatically, but the simulator window stays portrait. Rotate manually or use:
