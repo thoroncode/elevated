@@ -182,6 +182,10 @@ public class Renderer: NSObject, MTKViewDelegate {
         vi: matrix_identity_float4x4,
         resolution: .zero, time: 0, _pad: 0)
 
+    /// Gamma exponent for post-processing (0.45 for non-sRGB, 1.0 for sRGB targets).
+    /// Set to 1.0 when rendering to an sRGB texture to avoid double-gamma.
+    public var outputGamma: Float = 0
+
     // Pipelines
     var gbufferPSO:  MTLRenderPipelineState!
     var deferredPSO: MTLRenderPipelineState!
@@ -552,6 +556,9 @@ public class Renderer: NSObject, MTKViewDelegate {
             uniforms.setQ(5 + i, SIMD4(syncVals[i], 0, 0, 0))
         }
 
+        // q[15]: output gamma (0 = default 0.45, 1.0 = linear for sRGB targets)
+        uniforms.setQ(15, SIMD4(outputGamma, 0, 0, 0))
+
         // View matrix — exact port of constructMatrix() from demo_deb.cpp:
         // D3DXMatrixLookAtLH(mat, pptr[0].xyz, pptr[1].xyz, up)
         // up = {sin(roll), cos(roll), 0} where roll = pptr[0].w = .3*cos(t*2)
@@ -763,6 +770,12 @@ public class Renderer: NSObject, MTKViewDelegate {
     /// The camera FOV in radians at the current sync time.
     public var demoCameraFov: Float {
         return uniforms.getQ(0).w
+    }
+
+    /// The full view-projection matrix from the demo's camera path.
+    /// Matches the macOS render exactly (correct FOV, roll, aspect).
+    public var demoViewProjection: simd_float4x4 {
+        return uniforms.v
     }
 
     // ── MTKViewDelegate ────────────────────────────────────────────────────

@@ -24,13 +24,16 @@ public class ImmersiveRenderer {
             fatalError("Metal not available")
         }
 
-        // Create a temporary MTKView for Renderer pipeline/resource init.
-        // Use .bgra8Unorm so the postPSO matches the .bgra8Unorm texture
-        // views we create from the sRGB drawable (avoids double-gamma).
+        // Use .bgra8Unorm_srgb to match CompositorLayer drawable format.
+        // Set outputGamma = 1.0 so the shader outputs linear values —
+        // the sRGB texture then applies the correct gamma encoding.
         let tempView = MTKView(frame: CGRect(x: 0, y: 0, width: 1920, height: 1080), device: device)
-        tempView.colorPixelFormat = .bgra8Unorm
+        tempView.colorPixelFormat = .bgra8Unorm_srgb
         tempView.depthStencilPixelFormat = .depth32Float
         renderer = Renderer(mtkView: tempView, debug: false, capture: false)
+        // sRGB texture applies linear→sRGB encoding automatically.
+        // Set gamma=1.0 so shader outputs linear values for sRGB to encode.
+        renderer.outputGamma = 1.0
 
         // Audio
         do {
@@ -101,8 +104,9 @@ public class ImmersiveRenderer {
             let size = CGSize(width: tex.width, height: tex.height)
             renderer.updateUniformsForTime(time, size: size)
 
-            let camPos = renderer.demoCameraPosition
-            let camTarget = renderer.demoCameraTarget
+            // Use the demo's own VP matrix (matching macOS exactly)
+            // This includes the correct FOV, roll, and camera path.
+            let demoVP = renderer.demoViewProjection
 
             // Set device anchor on drawable for reprojection
             drawable.deviceAnchor = deviceAnchor
@@ -110,24 +114,12 @@ public class ImmersiveRenderer {
             guard let cmd = renderer.cmdQueue.makeCommandBuffer() else { continue }
 
             for viewIndex in 0..<drawable.views.count {
-                let srgbTexture = drawable.colorTextures[viewIndex]
+                let texture = drawable.colorTextures[viewIndex]
 
-                // Create a .bgra8Unorm view of the sRGB drawable texture.
-                // The shader already outputs gamma-corrected values (like macOS),
-                // so we write raw bytes to avoid double-gamma from sRGB encoding.
-                let outputTexture = srgbTexture.makeTextureView(pixelFormat: .bgra8Unorm)
-                                    ?? srgbTexture
-
-                // Per-eye projection from CompositorServices
-                let projMatrix = drawable.computeProjection(
-                    convention: .rightUpForward, viewIndex: viewIndex)
-
-                // Fixed demo camera — preplanned flight path, no head tracking
-                let viewMatrix = lookAtLH(eye: camPos, center: camTarget, up: SIMD3(0, 1, 0))
-                let vp = projMatrix * viewMatrix
-
-                renderer.renderFrame(commandBuffer: cmd, outputTexture: outputTexture,
-                                    viewProjection: vp, size: size)
+                // Use demo's own view-projection for preplanned flight
+                // (same as macOS — correct FOV, roll, camera path)
+                renderer.renderFrame(commandBuffer: cmd, outputTexture: texture,
+                                    viewProjection: demoVP, size: size)
             }
 
             drawable.encodePresent(commandBuffer: cmd)

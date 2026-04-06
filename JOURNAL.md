@@ -4,6 +4,33 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 
 ---
 
+## 2026-04-06 — visionOS immersive renderer: preplanned flight working
+
+**Goal**: Get the visionOS immersive space rendering the Elevated demo identically to macOS — correct colors, correct camera path, no crashes.
+
+**Problem 1 — Washed-out sky (blown-out white)**:
+CompositorServices provides its own projection matrix via `drawable.computeProjection()` with a very wide FOV (~100°) matching the device optics. The demo's intended FOV is much narrower (varies with sync data). The wide FOV showed mostly sky, and since sky values exceed 1.0 (additive terms in the shader), they clamp to white regardless of gamma correction.
+
+**Fix**: Use the demo's own view-projection matrix (`renderer.demoViewProjection`) instead of the CompositorServices projection. This gives the exact same camera path, FOV, and roll as the macOS version. Added a `demoViewProjection` public accessor on `Renderer`.
+
+**Problem 2 — sRGB double-gamma**:
+CompositorServices requires `.bgra8Unorm_srgb` drawable format (crashes with `.bgra8Unorm`). The post-processing shader originally hardcoded `pow(c, 0.45)` for gamma encoding. With sRGB textures, Metal automatically applies linear→sRGB encoding (~pow(1/2.2)), causing double-gamma.
+
+**Fix**: Made the shader gamma exponent configurable via `u.q[15].x` uniform. For visionOS (sRGB target), set `outputGamma = 1.0` so the shader outputs linear values and lets sRGB encoding handle gamma. For macOS/iOS (non-sRGB), the default 0.45 is preserved. Key insight: `pow(c, 1.0)` + sRGB encoding ≈ same visual result as `pow(c, 0.45)` on non-sRGB display.
+
+**Problem 3 — Camera had no roll**:
+The visionOS renderer used a fixed `up = (0,1,0)` and manually constructed the view matrix from `demoCameraPosition`/`demoCameraTarget`. This missed the demo's camera roll (`0.3 * cos(t * camSpeed * 2)`). Using the full demo VP matrix includes roll automatically.
+
+**Approaches tried and abandoned**:
+- `makeTextureView(.bgra8Unorm)` on sRGB drawable → crash, no `MTLTextureUsagePixelFormatView` flag
+- Offscreen `.bgra8Unorm` texture + blit to sRGB drawable → black screen
+- `outputGamma = 0.45 * 2.4 = 1.08` → still washed out (correct math but wide FOV was the real issue)
+- Switching CompositorLayer to `.bgra8Unorm` → crashes (`CPImmersiveScene` assertion)
+
+**Key debugging insight**: When testing gamma values (1.0, 1.08, 5.0) all produced identical-looking screenshots, it initially seemed like the uniform wasn't working. Closer inspection revealed gamma=5.0 DID darken terrain edges — the sky was unchanged because values ≥ 1.0 clamp regardless of gamma. The real problem was the wide FOV showing too much sky.
+
+---
+
 ## 2026-04-03 — Multi-account Git/SSH setup (new machine)
 
 **Problem**: Two GitHub accounts (`pkoistin` for work, `thoroncode` for personal) share one machine. Default SSH key `id_ed25519` belongs to `pkoistin`. Elevated repo needs to authenticate and commit as `thoroncode`.

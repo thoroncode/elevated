@@ -11,6 +11,7 @@
 # Captured frames:  /tmp/elevated_cap/cap_XXXX.png
 
 set -euo pipefail
+shopt -s nullglob
 
 REF="/tmp/elevated_ref"
 CAP="/tmp/elevated_cap"
@@ -19,7 +20,13 @@ CMP="/tmp/elevated_cmp"
 mkdir -p "$CMP"
 
 if [[ $# -eq 0 ]]; then
-    FRAMES=$(ls "$REF"/ref_*.png 2>/dev/null | sed 's/.*ref_\([0-9]*\)\.png/\1/' | sort -n)
+    REF_FILES=( "$REF"/ref_*.png )
+    if [[ ${#REF_FILES[@]} -eq 0 ]]; then
+        echo "No reference frames found in $REF"
+        echo "Run \`make ref\` first, then \`make capture\` and \`make compare\`."
+        exit 0
+    fi
+    FRAMES=$(printf '%s\n' "${REF_FILES[@]}" | sed 's/.*ref_\([0-9]*\)\.png/\1/' | sort -n)
 elif [[ $# -eq 1 ]]; then
     FRAMES=$(printf "%04d" "$1")
 else

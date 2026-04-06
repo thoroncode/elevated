@@ -259,7 +259,9 @@ fragment float4 e(
     }
 
     // Gamma + brightness/contrast
-    c = pow(c, 0.45) * u.q[2].z + u.q[2].y;
+    // q[15].x: gamma exponent (0.45 for non-sRGB output, 1.0 for sRGB targets)
+    float gamma = u.q[15].x > 0 ? u.q[15].x : 0.45;
+    c = pow(c, gamma) * u.q[2].z + u.q[2].y;
 
     // Vignette
     c *= 0.4 + 9.6*o.x*o.y*(1-o.x)*(1-o.y);
