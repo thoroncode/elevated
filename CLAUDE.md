@@ -55,7 +55,11 @@ This sets `core.sshCommand` in `.git/config` so all subsequent git operations (f
 ## tvOS Key Findings
 
 - **Code signing workaround**: No registered tvOS devices → archive unsigned (`CODE_SIGNING_ALLOWED=NO`), sign at export with `-allowProvisioningUpdates`
-- **Performance**: Must use `autoResizeDrawable = false` + explicit `drawableSize` to force render resolution. `contentScaleFactor` alone is unreliable. 1080p runs smooth on A15, 4K is unusable.
+- **Performance**: Must use `autoResizeDrawable = false` + explicit `drawableSize` to force render resolution. `contentScaleFactor` alone is unreliable.
+- **Mesh LOD**: 342×342 grid for A8 (proven identical: 1023 % 341 == 0). 9× fewer triangles, zero visual difference. Valid LOD sizes: [4, 12, 32, 34, 94, 342, 1024].
+- **Apple TV HD (A8)**: 342 mesh + 240p = ~24fps. Was 1024 mesh + 144p = ~11fps. Vertex-bound → fragment-bound transition at ~270p.
+- **Apple TV 4K (A15+)**: 1024 mesh + 1080p, runs smooth at 60fps.
+- **Idle timer**: `UIApplication.shared.isIdleTimerDisabled = true` prevents screensaver during playback.
 - **App icons**: tvOS uses `.imagestack` (layered, min 2 layers) in `.brandassets`. Role for App Store icon is `primary-app-icon` at 1280x768 — NOT a separate `app-store-icon` role.
 - **Top Shelf**: needs both @1x (2320x720) and @2x (4640x1440) wide images
 - **Upload method**: `scripts/write_export_options_plist.sh` + `xcodebuild -exportArchive` — uses Xcode's built-in auth, no app-specific password needed
@@ -63,9 +67,9 @@ This sets `core.sshCommand` in `.git/config` so all subsequent git operations (f
 ## Architecture
 
 - **3-pass Metal**: G-buffer (terrain mesh) → deferred shading → post-processing
-- **Uniforms**: q[0..12], VP matrix + inverse VP
+- **Uniforms**: q[0..12], q[14]=mesh grid size, q[15]=sRGB gamma, VP matrix + inverse VP
 - **Camera**: CPU `m1Camera(xdot:)` replicates D3D9 m1 pixel shader
-- **Terrain**: 1024×1024 grid ±52 units, alternating quad diagonals
+- **Terrain**: configurable grid (default 1024×1024) ±52 units, alternating quad diagonals, vertex shader reads size from q[14].x
 - **Renderer.renderFrame()**: headless rendering with custom VP matrix (for visionOS VR)
 - **Background handling**: MTKView.isPaused=true on background, preserves play/pause state
 

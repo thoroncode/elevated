@@ -1247,3 +1247,54 @@ Checked the local Codex memory store under `~/.codex/memories` for entries refer
 project (`elevated`, `/Users/pk/src/elevated`, `thoroncode/elevated`, and the Apple target names).
 That search returned no hits, so there was no Elevated-specific local Codex memory to dump or
 clear.
+
+### Mesh LOD Optimization for Apple TV HD A8 (2026-04-07)
+
+The Apple TV HD (4th gen, A8 chip) was running at ~11fps with the full 1024×1024 terrain mesh
+at 144p. The bottleneck was vertex throughput: 1024² grid = 2.09M triangles, 8-octave FBM per
+vertex = ~200M texture fetches/frame. Reducing resolution from 540p to 144p had no effect,
+confirming the vertex shader was the bottleneck.
+
+**The 512 mesh failure**: An earlier attempt to use 512×512 mesh "messed up" the art. Root cause:
+the terrain vertex shader computes XZ as `(gridIndex / (size-1) - 0.5) * 104.0`. For a 512 grid,
+vertex positions are at different XZ coordinates than the 1024 grid (1023 / 511 = 2.002..., not
+an integer), so `fbm()` samples different terrain heights → visibly different landscape.
+
+**The mathematical proof**: For mesh LOD to be visually identical, every vertex in the reduced
+grid must land on the exact same XZ coordinate as a vertex in the 1024 grid. This requires
+`(1024-1) % (lodSize-1) == 0`. A test suite (`testValidLODGridSizes`) discovers all valid sizes:
+
+| LOD Size | Step | Triangles | Reduction |
+|----------|------|-----------|-----------|
+| 4×4      | 341  | 18        | 99.999%   |
+| 12×12    | 93   | 242       | 99.99%    |
+| 32×32    | 33   | 1,922     | 99.9%     |
+| 34×34    | 31   | 2,178     | 99.9%     |
+| 94×94    | 11   | 17,298    | 99.2%     |
+| 342×342  | 3    | 232,562   | 88.9%     |
+| 1024×1024| 1    | 2,093,058 | baseline  |
+
+**342×342 chosen**: 9× fewer triangles, every vertex produces identical `fbm()` output. The test
+`testMeshLODSharedVerticesProduceIdenticalXZ` verifies all shared vertices match to 1e-4 accuracy.
+
+**Implementation**: The shader now reads grid size from uniform `q[14].x` instead of hardcoded
+1024. All platforms default to 1024 (no change). Only tvOS Apple TV HD passes 342.
+
+**Resolution/mesh proportion**: The ideal is ~2-4 pixels per triangle. 342 mesh + 240p gives
+~0.4 px/tri (still vertex-heavy), but it's the best balance on A8 hardware. At 540p the ratio
+was 2.2 px/tri (ideal) but fragment-bound at 8fps.
+
+**Performance sweep on Apple TV HD A8** (all with 342×342 mesh):
+
+| Resolution | Pixels | FPS     | Bottleneck |
+|------------|--------|---------|------------|
+| 144p       | 37K    | 36-38   | vertex     |
+| 192p       | 66K    | 28-34   | mixed      |
+| 240p       | 102K   | 24-27   | **chosen** |
+| 270p       | 130K   | 20      | fragment   |
+| 360p       | 231K   | 15-17   | fragment   |
+| 540p       | 518K   | 7-10    | fragment   |
+
+**Other fixes**: Disabled idle timer (`isIdleTimerDisabled = true`) to prevent tvOS screensaver
+during playback. Removed unused CPU mesh generation code (`makeTerrainMesh`) — the vertex shader
+generates terrain entirely from `vertex_id`.
