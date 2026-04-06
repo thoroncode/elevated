@@ -28,8 +28,12 @@ write_if_present ELEVATED_APP_IDENTIFIER "${ELEVATED_APP_IDENTIFIER:-}"
 
 "$repo_path/stamp-version.sh"
 
-# Run Swift package tests (ElevatedCore test suite)
-echo "Running swift test..."
-cd "$repo_path/elevated"
-swift test 2>&1
-echo "Tests passed."
+# Run Swift package tests (macOS only — swift test can't cross-compile)
+if [ "${CI_XCODEBUILD_ACTION:-}" = "" ] || [ "${CI_PRODUCT_PLATFORM:-}" = "macOS" ]; then
+    echo "Running swift test..."
+    cd "$repo_path/elevated"
+    swift test 2>&1
+    echo "Tests passed."
+else
+    echo "Skipping swift test on ${CI_PRODUCT_PLATFORM:-unknown} (macOS only)."
+fi
