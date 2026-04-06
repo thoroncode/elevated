@@ -18,6 +18,7 @@ public class ImmersiveRenderer {
     private let arSession = ARKitSession()
     private let worldTracking = WorldTrackingProvider()
     nonisolated(unsafe) private var isRunning = false
+    nonisolated(unsafe) private var isStopped = false
 
     public init(layerRenderer: LayerRenderer) throws {
         guard let device = MTLCreateSystemDefaultDevice() else {
@@ -25,8 +26,6 @@ public class ImmersiveRenderer {
         }
 
         // Use .bgra8Unorm_srgb to match CompositorLayer drawable format.
-        // Set outputGamma = 1.0 so the shader outputs linear values —
-        // the sRGB texture then applies the correct gamma encoding.
         let tempView = MTKView(frame: CGRect(x: 0, y: 0, width: 1920, height: 1080), device: device)
         tempView.colorPixelFormat = .bgra8Unorm_srgb
         tempView.depthStencilPixelFormat = .depth32Float
@@ -35,13 +34,14 @@ public class ImmersiveRenderer {
         // shader pre-applies pow(c, 2.4) to cancel it, matching macOS output.
         renderer.outputGamma = 2.4
 
-        // Audio
+        // Audio — use .ambient so system auto-stops on background
         do {
-            try AVAudioSession.sharedInstance().setCategory(.playback, mode: .default)
+            try AVAudioSession.sharedInstance().setCategory(.ambient, mode: .default)
             try AVAudioSession.sharedInstance().setActive(true)
         } catch {
             print("[ImmersiveRenderer] Audio session failed: \(error)")
         }
+
     }
 
     public func start() async {
@@ -67,8 +67,17 @@ public class ImmersiveRenderer {
         }
     }
 
+    /// Stop everything — call when immersive space is dismissed.
+    public func stop() {
+        isStopped = true
+        isRunning = false
+        synth.pause()
+        renderer.pause()
+        arSession.stop()
+    }
+
     nonisolated public func renderLoop(_ layerRenderer: LayerRenderer) {
-        while true {
+        while !isStopped {
             guard layerRenderer.state == .running else {
                 if layerRenderer.state == .paused {
                     layerRenderer.waitUntilRunning()
@@ -130,12 +139,11 @@ public class ImmersiveRenderer {
             frame.endSubmission()
         }
 
-        // Render loop exited (immersive space dismissed) — stop audio and renderer
-        isRunning = false
-        Task { @MainActor in
-            self.synth.pause()
-            self.renderer.pause()
-            self.arSession.stop()
+        // Render loop exited — ensure cleanup
+        if !isStopped {
+            Task { @MainActor in
+                self.stop()
+            }
         }
     }
 

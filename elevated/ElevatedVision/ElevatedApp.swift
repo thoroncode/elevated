@@ -5,8 +5,14 @@
 import SwiftUI
 import CompositorServices
 
+@Observable @MainActor
+class AppState {
+    var renderer: ImmersiveRenderer?
+}
+
 public struct ElevatedApp: App {
     @State private var immersionStyle: ImmersionStyle = .full
+    @State private var appState = AppState()
 
     public init() {}
 
@@ -18,10 +24,19 @@ public struct ElevatedApp: App {
         ImmersiveSpace(id: "elevated") {
             CompositorLayer(configuration: ContentConfiguration()) { layerRenderer in
                 Task { @MainActor in
+                    // Stop any previous renderer (e.g. re-entering immersive space)
+                    appState.renderer?.stop()
+
                     do {
                         let renderer = try ImmersiveRenderer(layerRenderer: layerRenderer)
+                        appState.renderer = renderer
                         await renderer.start()
                         renderer.renderLoop(layerRenderer)
+                        // renderLoop returned — clean up
+                        renderer.stop()
+                        if appState.renderer === renderer {
+                            appState.renderer = nil
+                        }
                     } catch {
                         print("[ElevatedApp] Failed to create renderer: \(error)")
                     }
