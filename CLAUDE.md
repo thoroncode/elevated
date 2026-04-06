@@ -75,3 +75,11 @@ This sets `core.sshCommand` in `.git/config` so all subsequent git operations (f
 - **iOS scrub bar**: Tap to show transport, pan to scrub (only when transport visible), preserves state
 - **Background muting**: iOS + tvOS pause renderer + audio + stop MTKView on background
 - **visionOS immersive (WIP)**: CompositorServices + ARKit head tracking, demo camera position + head orientation, needs API fixes
+
+## iOS Simulator
+
+- **Landscape orientation**: iPhone always launches in portrait (Apple TN2244). The app rotates to landscape automatically, but the simulator window stays portrait. Rotate manually or use:
+  ```
+  osascript -e 'tell application "Simulator" to activate' -e 'tell application "System Events" to keystroke (ASCII character 29) using command down'
+  ```
+  On real hardware the landscape transition is instant and invisible.
