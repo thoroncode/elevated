@@ -6,7 +6,9 @@ import MetalKit
 import AVFoundation
 import ElevatedCore
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
+    public override init() { super.init() }
+
     private static let releaseStartupDelay: TimeInterval = 5
     private static let fullscreenCursorIdleDelay: TimeInterval = 0.1
 
@@ -33,7 +35,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         [renderer, comparisonRenderer].compactMap { $0 }
     }
 
-    func applicationDidFinishLaunching(_ notification: Notification) {
+    public func applicationDidFinishLaunching(_ notification: Notification) {
         guard let device = MTLCreateSystemDefaultDevice() else {
             fatalError("Metal is not available on this device")
         }
@@ -350,8 +352,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.mainMenu = mainMenu
     }
 
-    func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
-    func applicationWillTerminate(_ notification: Notification) { deactivateFullscreenCursorPolicy() }
+    public func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { true }
+    public func applicationWillTerminate(_ notification: Notification) { deactivateFullscreenCursorPolicy() }
 
     private func shouldAutoHideFullscreenCursor() -> Bool {
         fullscreenCursorActive && !debugActive
@@ -411,17 +413,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSCursor.unhide()
     }
 
-    func windowWillEnterFullScreen(_ notification: Notification) {
+    public func windowWillEnterFullScreen(_ notification: Notification) {
         fullscreenCursorActive = true
         refreshFullscreenCursorPolicy()
     }
 
-    func windowDidEnterFullScreen(_ notification: Notification) {
+    public func windowDidEnterFullScreen(_ notification: Notification) {
         fullscreenCursorActive = true
         refreshFullscreenCursorPolicy()
     }
 
-    func windowWillExitFullScreen(_ notification: Notification) {
+    public func windowWillExitFullScreen(_ notification: Notification) {
         fullscreenCursorActive = false
         deactivateFullscreenCursorPolicy()
     }

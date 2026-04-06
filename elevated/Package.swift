@@ -6,6 +6,7 @@ let package = Package(
     platforms: [.macOS("26.0"), .iOS("26.0"), .tvOS("26.0"), .visionOS("26.0")],
     products: [
         .library(name: "ElevatedCore",   targets: ["ElevatedCore"]),
+        .library(name: "ElevatedMac",    targets: ["ElevatedMac"]),
         .library(name: "ElevatedIOS",    targets: ["ElevatedIOS"]),
         .library(name: "ElevatedTV",     targets: ["ElevatedTV"]),
         .library(name: "ElevatedVision", targets: ["ElevatedVision"]),
@@ -49,11 +50,24 @@ let package = Package(
             ]
         ),
 
-        // ── macOS app (AppKit, debug overlay, transport bar) ──────────────
-        .executableTarget(
+        // ── macOS app library (AppKit, debug overlay, transport bar) ─────
+        .target(
             name: "ElevatedMac",
             dependencies: ["ElevatedCore"],
             path: "ElevatedMac",
+            swiftSettings: [
+                .unsafeFlags(["-framework", "Cocoa"])
+            ],
+            linkerSettings: [
+                .linkedFramework("Cocoa"),
+            ]
+        ),
+
+        // ── macOS CLI executable (thin wrapper for `make app`) ───────────
+        .executableTarget(
+            name: "ElevatedMacCLI",
+            dependencies: ["ElevatedMac"],
+            path: "ElevatedMacCLI",
             swiftSettings: [
                 .unsafeFlags(["-framework", "Cocoa"])
             ],

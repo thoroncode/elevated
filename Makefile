@@ -1,6 +1,6 @@
 .PHONY: all help version stamp-version build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots ios-submit ios-add-tester tv-release tv-submit
 
-BIN       = elevated/.build/release/ElevatedMac
+BIN       = elevated/.build/release/ElevatedMacCLI
 APP       = Elevated.app
 APP_BIN   = $(APP)/Contents/MacOS/ElevatedMac
 ICON_TIME = 185.867
@@ -77,7 +77,7 @@ stamp-version:
 	@./stamp-version.sh
 
 build:
-	swift build -c release --package-path elevated --product ElevatedMac
+	swift build -c release --package-path elevated --product ElevatedMacCLI
 
 # Normal playback: fullscreen by default, with a 5s startup delay.
 run: app
