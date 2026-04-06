@@ -25,6 +25,15 @@ git config core.sshCommand "ssh -i ~/.ssh/thoroncode-m3"
 
 This sets `core.sshCommand` in `.git/config` so all subsequent git operations (fetch, push, pull) use the correct key automatically.
 
+## Xcode Cloud
+
+- **Workflow creation**: In Xcode 16+, use **Integrate** menu (not Product → Xcode Cloud)
+- **Post-clone script**: `ci_scripts/ci_post_clone.sh` generates `Identifiers.local.xcconfig` from CI env vars
+- **Required env vars** (set as secrets in workflow): `ELEVATED_APPLE_TEAM_ID`, `ELEVATED_APP_IDENTIFIER`
+- **Version stamping**: `stamp-version.sh` runs automatically in post-clone
+- **Code signing**: Xcode Cloud manages certificates automatically (cloud-managed)
+- **Workflows cannot be created from CLI** — initial setup must be done in Xcode, then manageable from App Store Connect web UI
+
 ## App Store / TestFlight
 
 - **Local release config**: Xcode identifiers live in `Config/Identifiers.local.xcconfig` (gitignored); Fastlane/Makefile identifiers live in `fastlane/.env` (gitignored)
