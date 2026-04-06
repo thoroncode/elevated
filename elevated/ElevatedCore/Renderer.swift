@@ -284,7 +284,7 @@ public class Renderer: NSObject, MTKViewDelegate {
         self.view = mtkView
         mtkView.isPaused = true          // hold until synthesis is ready
         mtkView.depthStencilPixelFormat = .depth32Float
-        mtkView.colorPixelFormat        = .bgra8Unorm
+        if mtkView.colorPixelFormat == .invalid { mtkView.colorPixelFormat = .bgra8Unorm }
         mtkView.sampleCount             = 1
 
         buildPipelines(mtkView: mtkView)
