@@ -35,8 +35,11 @@ public class ViewController: UIViewController {
         mtkView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         mtkView.contentScaleFactor = 1.0
         mtkView.autoResizeDrawable = false
-        mtkView.drawableSize = CGSize(width: 1920, height: 1080)  // force 1080p
-        mtkView.preferredFramesPerSecond = 60
+        // A8 (Apple TV HD/4th gen) can't handle 1080p; A15+ (4K) can.
+        let is4K = UIScreen.main.nativeBounds.height >= 2160
+        let renderSize = is4K ? CGSize(width: 1920, height: 1080) : CGSize(width: 960, height: 540)
+        mtkView.drawableSize = renderSize
+        mtkView.preferredFramesPerSecond = is4K ? 60 : 30
         print("[ElevatedTV] drawableSize: \(mtkView.drawableSize), scaleFactor: \(mtkView.contentScaleFactor), screen: \(UIScreen.main.bounds)")
         mtkView.enableSetNeedsDisplay = false
         mtkView.isPaused = false

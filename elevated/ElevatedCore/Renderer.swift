@@ -274,10 +274,15 @@ public class Renderer: NSObject, MTKViewDelegate {
                       tf / fps / 3600, tf / fps / 60 % 60, tf / fps % 60, tf % fps)
     }
 
+    /// Terrain mesh grid size. 1024 = full quality, 512 = quarter triangles, 256 = 1/16.
+    public var terrainMeshSize: Int = 1024
+
     public init(mtkView: MTKView,
                 debug: Bool = false,
                 capture: Bool = false,
-                shaderVariant: ShaderVariant = .optimized) {
+                shaderVariant: ShaderVariant = .optimized,
+                terrainMeshSize: Int = 1024) {
+        self.terrainMeshSize = terrainMeshSize
         self.shaderVariant = shaderVariant
         self.debugMode   = debug
         self.captureMode = capture
@@ -402,7 +407,7 @@ public class Renderer: NSObject, MTKViewDelegate {
         // D3DXTessellateNPatches(..., 512), which is substantially denser than
         // the baseline 256x256 grid. Match the extent first, then increase
         // density to test for water seams caused by coarse triangle interpolation.
-        let (vb, ib, ic) = makeTerrainMesh(device: device, size: 1024, scale: 104)
+        let (vb, ib, ic) = makeTerrainMesh(device: device, size: terrainMeshSize, scale: 104)
         terrainVBuf = vb; terrainIBuf = ib; terrainIndexCount = ic
     }
 
