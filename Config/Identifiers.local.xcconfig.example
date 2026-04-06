@@ -2,10 +2,6 @@
 // In Xcode Cloud, provide the same keys as environment variables and
 // ci_scripts/ci_post_clone.sh will generate the local override file.
 
-ELEVATED_IOS_TEAM_ID = YOURTEAMID
-ELEVATED_TVOS_TEAM_ID = YOURTEAMID
-ELEVATED_VISIONOS_TEAM_ID = YOURTEAMID
+ELEVATED_APPLE_TEAM_ID = YOURTEAMID
 
-ELEVATED_IOS_APP_IDENTIFIER = org.example.elevated
-ELEVATED_TVOS_APP_IDENTIFIER = org.example.elevated
-ELEVATED_VISIONOS_APP_IDENTIFIER = org.example.elevated.vision
+ELEVATED_APP_IDENTIFIER = org.example.elevated

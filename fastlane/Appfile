@@ -1,8 +1,8 @@
 ios_apple_id = ENV["FASTLANE_USER"]
 appletv_apple_id = ENV["FASTLANE_APPLETV_USER"] || ios_apple_id
 app_store_team_id = ENV.fetch("ELEVATED_ASC_TEAM_ID")
-ios_app_identifier = ENV.fetch("ELEVATED_IOS_APP_IDENTIFIER")
-appletv_app_identifier = ENV["ELEVATED_TVOS_APP_IDENTIFIER"] || ios_app_identifier
+ios_app_identifier = ENV.fetch("ELEVATED_APP_IDENTIFIER")
+appletv_app_identifier = ios_app_identifier
 
 app_identifier ios_app_identifier
 team_id app_store_team_id

@@ -16,9 +16,8 @@ VERSION_SCRIPT = ./scripts/version.sh
 -include fastlane/.env
 
 ELEVATED_ASC_TEAM_ID ?= TEAMIDPLACEHOLDER
-ELEVATED_IOS_APP_IDENTIFIER ?= example.invalid.elevated.ios
-ELEVATED_TVOS_APP_IDENTIFIER ?= example.invalid.elevated.tvos
-ELEVATED_VISIONOS_APP_IDENTIFIER ?= example.invalid.elevated.visionos
+ELEVATED_APPLE_TEAM_ID ?= TEAMIDPLACEHOLDER
+ELEVATED_APP_IDENTIFIER ?= example.invalid.elevated
 ELEVATED_MACOS_APP_IDENTIFIER ?= example.invalid.elevated.macos
 ELEVATED_TESTFLIGHT_GROUP ?= Internal Testers
 
@@ -288,7 +287,7 @@ ios-submit:
 # Usage: make ios-add-tester EMAIL=user@example.com
 ios-add-tester:
 	@test -n "$(EMAIL)" || (echo "Usage: make ios-add-tester EMAIL=user@example.com" && exit 1)
-	@$(FASTLANE) pilot add $(EMAIL) -a $(ELEVATED_IOS_APP_IDENTIFIER) -g "$(ELEVATED_TESTFLIGHT_GROUP)"
+	@$(FASTLANE) pilot add $(EMAIL) -a $(ELEVATED_APP_IDENTIFIER) -g "$(ELEVATED_TESTFLIGHT_GROUP)"
 
 # ── Apple TV (tvOS) ───────────────────────────────────────────────────────────
 
