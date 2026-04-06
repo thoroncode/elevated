@@ -845,6 +845,8 @@ public class Renderer: NSObject, MTKViewDelegate {
 
         // ── Pass 3: Post-processing → screen ──────────────────────────────
         rpd.colorAttachments[0].loadAction = .dontCare
+        rpd.depthAttachment.texture = nil          // post-processing needs no depth
+        rpd.stencilAttachment.texture = nil
         if let enc = cmd.makeRenderCommandEncoder(descriptor: rpd) {
             enc.setRenderPipelineState(postPSO)
             enc.setFragmentBytes(&uCopy, length: MemoryLayout<Uniforms>.size, index: 0)

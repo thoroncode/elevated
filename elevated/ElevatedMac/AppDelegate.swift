@@ -585,21 +585,21 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     }
 
     private func loadAboutText() -> String {
-        let execURL = URL(fileURLWithPath: CommandLine.arguments[0])
-        let candidates: [URL?] = [
-            Bundle.main.url(forResource: "LICENSE", withExtension: nil),
-            Bundle.main.resourceURL?.appendingPathComponent("LICENSE"),
-            execURL.deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("Resources/LICENSE"),
-            execURL.deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent().appendingPathComponent("LICENSE"),
-        ]
+        // Embedded from LICENSE — works in every build configuration.
+        return """
+        Winner 4 kB intro at Breakpoint 2009
+        by TBC and RGBA
 
-        for url in candidates.compactMap({ $0 }) {
-            if let text = try? String(contentsOf: url, encoding: .utf8) {
-                return text.trimmingCharacters(in: .whitespacesAndNewlines)
-            }
-        }
+        Music: Puryx (Christian Ronde)
+        Visuals: iq (Inigo Quilez)
+        Synth & optimization: Mentor (Rune L. H. Stubbe)
+        Compressor: Crinkler (crinkler.net)
 
-        return "LICENSE not found."
+        Mac/Metal port: Petri Koistinen <thoron@iki.fi>
+        AI assist: Claude Opus 4.6, ChatGPT/Codex 5.4
+
+        Use freely, blame nobody.
+        """
     }
 
     private func aboutVersionString() -> String {
