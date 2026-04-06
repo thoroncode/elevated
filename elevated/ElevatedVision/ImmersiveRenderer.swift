@@ -26,7 +26,7 @@ public class ImmersiveRenderer {
 
         // Create a temporary MTKView for Renderer pipeline/resource init
         let tempView = MTKView(frame: CGRect(x: 0, y: 0, width: 1920, height: 1080), device: device)
-        tempView.colorPixelFormat = .bgra8Unorm
+        tempView.colorPixelFormat = .bgra8Unorm_srgb
         tempView.depthStencilPixelFormat = .depth32Float
         renderer = Renderer(mtkView: tempView, debug: false, capture: false)
 
@@ -163,7 +163,6 @@ public class ImmersiveRenderer {
 
             drawable.encodePresent(commandBuffer: cmd)
             cmd.commit()
-            cmd.waitUntilCompleted()
 
             frame.endSubmission()
         }
