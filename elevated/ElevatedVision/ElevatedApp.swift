@@ -52,7 +52,7 @@ struct ContentConfiguration: CompositorLayerConfiguration {
                           configuration: inout LayerRenderer.Configuration) {
         let supportsFoveation = capabilities.supportsFoveation
         configuration.depthFormat = .depth32Float
-        configuration.colorFormat = .bgra8Unorm_srgb
+        configuration.colorFormat = .bgra8Unorm
         configuration.isFoveationEnabled = supportsFoveation
         let options: LayerRenderer.Capabilities.SupportedLayoutsOptions = supportsFoveation ? [.foveationEnabled] : []
         let layouts = capabilities.supportedLayouts(options: options)

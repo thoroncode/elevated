@@ -26,7 +26,7 @@ public class ImmersiveRenderer {
 
         // Create a temporary MTKView for Renderer pipeline/resource init
         let tempView = MTKView(frame: CGRect(x: 0, y: 0, width: 1920, height: 1080), device: device)
-        tempView.colorPixelFormat = .bgra8Unorm_srgb
+        tempView.colorPixelFormat = .bgra8Unorm
         tempView.depthStencilPixelFormat = .depth32Float
         renderer = Renderer(mtkView: tempView, debug: false, capture: false)
 
@@ -102,44 +102,53 @@ public class ImmersiveRenderer {
             let camPos = renderer.demoCameraPosition
             let camTarget = renderer.demoCameraTarget
 
-            // Demo forward direction
-            let demoForward = normalize(camTarget - camPos)
-            let demoRight = normalize(cross(SIMD3<Float>(0, 1, 0), demoForward))
-            let demoUp = cross(demoForward, demoRight)
-            let demoBasis = simd_float3x3(columns: (demoRight, demoUp, demoForward))
-
             // Set device anchor on drawable for reprojection
             drawable.deviceAnchor = deviceAnchor
 
-            guard let presentCmd = renderer.cmdQueue.makeCommandBuffer() else { continue }
+            // Use a single command buffer for all eyes + present
+            guard let cmd = renderer.cmdQueue.makeCommandBuffer() else { continue }
 
             for viewIndex in 0..<drawable.views.count {
                 let texture = drawable.colorTextures[viewIndex]
 
-                // Per-eye projection from CompositorServices (LH, near=0 far=1)
+                // Per-eye projection from CompositorServices
                 let projMatrix = drawable.computeProjection(
                     convention: .rightUpForward, viewIndex: viewIndex)
 
-                // View matrix from head tracking
-                var viewMatrix: simd_float4x4
+                // View matrix: demo camera + head tracking
+                let viewMatrix: simd_float4x4
                 if let anchor = deviceAnchor {
-                    let headTransform = anchor.originFromAnchorTransform
-                    // Per-eye view offset
-                    let eyeTransform = drawable.views[viewIndex].transform
-                    let viewTransform = headTransform * eyeTransform
+                    let eyeTransform = anchor.originFromAnchorTransform * drawable.views[viewIndex].transform
+                    let eyePos = SIMD3<Float>(eyeTransform.columns.3.x,
+                                              eyeTransform.columns.3.y,
+                                              eyeTransform.columns.3.z)
+                    // Use demo camera position but apply head rotation for look direction
                     let headRotation = simd_float3x3(
-                        SIMD3(viewTransform.columns.0.x, viewTransform.columns.0.y, viewTransform.columns.0.z),
-                        SIMD3(viewTransform.columns.1.x, viewTransform.columns.1.y, viewTransform.columns.1.z),
-                        SIMD3(viewTransform.columns.2.x, viewTransform.columns.2.y, viewTransform.columns.2.z)
+                        SIMD3(eyeTransform.columns.0.x, eyeTransform.columns.0.y, eyeTransform.columns.0.z),
+                        SIMD3(eyeTransform.columns.1.x, eyeTransform.columns.1.y, eyeTransform.columns.1.z),
+                        SIMD3(eyeTransform.columns.2.x, eyeTransform.columns.2.y, eyeTransform.columns.2.z)
                     )
 
-                    // Combine demo camera direction with head rotation
+                    // Demo forward basis
+                    let demoFwd = normalize(camTarget - camPos)
+                    let demoRight = normalize(cross(SIMD3<Float>(0, 1, 0), demoFwd))
+                    let demoUp = cross(demoFwd, demoRight)
+                    let demoBasis = simd_float3x3(columns: (demoRight, demoUp, demoFwd))
+
                     let r = demoBasis * headRotation
+                    // Offset eye position relative to head in demo space
+                    let headPos = SIMD3<Float>(
+                        anchor.originFromAnchorTransform.columns.3.x,
+                        anchor.originFromAnchorTransform.columns.3.y,
+                        anchor.originFromAnchorTransform.columns.3.z)
+                    let eyeOffset = eyePos - headPos
+                    let eye = camPos + demoBasis * eyeOffset
+
                     viewMatrix = simd_float4x4(columns: (
                         SIMD4(r.columns.0.x, r.columns.1.x, r.columns.2.x, 0),
                         SIMD4(r.columns.0.y, r.columns.1.y, r.columns.2.y, 0),
                         SIMD4(r.columns.0.z, r.columns.1.z, r.columns.2.z, 0),
-                        SIMD4(-dot(r.columns.0, camPos), -dot(r.columns.1, camPos), -dot(r.columns.2, camPos), 1)
+                        SIMD4(-dot(r.columns.0, eye), -dot(r.columns.1, eye), -dot(r.columns.2, eye), 1)
                     ))
                 } else {
                     viewMatrix = lookAtLH(eye: camPos, center: camTarget, up: SIMD3(0, 1, 0))
@@ -147,14 +156,14 @@ public class ImmersiveRenderer {
 
                 let vp = projMatrix * viewMatrix
 
-                guard let cmd = renderer.cmdQueue.makeCommandBuffer() else { continue }
+                // Render all 3 passes into this eye's texture
                 renderer.renderFrame(commandBuffer: cmd, outputTexture: texture,
                                     viewProjection: vp, size: size)
-                cmd.commit()
             }
 
-            drawable.encodePresent(commandBuffer: presentCmd)
-            presentCmd.commit()
+            drawable.encodePresent(commandBuffer: cmd)
+            cmd.commit()
+            cmd.waitUntilCompleted()
 
             frame.endSubmission()
         }
