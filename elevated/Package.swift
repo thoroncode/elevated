@@ -18,8 +18,8 @@ let package = Package(
             path: "CSynth",
             publicHeadersPath: "include",
             cSettings: [
-                .unsafeFlags(["-O3", "-ffast-math", "-march=native"], .when(platforms: [.macOS])),
-                .unsafeFlags(["-O3", "-ffast-math"],                  .when(platforms: [.iOS, .tvOS, .visionOS])),
+                .unsafeFlags(["-O3", "-ffast-math"], .when(platforms: [.macOS])),
+                .unsafeFlags(["-O3", "-ffast-math"], .when(platforms: [.iOS, .tvOS, .visionOS])),
             ],
             linkerSettings: [
                 .linkedFramework("Accelerate")
