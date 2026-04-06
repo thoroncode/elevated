@@ -103,19 +103,23 @@ vertex V a(
 {
     // Procedural XZ from vertex_id — no vertex buffer needed.
     // Non-indexed draw: vertex_id encodes triangle+vertex, matches the CPU index pattern.
+    // Grid size from q[14].x (default 1024). LOD sizes must satisfy
+    // (1024-1) % (size-1) == 0 so every vertex lands on the full grid.
+    uint sz = uint(u.q[14].x);           // e.g. 1024, 342, 94
+    uint edge = sz - 1u;                  // quads per row
     uint tri = i / 3, vert = i % 3, quad = tri / 2, qt = tri % 2;
-    uint qx = quad % 1023u, qz = quad / 1023u;
-    uint bl = qz * 1024u + qx;
+    uint qx = quad % edge, qz = quad / edge;
+    uint bl = qz * sz + qx;
     uint idx[6];
     if (((qx + qz) & 1) == 0) {
-        idx[0]=bl; idx[1]=bl+1; idx[2]=bl+1024u;
-        idx[3]=bl+1; idx[4]=bl+1025u; idx[5]=bl+1024u;
+        idx[0]=bl; idx[1]=bl+1; idx[2]=bl+sz;
+        idx[3]=bl+1; idx[4]=bl+sz+1; idx[5]=bl+sz;
     } else {
-        idx[0]=bl; idx[1]=bl+1; idx[2]=bl+1025u;
-        idx[3]=bl; idx[4]=bl+1025u; idx[5]=bl+1024u;
+        idx[0]=bl; idx[1]=bl+1; idx[2]=bl+sz+1;
+        idx[3]=bl; idx[4]=bl+sz+1; idx[5]=bl+sz;
     }
     uint gv = idx[qt * 3 + vert];
-    float2 xz = (float2(gv % 1024u, gv / 1024u) / 1023.0 - 0.5) * 104.0;
+    float2 xz = (float2(gv % sz, gv / sz) / float(edge) - 0.5) * 104.0;
 
     float h = u.q[2].w * fbm(xz, 8, t0);
     float4 w = float4(xz.x, h, xz.y, 1);

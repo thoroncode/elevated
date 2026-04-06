@@ -55,43 +55,6 @@ struct Uniforms {
 }
 
 
-// ─── Terrain mesh generation ──────────────────────────────────────────────────
-/// Flat grid in XZ, centered at origin. Metal displaces Y in vertex shader.
-func makeTerrainMesh(device: MTLDevice, size: Int = 256, scale: Float = 64)
-    -> (vbuf: MTLBuffer, ibuf: MTLBuffer, indexCount: Int)
-{
-    var verts = [SIMD2<Float>]()
-    var indices = [UInt32]()
-    verts.reserveCapacity(size * size)
-    indices.reserveCapacity(size * size * 6)
-
-    for z in 0..<size {
-        for x in 0..<size {
-            let fx = (Float(x) / Float(size-1) - 0.5) * scale
-            let fz = (Float(z) / Float(size-1) - 0.5) * scale
-            verts.append(SIMD2(fx, fz))
-        }
-    }
-    for z in 0..<size-1 {
-        for x in 0..<size-1 {
-            let i = UInt32(z*size + x)
-            let row = UInt32(size)
-            if ((x + z) & 1) == 0 {
-                indices += [i, i+1, i+row, i+1, i+row+1, i+row]
-            } else {
-                indices += [i, i+1, i+row+1, i, i+row+1, i+row]
-            }
-        }
-    }
-
-    let vbuf = device.makeBuffer(bytes: verts,
-                                  length: verts.count * MemoryLayout<SIMD2<Float>>.stride,
-                                  options: .storageModeShared)!
-    let ibuf = device.makeBuffer(bytes: indices,
-                                  length: indices.count * MemoryLayout<UInt32>.stride,
-                                  options: .storageModeShared)!
-    return (vbuf, ibuf, indices.count)
-}
 
 // ─── 256×256 noise texture — exact frandom() LCG from synth_core.nh ─────────
 // frandom(): seed = seed * 16307 + 17 (wrapping u32);
@@ -200,9 +163,7 @@ public class Renderer: NSObject, MTKViewDelegate {
     var gbufDepth:    MTLTexture!  // depth32float
     var sceneColor:   MTLTexture!  // bgra8unorm — scene after deferred pass (matches D3D9 A8R8G8B8)
 
-    // Mesh buffers
-    var terrainVBuf: MTLBuffer!
-    var terrainIBuf: MTLBuffer!
+    // Mesh vertex count (no buffers — vertex shader generates terrain procedurally)
     var terrainIndexCount: Int = 0
 
     // Noise texture
@@ -403,12 +364,10 @@ public class Renderer: NSObject, MTKViewDelegate {
 
     // ── Meshes ─────────────────────────────────────────────────────────────
     func buildMeshes() {
-        // Original mesh: D3DXCreatePolygon(52.0f, 4) followed by
-        // D3DXTessellateNPatches(..., 512), which is substantially denser than
-        // the baseline 256x256 grid. Match the extent first, then increase
-        // density to test for water seams caused by coarse triangle interpolation.
-        let (vb, ib, ic) = makeTerrainMesh(device: device, size: terrainMeshSize, scale: 104)
-        terrainVBuf = vb; terrainIBuf = ib; terrainIndexCount = ic
+        // Vertex shader generates terrain procedurally from vertex_id.
+        // terrainIndexCount = total vertices drawn = (size-1)^2 * 2 triangles * 3 verts.
+        let edge = terrainMeshSize - 1
+        terrainIndexCount = edge * edge * 2 * 3
     }
 
     // ── Initial uniforms ───────────────────────────────────────────────────
@@ -561,6 +520,9 @@ public class Renderer: NSObject, MTKViewDelegate {
         for i in 0..<8 {
             uniforms.setQ(5 + i, SIMD4(syncVals[i], 0, 0, 0))
         }
+
+        // q[14]: terrain mesh grid size (vertex shader reads this instead of hardcoded 1024)
+        uniforms.setQ(14, SIMD4(Float(terrainMeshSize), 0, 0, 0))
 
         // q[15]: inverse sRGB exponent (0 = no correction, 2.4 = cancel sRGB encoding)
         uniforms.setQ(15, SIMD4(outputGamma, 0, 0, 0))

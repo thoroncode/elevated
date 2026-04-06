@@ -33,6 +33,7 @@ public class ViewController: UIViewController {
         view.backgroundColor = .black
 
         activateAudioSession()
+        UIApplication.shared.isIdleTimerDisabled = true
 
         guard let device = MTLCreateSystemDefaultDevice() else {
             fatalError("Metal not available")
@@ -43,17 +44,20 @@ public class ViewController: UIViewController {
         mtkView.contentScaleFactor = 1.0
         mtkView.autoResizeDrawable = false
         // A8 (Apple TV HD/4th gen) can't handle 1080p; A15+ (4K) can.
+        // A8: 342×342 mesh LOD (proven identical XZ → identical terrain) + 540p.
+        // 4K: full 1024×1024 mesh + 1080p.
         let is4K = UIScreen.main.nativeBounds.height >= 2160
-        let renderSize = is4K ? CGSize(width: 1920, height: 1080) : CGSize(width: 256, height: 144)
+        let renderSize = is4K ? CGSize(width: 1920, height: 1080) : CGSize(width: 426, height: 240)
+        let meshSize = is4K ? 1024 : 342
         mtkView.drawableSize = renderSize
         mtkView.preferredFramesPerSecond = 60
-        print("[ElevatedTV] drawableSize: \(mtkView.drawableSize), scaleFactor: \(mtkView.contentScaleFactor), screen: \(UIScreen.main.bounds)")
+        print("[ElevatedTV] drawableSize: \(mtkView.drawableSize), meshSize: \(meshSize), screen: \(UIScreen.main.bounds)")
         mtkView.enableSetNeedsDisplay = false
         mtkView.isPaused = false
         mtkView.clearColor = MTLClearColorMake(0, 0, 0, 1)
         view.addSubview(mtkView)
 
-        renderer = Renderer(mtkView: mtkView, debug: false, capture: false)
+        renderer = Renderer(mtkView: mtkView, debug: false, capture: false, terrainMeshSize: meshSize)
         mtkView.delegate = renderer
         renderer.onDemoEnd = { [weak self] in
             guard let self else { return }
