@@ -129,6 +129,14 @@ public class ImmersiveRenderer {
 
             frame.endSubmission()
         }
+
+        // Render loop exited (immersive space dismissed) — stop audio and renderer
+        isRunning = false
+        Task { @MainActor in
+            self.synth.pause()
+            self.renderer.pause()
+            self.arSession.stop()
+        }
     }
 
 }
