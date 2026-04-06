@@ -1,6 +1,6 @@
 // ImmersiveRenderer.swift
 // Immersive Metal renderer for visionOS using CompositorServices.
-// Fly through the Elevated terrain with head-tracked free look.
+// Preplanned demo flight through the Elevated terrain.
 
 #if os(visionOS)
 import CompositorServices
@@ -24,9 +24,11 @@ public class ImmersiveRenderer {
             fatalError("Metal not available")
         }
 
-        // Create a temporary MTKView for Renderer pipeline/resource init
+        // Create a temporary MTKView for Renderer pipeline/resource init.
+        // Use .bgra8Unorm so the postPSO matches the .bgra8Unorm texture
+        // views we create from the sRGB drawable (avoids double-gamma).
         let tempView = MTKView(frame: CGRect(x: 0, y: 0, width: 1920, height: 1080), device: device)
-        tempView.colorPixelFormat = .bgra8Unorm_srgb
+        tempView.colorPixelFormat = .bgra8Unorm
         tempView.depthStencilPixelFormat = .depth32Float
         renderer = Renderer(mtkView: tempView, debug: false, capture: false)
 
@@ -75,7 +77,7 @@ public class ImmersiveRenderer {
             guard let frame = layerRenderer.queryNextFrame() else { continue }
             frame.startUpdate()
 
-            // Get head pose
+            // Get head pose for reprojection
             let deviceAnchor = worldTracking.queryDeviceAnchor(atTimestamp: CACurrentMediaTime())
 
             frame.endUpdate()
@@ -105,59 +107,26 @@ public class ImmersiveRenderer {
             // Set device anchor on drawable for reprojection
             drawable.deviceAnchor = deviceAnchor
 
-            // Use a single command buffer for all eyes + present
             guard let cmd = renderer.cmdQueue.makeCommandBuffer() else { continue }
 
             for viewIndex in 0..<drawable.views.count {
-                let texture = drawable.colorTextures[viewIndex]
+                let srgbTexture = drawable.colorTextures[viewIndex]
+
+                // Create a .bgra8Unorm view of the sRGB drawable texture.
+                // The shader already outputs gamma-corrected values (like macOS),
+                // so we write raw bytes to avoid double-gamma from sRGB encoding.
+                let outputTexture = srgbTexture.makeTextureView(pixelFormat: .bgra8Unorm)
+                                    ?? srgbTexture
 
                 // Per-eye projection from CompositorServices
                 let projMatrix = drawable.computeProjection(
                     convention: .rightUpForward, viewIndex: viewIndex)
 
-                // View matrix: demo camera + head tracking
-                let viewMatrix: simd_float4x4
-                if let anchor = deviceAnchor {
-                    let eyeTransform = anchor.originFromAnchorTransform * drawable.views[viewIndex].transform
-                    let eyePos = SIMD3<Float>(eyeTransform.columns.3.x,
-                                              eyeTransform.columns.3.y,
-                                              eyeTransform.columns.3.z)
-                    // Use demo camera position but apply head rotation for look direction
-                    let headRotation = simd_float3x3(
-                        SIMD3(eyeTransform.columns.0.x, eyeTransform.columns.0.y, eyeTransform.columns.0.z),
-                        SIMD3(eyeTransform.columns.1.x, eyeTransform.columns.1.y, eyeTransform.columns.1.z),
-                        SIMD3(eyeTransform.columns.2.x, eyeTransform.columns.2.y, eyeTransform.columns.2.z)
-                    )
-
-                    // Demo forward basis
-                    let demoFwd = normalize(camTarget - camPos)
-                    let demoRight = normalize(cross(SIMD3<Float>(0, 1, 0), demoFwd))
-                    let demoUp = cross(demoFwd, demoRight)
-                    let demoBasis = simd_float3x3(columns: (demoRight, demoUp, demoFwd))
-
-                    let r = demoBasis * headRotation
-                    // Offset eye position relative to head in demo space
-                    let headPos = SIMD3<Float>(
-                        anchor.originFromAnchorTransform.columns.3.x,
-                        anchor.originFromAnchorTransform.columns.3.y,
-                        anchor.originFromAnchorTransform.columns.3.z)
-                    let eyeOffset = eyePos - headPos
-                    let eye = camPos + demoBasis * eyeOffset
-
-                    viewMatrix = simd_float4x4(columns: (
-                        SIMD4(r.columns.0.x, r.columns.1.x, r.columns.2.x, 0),
-                        SIMD4(r.columns.0.y, r.columns.1.y, r.columns.2.y, 0),
-                        SIMD4(r.columns.0.z, r.columns.1.z, r.columns.2.z, 0),
-                        SIMD4(-dot(r.columns.0, eye), -dot(r.columns.1, eye), -dot(r.columns.2, eye), 1)
-                    ))
-                } else {
-                    viewMatrix = lookAtLH(eye: camPos, center: camTarget, up: SIMD3(0, 1, 0))
-                }
-
+                // Fixed demo camera — preplanned flight path, no head tracking
+                let viewMatrix = lookAtLH(eye: camPos, center: camTarget, up: SIMD3(0, 1, 0))
                 let vp = projMatrix * viewMatrix
 
-                // Render all 3 passes into this eye's texture
-                renderer.renderFrame(commandBuffer: cmd, outputTexture: texture,
+                renderer.renderFrame(commandBuffer: cmd, outputTexture: outputTexture,
                                     viewProjection: vp, size: size)
             }
 
