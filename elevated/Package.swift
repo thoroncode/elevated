@@ -114,5 +114,12 @@ let package = Package(
                 .linkedFramework("UIKit"),
             ]
         ),
+
+        // ── Tests ────────────────────────────────────────────────────────
+        .testTarget(
+            name: "ElevatedCoreTests",
+            dependencies: ["ElevatedCore"],
+            path: "Tests/ElevatedCoreTests"
+        ),
     ]
 )
