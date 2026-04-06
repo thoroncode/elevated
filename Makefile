@@ -2,7 +2,7 @@
 
 BIN       = elevated/.build/release/ElevatedMacCLI
 APP       = Elevated.app
-APP_BIN   = $(APP)/Contents/MacOS/ElevatedMac
+APP_BIN   = $(APP)/Contents/MacOS/ElevatedMacCLI
 ICON_TIME = 185.867
 ICON_SRC  = assets/icon_source.png
 ICON_ICNS = assets/icon.icns
@@ -125,7 +125,7 @@ app-icon: build
 # Build a self-contained Elevated.app bundle (double-clickable, drag to Applications)
 #   Normal:  open Elevated.app
 #   Debug:   open Elevated.app --args --debug
-#   CLI:     Elevated.app/Contents/MacOS/ElevatedMac --debug
+#   CLI:     Elevated.app/Contents/MacOS/ElevatedMacCLI --debug
 app: build
 	@echo "Assembling $(APP)..."
 	@rm -rf $(APP)
@@ -146,7 +146,7 @@ app: build
 	        -c "Add :CFBundleIdentifier     string $(ELEVATED_MACOS_APP_IDENTIFIER)" \
 	        -c "Add :CFBundleVersion        string $$buildver" \
 	    -c "Add :CFBundleShortVersionString string $$shortver" \
-	    -c "Add :CFBundleExecutable     string ElevatedMac" \
+	    -c "Add :CFBundleExecutable     string ElevatedMacCLI" \
 	    -c "Add :CFBundlePackageType    string APPL" \
 	    -c "Add :CFBundleIconFile       string icon" \
 	    -c "Add :NSPrincipalClass       string NSApplication" \
@@ -336,7 +336,7 @@ compare-range:
 	bash tools/compare.sh $(T0) $(T1)
 
 clean:
-	-killall ElevatedMac ElevatedMac4k ElevatedMac4k.run ElevatedMac4k.4k _ 2>/dev/null
+	-killall ElevatedMacCLI ElevatedMac4k ElevatedMac4k.run ElevatedMac4k.4k _ 2>/dev/null
 	swift package --package-path elevated clean
 	$(MAKE) -C elevated4k clean
 	rm -rf /tmp/elevated_ref /tmp/elevated_cap /tmp/elevated_cmp
