@@ -92,6 +92,8 @@ public class SynthPlayer {
         set { engine.mainMixerNode.outputVolume = newValue ? 0 : 1 }
     }
 
+    private var fadeTimer: Timer?
+
     public func pause() {
         guard !isPaused else { return }
         player.pause()
@@ -102,6 +104,27 @@ public class SynthPlayer {
         guard isPaused else { return }
         player.play()
         isPaused = false
+    }
+
+    /// Fade volume to target over duration, then call completion.
+    public func fadeVolume(to target: Float, duration: Double, then completion: (() -> Void)? = nil) {
+        fadeTimer?.invalidate()
+        let start = engine.mainMixerNode.outputVolume
+        let steps = max(1, Int(duration * 60))
+        let delta = (target - start) / Float(steps)
+        var step = 0
+        fadeTimer = Timer.scheduledTimer(withTimeInterval: duration / Double(steps), repeats: true) { [weak self] timer in
+            guard let self else { timer.invalidate(); return }
+            step += 1
+            if step >= steps {
+                self.engine.mainMixerNode.outputVolume = target
+                timer.invalidate()
+                self.fadeTimer = nil
+                completion?()
+            } else {
+                self.engine.mainMixerNode.outputVolume = start + delta * Float(step)
+            }
+        }
     }
 
     /// Seek to time (seconds). Preserves paused/playing state.

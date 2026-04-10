@@ -14,9 +14,9 @@ final class ExploreCamera {
     private var yawOffset: Float = 0
     private var pitchOffset: Float = 0
 
-    private let maxYaw: Float = 0.8
-    private let maxPitch: Float = 0.5
-    private let followSpeed: Float = 0.4
+    private let maxYaw: Float = 0.9      // ±52°
+    private let maxPitch: Float = 0.55   // ±31°
+    private let followSpeed: Float = 0.45
     private let holdDelay: Float = 5.0
     private var idleTimer: Float = 0
 

@@ -21,15 +21,20 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
     private var isScrubbing = false
     private var scrubTime: Double = 0
 
+    // Smooth speed ramp for pause/resume
+    private var playbackSpeed: Double = 1.0
+    private var targetSpeed: Double = 1.0
+    private let speedRampDuration: Double = 0.6
+
     // Explore mode
     var launchIntoExploreMode = false
     private(set) var isExploreMode = false
     private var exploreCamera: ExploreCamera?
     private var joystickView: VirtualJoystickView?
     private var lastExploreTime: CFTimeInterval = 0
-    private var hasUserTouched = false
+    private var userEngagementTime: Double = 0  // cumulative seconds of interaction
+    private let engagementThreshold: Double = 7.0  // seconds before hint is suppressed
     private var hintShown = false
-    private let exploreLockoutTime: Double = 45.0
     private let hintTime: Double = 93.0
 
     deinit {
@@ -58,9 +63,14 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
         mtkView.delegate = renderer
         renderer.onDemoEnd = { [weak self] in
             guard let self else { return }
-            // Reset explore camera on demo loop so offset doesn't carry over
+            // Reset explore mode on demo loop
             self.exploreCamera?.stick = .zero
             self.renderer.viewProjectionRotation = nil
+            if self.isExploreMode {
+                self.joystickView?.removeFromSuperview()
+                self.joystickView = nil
+                self.joystickAdded = false
+            }
             self.synth.seek(to: 0)
             self.renderer.start()
             self.setIdleTimerDisabled(true)
@@ -151,6 +161,7 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
     }
 
     @objc private func displayLinkFired() {
+        updateSpeedRamp()
         updateExploreCamera()
         guard transportView.alpha > 0 else { return }
         let t = isScrubbing ? scrubTime : renderer.currentTime
@@ -171,6 +182,48 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
     private func formatTime(_ seconds: Double) -> String {
         let s = max(0, Int(seconds))
         return String(format: "%d:%02d", s / 60, s % 60)
+    }
+
+    // MARK: - Speed Ramp
+
+    private func updateSpeedRamp() {
+        guard !isScrubbing else { return }
+        let dt = 1.0 / 60.0  // display link interval
+
+        // Ramp speed toward target with ease curve
+        if abs(playbackSpeed - targetSpeed) < 0.01 {
+            playbackSpeed = targetSpeed
+        } else {
+            let rampRate = dt / speedRampDuration
+            // Ease: move faster at the start, slower near the target
+            let distance = abs(targetSpeed - playbackSpeed)
+            let ease = max(0.3, distance * 2.0)  // faster when far, gentler near target
+            let step = rampRate * ease
+            if playbackSpeed < targetSpeed {
+                playbackSpeed = min(targetSpeed, playbackSpeed + step)
+            } else {
+                playbackSpeed = max(targetSpeed, playbackSpeed - step)
+            }
+        }
+
+        // When ramping (speed between 0 and 1), manually control time
+        if playbackSpeed < 0.999 && playbackSpeed > 0.001 {
+            // Pause the renderer's internal clock, advance manually
+            if !renderer.isPaused {
+                renderer.pause()
+            }
+            let advance = dt * playbackSpeed
+            let newTime = min(renderer.currentTime + advance, kDemoDuration)
+            renderer.seek(to: newTime)
+        } else if playbackSpeed >= 0.999 && renderer.isPaused && targetSpeed > 0.5 {
+            // Fully ramped up — resume normal playback
+            renderer.resume()
+            playbackSpeed = 1.0
+        } else if playbackSpeed <= 0.001 && targetSpeed < 0.5 {
+            // Fully stopped
+            if !renderer.isPaused { renderer.pause() }
+            playbackSpeed = 0.0
+        }
     }
 
     // MARK: - Transport Show/Hide
@@ -209,25 +262,41 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
     }
 
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
-        guard !isExploreMode || exploreLockoutActive else { return }
+        guard !isExploreMode else { return }
         let location = gesture.location(in: view)
         let inBottomArea = location.y > view.bounds.height * 0.7
 
         if transportView.alpha < 0.5 {
-            // Transport hidden — show it (and pause if tapped in main area)
+            // Transport hidden — show it (and toggle if tapped in main area)
             showTransport()
             if !inBottomArea {
-                if renderer.isPaused { renderer.resume(); synth.resume() }
-                else                 { renderer.pause(); synth.pause() }
-                updateIdleTimerForPlayback()
+                togglePlayback()
             }
         } else {
             // Transport visible — tap toggles play/pause
-            if renderer.isPaused { renderer.resume(); synth.resume() }
-            else                 { renderer.pause(); synth.pause() }
-            updateIdleTimerForPlayback()
+            togglePlayback()
             scheduleHideTransport()
         }
+    }
+
+    private func togglePlayback() {
+        if targetSpeed < 0.5 {
+            // Resume: start ramping up
+            targetSpeed = 1.0
+            // Unpause renderer immediately so we can control its time
+            if renderer.isPaused {
+                renderer.resume()
+            }
+            synth.resume()
+            synth.fadeVolume(to: 1, duration: speedRampDuration)
+        } else {
+            // Pause: start ramping down
+            targetSpeed = 0.0
+            synth.fadeVolume(to: 0, duration: speedRampDuration) { [weak self] in
+                self?.synth.pause()
+            }
+        }
+        updateIdleTimerForPlayback()
     }
 
     @objc private func handlePan(_ gesture: UIPanGestureRecognizer) {
@@ -244,7 +313,10 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
             hideTimer?.invalidate()
             if !renderer.isPaused {
                 renderer.pause()
-                synth.pause()
+            }
+            // Fade out audio smoothly
+            synth.fadeVolume(to: 0, duration: 0.6) { [weak self] in
+                self?.synth.pause()
             }
             updateIdleTimerForPlayback()
 
@@ -255,9 +327,10 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
         case .ended, .cancelled:
             isScrubbing = false
             synth.seek(to: scrubTime)
+            synth.resume()
+            synth.fadeVolume(to: 1, duration: 0.6)
             if !wasPausedBeforeScrub {
                 renderer.resume()
-                synth.resume()
             }
             updateIdleTimerForPlayback()
             scheduleHideTransport()
@@ -269,25 +342,20 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
 
     // MARK: - Explore Mode
 
-    private var exploreLockoutActive = true
+    private let exploreLockoutTime: Double = 45.0
 
     func enterExploreMode() {
         guard !isExploreMode else { return }
         isExploreMode = true
-        exploreLockoutActive = exploreLockoutTime > 0
+
+        // Hide transport — explore mode has no scrubber
+        hideTimer?.invalidate()
+        transportView.alpha = 0
 
         // Demo keeps running. Explore camera adds look-around on top.
         exploreCamera = ExploreCamera()
         lastExploreTime = CACurrentMediaTime()
-
-        if exploreLockoutActive {
-            // Transport stays visible during lockout, joystick added when lockout ends
-        } else {
-            // No lockout — add joystick immediately
-            hideTimer?.invalidate()
-            transportView.alpha = 0
-            addJoystickOverlay()
-        }
+        // Joystick added after lockout
         setIdleTimerDisabled(true)
     }
 
@@ -304,42 +372,37 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
         setIdleTimerDisabled(true)
     }
 
+    private var joystickAdded = false
+
     private func updateExploreCamera() {
         guard isExploreMode, let cam = exploreCamera else { return }
 
         let demoTime = renderer.currentTime
 
-        // Lockout: normal demo with transport during first 45s
+        // Lockout: pure demo, no joystick for first 45s
         if demoTime < exploreLockoutTime {
-            cam.stick = .zero
             renderer.viewProjectionRotation = nil
             return
         }
 
-        // Transition: hide transport, show joystick when lockout ends
-        if exploreLockoutActive {
-            exploreLockoutActive = false
-            hideTimer?.invalidate()
-            UIView.animate(withDuration: 1.0) { self.transportView.alpha = 0 }
-
-            // Unpause if user left it paused during lockout
-            if renderer.isPaused {
-                renderer.resume()
-                synth.resume()
-            }
-
+        // Add joystick when lockout ends
+        if !joystickAdded {
+            joystickAdded = true
             addJoystickOverlay()
-        }
-
-        // Ghost hint at 1:30 if user hasn't touched yet
-        if !hasUserTouched && !hintShown && demoTime >= hintTime {
-            hintShown = true
-            joystickView?.playGhostHint()
         }
 
         let now = CACurrentMediaTime()
         let dt = Float(min(now - lastExploreTime, 1.0 / 30.0))
         lastExploreTime = now
+
+        // Track engagement
+        if cam.isActive { userEngagementTime += Double(dt) }
+
+        // Ghost hint if user hasn't engaged substantially
+        if userEngagementTime < engagementThreshold && !hintShown && demoTime >= hintTime {
+            hintShown = true
+            joystickView?.playGhostHint()
+        }
 
         let rot = cam.update(dt: dt)
         renderer.viewProjectionRotation = rot  // nil = identity = exact demo camera
@@ -366,12 +429,8 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
 
     // VirtualJoystickDelegate
     public func joystickDidUpdate(value: SIMD2<Float>) {
-        // If this came from a real touch (not ghost hint), mark user as active
         if length(value) > 0.05 && joystickView?.isGhostPlaying != true {
-            if !hasUserTouched {
-                hasUserTouched = true
-                joystickView?.cancelGhostHint()
-            }
+            joystickView?.cancelGhostHint()
         }
         exploreCamera?.stick = value
     }

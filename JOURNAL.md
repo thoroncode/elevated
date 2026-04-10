@@ -1360,3 +1360,19 @@ The fix required storing P and V separately in `updateUniforms` and recomposing 
 **Ghost hint glow**: `CAGradientLayer` with `.conic` type, rainbow colors, spinning via
 `CABasicAnimation`. Ring-masked (inner circle cut out). All opacity changes wrapped in
 `CATransaction.setDisableActions(true)` to prevent implicit CA animation blinks.
+
+---
+
+## Cinematic Pause/Resume and Audio Fades (2026-04-10)
+
+**Speed ramp**: Pause/resume smoothly decelerates/accelerates the rendering over 0.6s with an ease
+curve (fast start, gentle into stop). Implemented by pausing the Renderer's internal clock and
+manually advancing time via `seek()` at decreasing/increasing rates from the display link. Once
+fully ramped up, resumes normal Renderer playback.
+
+**Audio fades**: All audio transitions use a 0.6s volume fade via `SynthPlayer.fadeVolume(to:duration:)`.
+Applied to: play/pause toggle, scrub start (fade out), scrub end (fade in). No instant audio cuts
+anywhere. The fade uses a 60fps Timer stepping `engine.mainMixerNode.outputVolume`.
+
+**Scrub audio**: On scrub begin, audio fades to zero then pauses. On scrub end, audio seeks to new
+position, resumes, and fades back in. Works whether the demo was playing or paused before scrub.
