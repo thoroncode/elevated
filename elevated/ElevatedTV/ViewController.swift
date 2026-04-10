@@ -21,6 +21,11 @@ public class ViewController: UIViewController {
     private var isScrubbing = false
     private var scrubTime: Double = 0
 
+    // Smooth speed ramp for pause/resume
+    private var playbackSpeed: Double = 1.0
+    private var targetSpeed: Double = 1.0
+    private let speedRampDuration: Double = 0.6
+
     // FPS debug overlay
     private let fpsLabel = UILabel()
     private var fpsVisible = false
@@ -153,6 +158,7 @@ public class ViewController: UIViewController {
     }
 
     @objc private func updateTransport() {
+        updateSpeedRamp()
         updateFPS()
         guard transportView.alpha > 0 else { return }
         let t = isScrubbing ? scrubTime : renderer.currentTime
@@ -229,6 +235,54 @@ public class ViewController: UIViewController {
         }
     }
 
+    // MARK: - Speed Ramp
+
+    private func updateSpeedRamp() {
+        guard !isScrubbing else { return }
+        let dt = 1.0 / 60.0
+
+        if abs(playbackSpeed - targetSpeed) < 0.01 {
+            playbackSpeed = targetSpeed
+        } else {
+            let rampRate = dt / speedRampDuration
+            let distance = abs(targetSpeed - playbackSpeed)
+            let ease = max(0.3, distance * 2.0)
+            let step = rampRate * ease
+            if playbackSpeed < targetSpeed {
+                playbackSpeed = min(targetSpeed, playbackSpeed + step)
+            } else {
+                playbackSpeed = max(targetSpeed, playbackSpeed - step)
+            }
+        }
+
+        if playbackSpeed < 0.999 && playbackSpeed > 0.001 {
+            if !renderer.isPaused { renderer.pause() }
+            let advance = dt * playbackSpeed
+            let newTime = min(renderer.currentTime + advance, kDemoDuration)
+            renderer.seek(to: newTime)
+        } else if playbackSpeed >= 0.999 && renderer.isPaused && targetSpeed > 0.5 {
+            renderer.resume()
+            playbackSpeed = 1.0
+        } else if playbackSpeed <= 0.001 && targetSpeed < 0.5 {
+            if !renderer.isPaused { renderer.pause() }
+            playbackSpeed = 0.0
+        }
+    }
+
+    private func togglePlayback() {
+        if targetSpeed < 0.5 {
+            targetSpeed = 1.0
+            if renderer.isPaused { renderer.resume() }
+            synth.resume()
+            synth.fadeVolume(to: 1, duration: 0.6)
+        } else {
+            targetSpeed = 0.0
+            synth.fadeVolume(to: 0, duration: 0.6) { [weak self] in
+                self?.synth.pause()
+            }
+        }
+    }
+
     // MARK: - Gestures
 
     private func setupGestures() {
@@ -266,11 +320,7 @@ public class ViewController: UIViewController {
     }
 
     @objc private func handleTap() {
-        if renderer.isPaused {
-            renderer.resume(); synth.resume()
-        } else {
-            renderer.pause(); synth.pause()
-        }
+        togglePlayback()
         showTransport()
     }
 
@@ -283,6 +333,10 @@ public class ViewController: UIViewController {
             scrubTime = renderer.currentTime
             showTransport()
             hideTimer?.invalidate()
+            if !renderer.isPaused { renderer.pause() }
+            synth.fadeVolume(to: 0, duration: 0.6) { [weak self] in
+                self?.synth.pause()
+            }
 
         case .changed:
             // Map horizontal velocity to seek speed
@@ -295,6 +349,9 @@ public class ViewController: UIViewController {
         case .ended, .cancelled:
             isScrubbing = false
             synth.seek(to: scrubTime)
+            synth.resume()
+            synth.fadeVolume(to: 1, duration: 0.6)
+            if targetSpeed > 0.5 { renderer.resume() }
             scheduleHideTransport()
 
         default:
