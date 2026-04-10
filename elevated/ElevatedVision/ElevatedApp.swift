@@ -13,7 +13,6 @@ class AppState {
 }
 
 public struct ElevatedApp: App {
-    @State private var immersionStyle: ImmersionStyle = .full
     @State private var appState = AppState()
 
     public init() {}
@@ -45,7 +44,7 @@ public struct ElevatedApp: App {
                 }
             }
         }
-        .immersionStyle(selection: $immersionStyle, in: .full)
+        .immersionStyle(selection: .constant(.full), in: .full)
     }
 }
 

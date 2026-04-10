@@ -231,7 +231,7 @@ fragment float4 d(
            * (float3(.52,.59,.65) + pow(saturate(dot(e, u.q[3].xyz)), 8)*float3(.6,.4,.1));
     }
 
-    return float4(c, 0);
+    return float4(c, 1);
 }
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -285,5 +285,5 @@ fragment float4 e(
     if (u.q[15].x > 0)
         c = pow(saturate(c), u.q[15].x);
 
-    return float4(c, 0);
+    return float4(c, 1);
 }
