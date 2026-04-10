@@ -5,7 +5,6 @@
 import UIKit
 import MetalKit
 import AVFoundation
-import CoreMotion
 import ElevatedCore
 
 public class ViewController: UIViewController, VirtualJoystickDelegate {
@@ -28,7 +27,6 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
     private var exploreCamera: ExploreCamera?
     private var joystickView: VirtualJoystickView?
     private var lastExploreTime: CFTimeInterval = 0
-    private let exploreSceneTime: Double = 45.0
 
     deinit {
         setIdleTimerDisabled(false)
@@ -272,22 +270,8 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
         hideTimer?.invalidate()
         transportView.alpha = 0
 
-        // Freeze scene at scenic moment
-        renderer.seek(to: exploreSceneTime)
-        renderer.pause()
-        // Keep synth playing from this point for atmosphere
-        synth.seek(to: exploreSceneTime)
-        synth.resume()
-
-        // Read the demo camera position as starting point
-        let mtkView = view.subviews.first as! MTKView
-        renderer.updateUniformsForTime(exploreSceneTime, size: mtkView.drawableSize)
-        let startPos = renderer.demoCameraPosition
-
-        // Start gyroscope camera
-        let cam = ExploreCamera(startPosition: startPos)
-        cam.start()
-        exploreCamera = cam
+        // Demo keeps running. Explore camera adds look-around on top.
+        exploreCamera = ExploreCamera()
         lastExploreTime = CACurrentMediaTime()
 
         // Add joystick overlay
@@ -297,11 +281,7 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
         view.addSubview(joy)
         joystickView = joy
 
-        // Explore gestures
-        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(exploreDoubleTap))
-        doubleTap.numberOfTapsRequired = 2
-        joy.addGestureRecognizer(doubleTap)
-
+        // Long-press to exit explore mode
         let longPress = UILongPressGestureRecognizer(target: self, action: #selector(exploreLongPress))
         longPress.minimumPressDuration = 2.0
         joy.addGestureRecognizer(longPress)
@@ -313,38 +293,30 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
         guard isExploreMode else { return }
         isExploreMode = false
 
-        exploreCamera?.stop()
         exploreCamera = nil
 
         joystickView?.removeFromSuperview()
         joystickView = nil
 
         renderer.viewProjectionOverride = nil
-
-        // Resume demo from start
-        renderer.seek(to: 0)
-        renderer.start()
-        synth.seek(to: 0)
-        synth.play()
         setIdleTimerDisabled(true)
     }
 
     private func updateExploreCamera() {
-        guard isExploreMode, let cam = exploreCamera else {
-            return
-        }
+        guard isExploreMode, let cam = exploreCamera else { return }
+
         let now = CACurrentMediaTime()
         let dt = Float(min(now - lastExploreTime, 1.0 / 30.0))
         lastExploreTime = now
 
         let mtkView = view.subviews.first as! MTKView
         let aspect = Float(mtkView.drawableSize.width / mtkView.drawableSize.height)
-        let vp = cam.update(dt: dt, aspect: aspect)
-        renderer.viewProjectionOverride = vp
-    }
 
-    @objc private func exploreDoubleTap() {
-        exploreCamera?.recalibrate()
+        let vp = cam.update(dt: dt, aspect: aspect,
+                            demoFov: renderer.demoCameraFov,
+                            demoPos: renderer.demoCameraPosition,
+                            demoTarget: renderer.demoCameraTarget)
+        renderer.viewProjectionOverride = vp  // nil when not touching → demo camera used
     }
 
     @objc private func exploreLongPress(_ gesture: UILongPressGestureRecognizer) {
@@ -354,9 +326,8 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
     }
 
     // VirtualJoystickDelegate
-    public func joystickDidUpdate(left: SIMD2<Float>, right: SIMD2<Float>) {
-        exploreCamera?.leftStick = left
-        exploreCamera?.rightStick = right.y
+    public func joystickDidUpdate(value: SIMD2<Float>) {
+        exploreCamera?.stick = value
     }
 
     // MARK: - Background/Foreground
@@ -369,7 +340,6 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
             renderer.pause()
             synth.pause()
         }
-        if isExploreMode { exploreCamera?.stop() }
         setIdleTimerDisabled(false)
         // Stop GPU work entirely when backgrounded
         (view.subviews.first as? MTKView)?.isPaused = true
@@ -377,9 +347,7 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
 
     func resumePlayback() {
         (view.subviews.first as? MTKView)?.isPaused = false
-        if isExploreMode {
-            exploreCamera?.start()
-        } else if wasPlayingBeforeBackground {
+        if !isExploreMode && wasPlayingBeforeBackground {
             renderer.resume()
             synth.resume()
         }

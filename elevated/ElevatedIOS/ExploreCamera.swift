@@ -1,115 +1,91 @@
 // ExploreCamera.swift
-// CoreMotion gyroscope → free camera for Explore Mode.
+// Look-around camera for Explore Mode.
+// Follows the demo flight path exactly. Stick gives a direction to look.
+// Offset smoothly follows the stick, smoothly returns when released.
 
 #if canImport(UIKit)
-import CoreMotion
 import simd
 import ElevatedCore
 
 final class ExploreCamera {
-    private let motionManager = CMMotionManager()
-    private var referenceAttitude: CMAttitude?
+    /// Raw joystick input: x = look left/right, y = look up/down.
+    var stick: SIMD2<Float> = .zero
 
-    var position: SIMD3<Float>
-    var leftStick: SIMD2<Float> = .zero   // x=strafe, y=forward
-    var rightStick: Float = 0             // altitude
+    /// Current yaw/pitch offset from demo direction (radians).
+    private var yawOffset: Float = 0
+    private var pitchOffset: Float = 0
 
-    private let boundsMin = SIMD3<Float>(-50, 0.5, -50)
-    private let boundsMax = SIMD3<Float>(50, 15, 50)
-    private let moveSpeed: Float = 8.0
+    // How far the stick can turn the camera (radians at full deflection)
+    private let maxYaw: Float = 0.8        // ±46°
+    private let maxPitch: Float = 0.5      // ±29°
 
-    init(startPosition: SIMD3<Float>) {
-        self.position = startPosition
-    }
+    // Smoothing: how fast offset follows the target (per second)
+    private let followSpeed: Float = 0.4   // slow, cinematic
+    private let returnSpeed: Float = 0.15  // even slower return
+    private let holdDelay: Float = 5.0     // seconds before returning to demo
+    private var idleTimer: Float = 0
 
-    func start() {
-        guard motionManager.isDeviceMotionAvailable else { return }
-        motionManager.deviceMotionUpdateInterval = 1.0 / 60.0
-        motionManager.startDeviceMotionUpdates(using: .xArbitraryZVertical)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-            self?.recalibrate()
+    var isActive: Bool { length(stick) > 0.05 }
+
+    /// Returns VP with look-around applied, or nil for exact demo camera.
+    func update(dt: Float, aspect: Float, demoFov: Float,
+                demoPos: SIMD3<Float>, demoTarget: SIMD3<Float>) -> simd_float4x4? {
+
+        if isActive {
+            idleTimer = 0
+
+            // Target offset from stick (stick already has cubic curve)
+            let targetYaw = stick.x * maxYaw
+            let targetPitch = stick.y * maxPitch
+
+            // Smoothly move toward target
+            let blend = min(1.0, followSpeed * dt)
+            yawOffset += (targetYaw - yawOffset) * blend
+            pitchOffset += (targetPitch - pitchOffset) * blend
+        } else {
+            idleTimer += dt
+
+            if idleTimer > holdDelay {
+                // Smoothly ease offsets back to zero
+                let t = idleTimer - holdDelay
+                let blend = min(1.0, 0.3 * t * t)  // quadratic ramp: slow start, accelerates
+                yawOffset *= (1.0 - blend * dt * 2)
+                pitchOffset *= (1.0 - blend * dt * 2)
+
+                if abs(yawOffset) < 0.001 && abs(pitchOffset) < 0.001 {
+                    yawOffset = 0
+                    pitchOffset = 0
+                    return nil
+                }
+            }
+            // Within hold period — keep the offset where user left it
         }
-    }
 
-    func stop() {
-        motionManager.stopDeviceMotionUpdates()
-        referenceAttitude = nil
-    }
+        // Build VP from raw demo position + offset look direction
+        let demoFwd = normalize(demoTarget - demoPos)
+        let demoRight = normalize(cross(SIMD3<Float>(0, 1, 0), demoFwd))
+        let demoUp = cross(demoFwd, demoRight)
 
-    func recalibrate() {
-        referenceAttitude = motionManager.deviceMotion?.attitude.copy() as? CMAttitude
-    }
+        // Apply yaw (rotate around up)
+        let cosY = cos(yawOffset), sinY = sin(yawOffset)
+        let yawedFwd = demoFwd * cosY + demoRight * sinY
+        let yawedRight = demoRight * cosY - demoFwd * sinY
 
-    /// Returns the view-projection matrix for this frame.
-    func update(dt: Float, aspect: Float) -> simd_float4x4 {
-        let orient = currentOrientation()
+        // Apply pitch (rotate around right)
+        let cosP = cos(pitchOffset), sinP = sin(pitchOffset)
+        let forward = yawedFwd * cosP + demoUp * sinP
+        let up = demoUp * cosP - yawedFwd * sinP
+        let right = yawedRight
 
-        // Move camera based on joystick input in camera-relative directions
-        let forward = SIMD3<Float>(orient.columns.2.x, 0, orient.columns.2.z)
-        let right = SIMD3<Float>(orient.columns.0.x, 0, orient.columns.0.z)
-        let fLen = length(forward)
-        let rLen = length(right)
-        let speed = moveSpeed * dt
-
-        if fLen > 0.001 {
-            position += (forward / fLen) * leftStick.y * speed
-        }
-        if rLen > 0.001 {
-            position += (right / rLen) * leftStick.x * speed
-        }
-        position.y += rightStick * speed
-
-        position = simd_clamp(position, boundsMin, boundsMax)
-
-        return makeVP(orientation: orient, aspect: aspect)
-    }
-
-    // MARK: - Private
-
-    private func currentOrientation() -> simd_float3x3 {
-        guard let motion = motionManager.deviceMotion else {
-            return matrix_identity_float3x3
-        }
-        let attitude = motion.attitude
-        if let ref = referenceAttitude {
-            attitude.multiply(byInverseOf: ref)
-        }
-        return deviceAttitudeToLH(attitude.rotationMatrix)
-    }
-
-    /// Convert CMRotationMatrix (device in landscape-right) to LH camera orientation.
-    /// Landscape-right: device +X → screen up, device +Y → screen left.
-    /// LH world: +X=right, +Y=up, +Z=forward (into screen).
-    private func deviceAttitudeToLH(_ m: CMRotationMatrix) -> simd_float3x3 {
-        // In landscape-right, the mapping from device axes to screen axes is:
-        //   screen right = device -Y
-        //   screen up    = device +X
-        //   screen fwd   = device -Z (into screen)
-        //
-        // The rotation matrix m transforms from device frame to reference frame.
-        // We remap: world = R * landscapeTransform, where landscapeTransform
-        // swaps axes as above.
-        let right   = SIMD3<Float>(Float(-m.m21), Float(-m.m22), Float(-m.m23))
-        let up      = SIMD3<Float>(Float( m.m11), Float( m.m12), Float( m.m13))
-        let forward = SIMD3<Float>(Float(-m.m31), Float(-m.m32), Float(-m.m33))
-        return simd_float3x3(columns: (right, up, forward))
-    }
-
-    private func makeVP(orientation r: simd_float3x3, aspect: Float) -> simd_float4x4 {
         let viewMatrix = simd_float4x4(columns: (
-            SIMD4(r.columns.0.x, r.columns.1.x, r.columns.2.x, 0),
-            SIMD4(r.columns.0.y, r.columns.1.y, r.columns.2.y, 0),
-            SIMD4(r.columns.0.z, r.columns.1.z, r.columns.2.z, 0),
-            SIMD4(-dot(r.columns.0, position),
-                   -dot(r.columns.1, position),
-                   -dot(r.columns.2, position), 1)
+            SIMD4(right.x, up.x, forward.x, 0),
+            SIMD4(right.y, up.y, forward.y, 0),
+            SIMD4(right.z, up.z, forward.z, 0),
+            SIMD4(-dot(right, demoPos), -dot(up, demoPos), -dot(forward, demoPos), 1)
         ))
-        let proj = projectionMatrixLH(
-            fovY: 75.0 * .pi / 180.0,
-            aspect: aspect,
-            near: 0.03125,
-            far: 256.0
-        )
+
+        let fov = demoFov > 0.01 ? demoFov : (75.0 * .pi / 180.0)
+        let proj = projectionMatrixLH(fovY: fov, aspect: aspect, near: 0.03125, far: 256.0)
         return proj * viewMatrix
     }
 }
