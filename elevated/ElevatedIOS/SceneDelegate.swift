@@ -31,12 +31,25 @@ public class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         completionHandler: @escaping (Bool) -> Void
     ) {
         if shortcutItem.type == "com.elevated.explore" {
-            viewController?.enterExploreMode()
+            // Toggle: if already exploring, go back to normal; otherwise enter explore
+            if let vc = viewController {
+                if vc.isExploreMode {
+                    vc.exitExploreMode()
+                } else {
+                    vc.enterExploreMode()
+                }
+            }
         }
         completionHandler(true)
     }
 
+    public func sceneWillResignActive(_ scene: UIScene) {
+        // Start fading audio while we still have CPU time
+        viewController?.fadeOutPlayback()
+    }
+
     public func sceneDidEnterBackground(_ scene: UIScene) {
+        // Hard stop — app is suspended
         viewController?.pausePlayback()
     }
 

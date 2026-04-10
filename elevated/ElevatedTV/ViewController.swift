@@ -277,9 +277,7 @@ public class ViewController: UIViewController {
             synth.fadeVolume(to: 1, duration: 0.6)
         } else {
             targetSpeed = 0.0
-            synth.fadeVolume(to: 0, duration: 0.6) { [weak self] in
-                self?.synth.pause()
-            }
+            synth.fadeVolume(to: 0, duration: 0.6)
         }
     }
 
@@ -334,9 +332,7 @@ public class ViewController: UIViewController {
             showTransport()
             hideTimer?.invalidate()
             if !renderer.isPaused { renderer.pause() }
-            synth.fadeVolume(to: 0, duration: 0.6) { [weak self] in
-                self?.synth.pause()
-            }
+            synth.fadeVolume(to: 0, duration: 0.6)
 
         case .changed:
             // Map horizontal velocity to seek speed

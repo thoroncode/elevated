@@ -107,8 +107,12 @@ public class SynthPlayer {
     }
 
     /// Fade volume to target over duration, then call completion.
-    public func fadeVolume(to target: Float, duration: Double, then completion: (() -> Void)? = nil) {
+    public func fadeVolume(to target: Float, duration: Double) {
         fadeTimer?.invalidate()
+        if duration <= 0 {
+            engine.mainMixerNode.outputVolume = target
+            return
+        }
         let start = engine.mainMixerNode.outputVolume
         let steps = max(1, Int(duration * 60))
         let delta = (target - start) / Float(steps)
@@ -120,7 +124,6 @@ public class SynthPlayer {
                 self.engine.mainMixerNode.outputVolume = target
                 timer.invalidate()
                 self.fadeTimer = nil
-                completion?()
             } else {
                 self.engine.mainMixerNode.outputVolume = start + delta * Float(step)
             }

@@ -14,6 +14,8 @@ final class VirtualJoystickView: UIView {
     private var activeTouch: UITouch?
     private var origin: CGPoint = .zero
     private var value: SIMD2<Float> = .zero
+    private var useCount: Int = 0
+    private let hideAfterUses: Int = 5
 
     private let base = CAShapeLayer()
     private let knob = CAShapeLayer()
@@ -42,20 +44,22 @@ final class VirtualJoystickView: UIView {
 
     required init?(coder: NSCoder) { fatalError() }
 
+    private var showVisuals: Bool { useCount < hideAfterUses }
+
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard activeTouch == nil, let touch = touches.first else { return }
-        // Cancel ghost hint if playing
         if isGhostPlaying { cancelGhostHint() }
         activeTouch = touch
         origin = touch.location(in: self)
-        showStick(at: origin)
+        useCount += 1
+        if showVisuals { showStick(at: origin) }
     }
 
     override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
         guard let touch = activeTouch, touches.contains(touch) else { return }
         let loc = touch.location(in: self)
         value = computeValue(origin: origin, current: loc)
-        updateKnob(value: value)
+        if showVisuals { updateKnob(value: value) }
         delegate?.joystickDidUpdate(value: value)
     }
 
@@ -72,7 +76,7 @@ final class VirtualJoystickView: UIView {
         activeTouch = nil
         value = .zero
         delegate?.joystickDidUpdate(value: .zero)
-        hideStick()
+        if showVisuals { hideStick() }
     }
 
     private let deadZone: CGFloat = 15  // pixels of movement before any output

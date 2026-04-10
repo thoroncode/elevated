@@ -190,14 +190,14 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
         guard !isScrubbing else { return }
         let dt = 1.0 / 60.0  // display link interval
 
-        // Ramp speed toward target with ease curve
+        // Ramp speed toward target with squared ease (gentle from zero)
         if abs(playbackSpeed - targetSpeed) < 0.01 {
             playbackSpeed = targetSpeed
         } else {
             let rampRate = dt / speedRampDuration
-            // Ease: move faster at the start, slower near the target
-            let distance = abs(targetSpeed - playbackSpeed)
-            let ease = max(0.3, distance * 2.0)  // faster when far, gentler near target
+            // Squared ease: very gentle near zero, faster as speed builds
+            let progress = targetSpeed > 0.5 ? playbackSpeed : (1.0 - playbackSpeed)
+            let ease = max(0.1, progress * 2.5)
             let step = rampRate * ease
             if playbackSpeed < targetSpeed {
                 playbackSpeed = min(targetSpeed, playbackSpeed + step)
@@ -281,20 +281,14 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
 
     private func togglePlayback() {
         if targetSpeed < 0.5 {
-            // Resume: start ramping up
             targetSpeed = 1.0
-            // Unpause renderer immediately so we can control its time
-            if renderer.isPaused {
-                renderer.resume()
-            }
+            if renderer.isPaused { renderer.resume() }
             synth.resume()
             synth.fadeVolume(to: 1, duration: speedRampDuration)
         } else {
-            // Pause: start ramping down
             targetSpeed = 0.0
-            synth.fadeVolume(to: 0, duration: speedRampDuration) { [weak self] in
-                self?.synth.pause()
-            }
+            synth.fadeVolume(to: 0, duration: speedRampDuration)
+            // No synth.pause() — volume at 0 is silent. Actual pause only on background.
         }
         updateIdleTimerForPlayback()
     }
@@ -314,10 +308,7 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
             if !renderer.isPaused {
                 renderer.pause()
             }
-            // Fade out audio smoothly
-            synth.fadeVolume(to: 0, duration: 0.6) { [weak self] in
-                self?.synth.pause()
-            }
+            synth.fadeVolume(to: 0, duration: 0.6)
             updateIdleTimerForPlayback()
 
         case .changed:
@@ -439,22 +430,33 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
 
     private var wasPlayingBeforeBackground = false
 
+    func fadeOutPlayback() {
+        // Capture state before ramp changes it
+        wasPlayingBeforeBackground = targetSpeed > 0.5
+        targetSpeed = 0.0
+        synth.fadeVolume(to: 0, duration: 0.6)
+    }
+
     func pausePlayback() {
-        wasPlayingBeforeBackground = !renderer.isPaused
-        if !renderer.isPaused {
-            renderer.pause()
-            synth.pause()
-        }
+        // Hard stop when fully backgrounded
+        renderer.pause()
+        synth.pause()
+        synth.fadeVolume(to: 0, duration: 0)
+        playbackSpeed = 0.0
+        targetSpeed = 0.0
         setIdleTimerDisabled(false)
-        // Stop GPU work entirely when backgrounded
         (view.subviews.first as? MTKView)?.isPaused = true
     }
 
     func resumePlayback() {
         (view.subviews.first as? MTKView)?.isPaused = false
-        if !isExploreMode && wasPlayingBeforeBackground {
+        if wasPlayingBeforeBackground || isExploreMode {
+            // Ease everything in gently
+            playbackSpeed = 0.0
+            targetSpeed = 1.0
             renderer.resume()
             synth.resume()
+            synth.fadeVolume(to: 1, duration: 1.5)
         }
         updateIdleTimerForPlayback()
     }

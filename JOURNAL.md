@@ -1377,6 +1377,21 @@ anywhere. The fade uses a 60fps Timer stepping `engine.mainMixerNode.outputVolum
 **Scrub audio**: On scrub begin, audio fades to zero then pauses. On scrub end, audio seeks to new
 position, resumes, and fades back in. Works whether the demo was playing or paused before scrub.
 
+**Race condition fix**: Removed all completion-block-based `synth.pause()` calls from fadeVolume.
+The completion could fire after the user returned from background, killing resumed audio. Now only
+`pausePlayback` (hard background stop) actually pauses the synth. Volume at 0 = silent enough.
+Removed the `then:` parameter from `fadeVolume` entirely to prevent future misuse.
+
+**Background transitions**: `sceneWillResignActive` starts audio fade + speed ramp down while app
+still has CPU time. `sceneDidEnterBackground` does the hard stop. Return from background eases
+rendering speed from zero (squared ease curve) and fades audio over 1.5s.
+
+**Quick action toggle**: "Explore" quick action toggles between normal and explore mode on warm
+launch. Properly resumes audio when entering explore mode from background.
+
+**Joystick auto-hide**: After 5 uses the joystick visuals stop drawing. Touch input still works
+— the camera responds, but no circles clutter the view. The input is the thing, not the UI.
+
 ---
 
 ## visionOS: P * R * V Head Tracking (2026-04-10)
