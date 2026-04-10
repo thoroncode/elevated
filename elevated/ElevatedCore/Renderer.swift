@@ -176,6 +176,8 @@ public class Renderer: NSObject, MTKViewDelegate {
     private var pauseTime: Double = 0
     public var onDraw: (() -> Void)?
     public var onDemoEnd: (() -> Void)?
+    /// When set, draw(in:) uses this VP matrix instead of the demo camera.
+    public var viewProjectionOverride: simd_float4x4?
     public weak var view: MTKView?
 
     // Debug / capture
@@ -767,6 +769,10 @@ public class Renderer: NSObject, MTKViewDelegate {
               let rpd = view.currentRenderPassDescriptor else { return }
 
         updateUniforms(size: view.drawableSize)
+        if let vp = viewProjectionOverride {
+            uniforms.v = vp
+            uniforms.vi = simd_inverse(vp)
+        }
         frameNumber += 1
 #if os(macOS)
         if debugMode { emitDebug() }

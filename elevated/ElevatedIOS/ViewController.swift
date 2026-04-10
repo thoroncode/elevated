@@ -5,9 +5,10 @@
 import UIKit
 import MetalKit
 import AVFoundation
+import CoreMotion
 import ElevatedCore
 
-public class ViewController: UIViewController {
+public class ViewController: UIViewController, VirtualJoystickDelegate {
     private var renderer: Renderer!
     private let synth = SynthPlayer()
 
@@ -20,6 +21,14 @@ public class ViewController: UIViewController {
     private var hideTimer: Timer?
     private var isScrubbing = false
     private var scrubTime: Double = 0
+
+    // Explore mode
+    var launchIntoExploreMode = false
+    private(set) var isExploreMode = false
+    private var exploreCamera: ExploreCamera?
+    private var joystickView: VirtualJoystickView?
+    private var lastExploreTime: CFTimeInterval = 0
+    private let exploreSceneTime: Double = 45.0
 
     deinit {
         setIdleTimerDisabled(false)
@@ -60,9 +69,13 @@ public class ViewController: UIViewController {
             self.renderer.start()
             self.synth.play()
             self.setIdleTimerDisabled(true)
+            if self.launchIntoExploreMode {
+                self.launchIntoExploreMode = false
+                self.enterExploreMode()
+            }
         }
 
-        let link = CADisplayLink(target: self, selector: #selector(updateTransport))
+        let link = CADisplayLink(target: self, selector: #selector(displayLinkFired))
         link.add(to: .main, forMode: .common)
     }
 
@@ -132,7 +145,8 @@ public class ViewController: UIViewController {
         progressFill.widthAnchor.constraint(equalToConstant: 0).isActive = true
     }
 
-    @objc private func updateTransport() {
+    @objc private func displayLinkFired() {
+        updateExploreCamera()
         guard transportView.alpha > 0 else { return }
         let t = isScrubbing ? scrubTime : renderer.currentTime
         let duration = kDemoDuration
@@ -190,6 +204,7 @@ public class ViewController: UIViewController {
     }
 
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
+        guard !isExploreMode else { return }
         let location = gesture.location(in: view)
         let inBottomArea = location.y > view.bounds.height * 0.7
 
@@ -247,6 +262,103 @@ public class ViewController: UIViewController {
         }
     }
 
+    // MARK: - Explore Mode
+
+    func enterExploreMode() {
+        guard !isExploreMode else { return }
+        isExploreMode = true
+
+        // Hide transport
+        hideTimer?.invalidate()
+        transportView.alpha = 0
+
+        // Freeze scene at scenic moment
+        renderer.seek(to: exploreSceneTime)
+        renderer.pause()
+        // Keep synth playing from this point for atmosphere
+        synth.seek(to: exploreSceneTime)
+        synth.resume()
+
+        // Read the demo camera position as starting point
+        let mtkView = view.subviews.first as! MTKView
+        renderer.updateUniformsForTime(exploreSceneTime, size: mtkView.drawableSize)
+        let startPos = renderer.demoCameraPosition
+
+        // Start gyroscope camera
+        let cam = ExploreCamera(startPosition: startPos)
+        cam.start()
+        exploreCamera = cam
+        lastExploreTime = CACurrentMediaTime()
+
+        // Add joystick overlay
+        let joy = VirtualJoystickView(frame: view.bounds)
+        joy.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        joy.delegate = self
+        view.addSubview(joy)
+        joystickView = joy
+
+        // Explore gestures
+        let doubleTap = UITapGestureRecognizer(target: self, action: #selector(exploreDoubleTap))
+        doubleTap.numberOfTapsRequired = 2
+        joy.addGestureRecognizer(doubleTap)
+
+        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(exploreLongPress))
+        longPress.minimumPressDuration = 2.0
+        joy.addGestureRecognizer(longPress)
+
+        setIdleTimerDisabled(true)
+    }
+
+    func exitExploreMode() {
+        guard isExploreMode else { return }
+        isExploreMode = false
+
+        exploreCamera?.stop()
+        exploreCamera = nil
+
+        joystickView?.removeFromSuperview()
+        joystickView = nil
+
+        renderer.viewProjectionOverride = nil
+
+        // Resume demo from start
+        renderer.seek(to: 0)
+        renderer.start()
+        synth.seek(to: 0)
+        synth.play()
+        setIdleTimerDisabled(true)
+    }
+
+    private func updateExploreCamera() {
+        guard isExploreMode, let cam = exploreCamera else {
+            return
+        }
+        let now = CACurrentMediaTime()
+        let dt = Float(min(now - lastExploreTime, 1.0 / 30.0))
+        lastExploreTime = now
+
+        let mtkView = view.subviews.first as! MTKView
+        let aspect = Float(mtkView.drawableSize.width / mtkView.drawableSize.height)
+        let vp = cam.update(dt: dt, aspect: aspect)
+        renderer.viewProjectionOverride = vp
+    }
+
+    @objc private func exploreDoubleTap() {
+        exploreCamera?.recalibrate()
+    }
+
+    @objc private func exploreLongPress(_ gesture: UILongPressGestureRecognizer) {
+        if gesture.state == .began {
+            exitExploreMode()
+        }
+    }
+
+    // VirtualJoystickDelegate
+    public func joystickDidUpdate(left: SIMD2<Float>, right: SIMD2<Float>) {
+        exploreCamera?.leftStick = left
+        exploreCamera?.rightStick = right.y
+    }
+
     // MARK: - Background/Foreground
 
     private var wasPlayingBeforeBackground = false
@@ -257,6 +369,7 @@ public class ViewController: UIViewController {
             renderer.pause()
             synth.pause()
         }
+        if isExploreMode { exploreCamera?.stop() }
         setIdleTimerDisabled(false)
         // Stop GPU work entirely when backgrounded
         (view.subviews.first as? MTKView)?.isPaused = true
@@ -264,7 +377,9 @@ public class ViewController: UIViewController {
 
     func resumePlayback() {
         (view.subviews.first as? MTKView)?.isPaused = false
-        if wasPlayingBeforeBackground {
+        if isExploreMode {
+            exploreCamera?.start()
+        } else if wasPlayingBeforeBackground {
             renderer.resume()
             synth.resume()
         }

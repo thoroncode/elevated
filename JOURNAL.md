@@ -1298,3 +1298,53 @@ was 2.2 px/tri (ideal) but fragment-bound at 8fps.
 **Other fixes**: Disabled idle timer (`isIdleTimerDisabled = true`) to prevent tvOS screensaver
 during playback. Removed unused CPU mesh generation code (`makeTerrainMesh`) — the vertex shader
 generates terrain entirely from `vertex_id`.
+
+---
+
+## visionOS 26 SDK Fixes (2026-04-10)
+
+CompositorServices API changed significantly in visionOS 26:
+- `queryDrawable()` → `queryDrawables()` (returns array for multi-target rendering)
+- `Clock().sleep(until:)` → `Clock().wait(until:)` (non-async, default nil tolerance)
+- `view.tangents` deprecated → `drawable.computeProjection(viewIndex:)` for per-eye projection
+- `drawable.commandBuffer` removed → create own command buffer, pass to `encodePresent(commandBuffer:)`
+- `encodeWaitForPresentation` removed entirely
+
+**App launch fix**: The app only had `ImmersiveSpace` (no `WindowGroup`), so nothing was visible.
+Added `ImmersiveLauncher` that auto-opens the immersive space and dismisses the launch window.
+Required `UIApplicationSupportsMultipleScenes = true` in Info.plist.
+
+**Shader alpha fix**: Both deferred shading and post-process passes returned `float4(c, 0)` — alpha
+zero. The compositor treated all pixels as transparent, showing the passthrough environment through
+the rendered content. Changed to `float4(c, 1)`.
+
+**Head-tracked stereo rendering**: Wired up per-eye rendering with ARKit head tracking. Demo camera
+path provides position, head rotation from `WorldTrackingProvider` provides look direction. Per-eye
+asymmetric projection from `drawable.computeProjection()`, stereo eye offset from `view.transform`.
+
+**Simulator support**: visionOS 26.4 simulator does support CompositorServices immersive rendering.
+Full immersion (environment replacement) requires real hardware — simulator always shows the room.
+
+---
+
+## Explore Mode — Design Plan (2026-04-10)
+
+Easter egg for iOS/iPad: long-press app icon → "Explore" quick action. Gyroscope-based free camera
+lets users hold the iPad as a window into the 3D world and fly around with virtual joysticks.
+
+**Architecture**: Minimal Renderer change — add `viewProjectionOverride: simd_float4x4?` property.
+When set, `draw(in:)` uses it instead of the demo camera VP. Same pattern as the existing
+`renderFrame()` API used by visionOS. Everything else is iOS-side.
+
+**Components**:
+- `ExploreCamera` — CoreMotion `CMMotionManager` with `.xArbitraryZVertical` reference frame.
+  Device attitude relative to reference → LH camera orientation. Joystick input moves position.
+  Terrain bounds clamped to XZ ±52, Y 0.5–15.
+- `VirtualJoystickView` — Two floating translucent thumbsticks (left=move, right=altitude).
+  Appear at touch-down point, fade out on release. Multi-touch.
+- Scene frozen at ~45s (good terrain + lighting). Music keeps playing for atmosphere.
+- Double-tap recalibrates gyro. Long-press (2s) exits to normal demo.
+
+**Key insight**: `updateUniformsForTime()` freezes all scene state (terrain, lighting, instrument
+sync) without touching the camera. Combined with `viewProjectionOverride`, this gives us free
+camera with zero changes to the rendering pipeline.

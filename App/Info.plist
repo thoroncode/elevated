@@ -64,6 +64,17 @@
         <string>UIInterfaceOrientationPortrait</string>
         <string>UIInterfaceOrientationPortraitUpsideDown</string>
     </array>
+    <key>UIApplicationShortcutItems</key>
+    <array>
+        <dict>
+            <key>UIApplicationShortcutItemType</key>
+            <string>com.elevated.explore</string>
+            <key>UIApplicationShortcutItemTitle</key>
+            <string>Explore</string>
+            <key>UIApplicationShortcutItemIconSymbolName</key>
+            <string>binoculars</string>
+        </dict>
+    </array>
     <key>UIBackgroundModes</key>
     <array>
         <string>audio</string>

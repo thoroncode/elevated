@@ -76,7 +76,7 @@ let package = Package(
             ]
         ),
 
-        // ── iOS/iPadOS app (UIKit, fullscreen playback) ───────────────────
+        // ── iOS/iPadOS app (UIKit, fullscreen playback + Explore Mode) ────
         .target(
             name: "ElevatedIOS",
             dependencies: ["ElevatedCore"],
@@ -86,6 +86,7 @@ let package = Package(
             ],
             linkerSettings: [
                 .linkedFramework("UIKit"),
+                .linkedFramework("CoreMotion"),
             ]
         ),
 
