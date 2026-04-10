@@ -27,6 +27,10 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
     private var exploreCamera: ExploreCamera?
     private var joystickView: VirtualJoystickView?
     private var lastExploreTime: CFTimeInterval = 0
+    private var hasUserTouched = false
+    private var hintShown = false
+    private let exploreLockoutTime: Double = 45.0  // no interaction before this
+    private let hintTime: Double = 90.0            // show ghost hint at 1:30
 
     deinit {
         setIdleTimerDisabled(false)
@@ -202,7 +206,7 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
     }
 
     @objc private func handleTap(_ gesture: UITapGestureRecognizer) {
-        guard !isExploreMode else { return }
+        guard !isExploreMode || exploreLockoutActive else { return }
         let location = gesture.location(in: view)
         let inBottomArea = location.y > view.bounds.height * 0.7
 
@@ -262,30 +266,20 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
 
     // MARK: - Explore Mode
 
+    private var exploreLockoutActive = true
+
     func enterExploreMode() {
         guard !isExploreMode else { return }
         isExploreMode = true
+        exploreLockoutActive = true
 
-        // Hide transport
-        hideTimer?.invalidate()
-        transportView.alpha = 0
+        // Transport stays visible during lockout (first 45s)
+        // It gets hidden when lockout ends
 
         // Demo keeps running. Explore camera adds look-around on top.
         exploreCamera = ExploreCamera()
         lastExploreTime = CACurrentMediaTime()
-
-        // Add joystick overlay
-        let joy = VirtualJoystickView(frame: view.bounds)
-        joy.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        joy.delegate = self
-        view.addSubview(joy)
-        joystickView = joy
-
-        // Long-press to exit explore mode
-        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(exploreLongPress))
-        longPress.minimumPressDuration = 2.0
-        joy.addGestureRecognizer(longPress)
-
+        // Joystick overlay added when lockout ends (at 45s)
         setIdleTimerDisabled(true)
     }
 
@@ -305,6 +299,45 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
     private func updateExploreCamera() {
         guard isExploreMode, let cam = exploreCamera else { return }
 
+        let demoTime = renderer.currentTime
+
+        // Lockout: normal demo with transport during first 45s
+        if demoTime < exploreLockoutTime {
+            cam.stick = .zero
+            renderer.viewProjectionOverride = nil
+            return
+        }
+
+        // Transition: hide transport, show joystick when lockout ends
+        if exploreLockoutActive {
+            exploreLockoutActive = false
+            hideTimer?.invalidate()
+            UIView.animate(withDuration: 1.0) { self.transportView.alpha = 0 }
+
+            // Unpause if user left it paused during lockout
+            if renderer.isPaused {
+                renderer.resume()
+                synth.resume()
+            }
+
+            // Add joystick overlay
+            let joy = VirtualJoystickView(frame: view.bounds)
+            joy.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            joy.delegate = self
+            view.addSubview(joy)
+            joystickView = joy
+
+            let longPress = UILongPressGestureRecognizer(target: self, action: #selector(exploreLongPress))
+            longPress.minimumPressDuration = 2.0
+            joy.addGestureRecognizer(longPress)
+        }
+
+        // Ghost hint at 1:30 if user hasn't touched yet
+        if !hasUserTouched && !hintShown && demoTime >= hintTime {
+            hintShown = true
+            joystickView?.playGhostHint()
+        }
+
         let now = CACurrentMediaTime()
         let dt = Float(min(now - lastExploreTime, 1.0 / 30.0))
         lastExploreTime = now
@@ -316,7 +349,7 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
                             demoFov: renderer.demoCameraFov,
                             demoPos: renderer.demoCameraPosition,
                             demoTarget: renderer.demoCameraTarget)
-        renderer.viewProjectionOverride = vp  // nil when not touching → demo camera used
+        renderer.viewProjectionOverride = vp
     }
 
     @objc private func exploreLongPress(_ gesture: UILongPressGestureRecognizer) {
@@ -327,6 +360,13 @@ public class ViewController: UIViewController, VirtualJoystickDelegate {
 
     // VirtualJoystickDelegate
     public func joystickDidUpdate(value: SIMD2<Float>) {
+        // If this came from a real touch (not ghost hint), mark user as active
+        if length(value) > 0.05 && joystickView?.isGhostPlaying != true {
+            if !hasUserTouched {
+                hasUserTouched = true
+                joystickView?.cancelGhostHint()
+            }
+        }
         exploreCamera?.stick = value
     }
 
