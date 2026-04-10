@@ -94,9 +94,10 @@ public class ImmersiveRenderer {
 
             frame.endUpdate()
             guard let timing = frame.predictTiming() else { continue }
-            LayerRenderer.Clock().wait(until: timing.optimalInputTime, tolerance: nil)
+            LayerRenderer.Clock().wait(until: timing.optimalInputTime)
 
-            guard let drawable = frame.queryDrawable() else { continue }
+            let drawables = frame.queryDrawables()
+            guard !drawables.isEmpty else { continue }
 
             frame.startSubmission()
 
@@ -110,31 +111,33 @@ public class ImmersiveRenderer {
                 }
             }
 
-            // Update sync-driven uniforms
-            let tex = drawable.colorTextures[0]
-            let size = CGSize(width: tex.width, height: tex.height)
-            renderer.updateUniformsForTime(time, size: size)
+            for drawable in drawables {
+                // Update sync-driven uniforms
+                let tex = drawable.colorTextures[0]
+                let size = CGSize(width: tex.width, height: tex.height)
+                renderer.updateUniformsForTime(time, size: size)
 
-            // Use the demo's own VP matrix (matching macOS exactly)
-            // This includes the correct FOV, roll, and camera path.
-            let demoVP = renderer.demoViewProjection
+                // Use the demo's own VP matrix (matching macOS exactly)
+                // This includes the correct FOV, roll, and camera path.
+                let demoVP = renderer.demoViewProjection
 
-            // Set device anchor on drawable for reprojection
-            drawable.deviceAnchor = deviceAnchor
+                // Set device anchor on drawable for reprojection
+                drawable.deviceAnchor = deviceAnchor
 
-            guard let cmd = renderer.cmdQueue.makeCommandBuffer() else { continue }
+                guard let cmd = renderer.cmdQueue.makeCommandBuffer() else { continue }
 
-            for viewIndex in 0..<drawable.views.count {
-                let texture = drawable.colorTextures[viewIndex]
+                for viewIndex in 0..<drawable.views.count {
+                    let texture = drawable.colorTextures[viewIndex]
 
-                // Use demo's own view-projection for preplanned flight
-                // (same as macOS — correct FOV, roll, camera path)
-                renderer.renderFrame(commandBuffer: cmd, outputTexture: texture,
-                                    viewProjection: demoVP, size: size)
+                    // Use demo's own view-projection for preplanned flight
+                    // (same as macOS — correct FOV, roll, camera path)
+                    renderer.renderFrame(commandBuffer: cmd, outputTexture: texture,
+                                        viewProjection: demoVP, size: size)
+                }
+
+                drawable.encodePresent(commandBuffer: cmd)
+                cmd.commit()
             }
-
-            drawable.encodePresent(commandBuffer: cmd)
-            cmd.commit()
 
             frame.endSubmission()
         }

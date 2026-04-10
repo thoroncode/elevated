@@ -1,5 +1,7 @@
 // ElevatedApp.swift
 // SwiftUI app entry point for visionOS immersive experience.
+// WindowGroup provides MTKView-based rendering (works in simulator).
+// ImmersiveSpace provides CompositorServices rendering on device.
 
 #if os(visionOS)
 import SwiftUI
@@ -18,7 +20,8 @@ public struct ElevatedApp: App {
 
     public var body: some Scene {
         WindowGroup {
-            ImmersiveLauncher()
+            MetalView()
+                .ignoresSafeArea()
         }
 
         ImmersiveSpace(id: "elevated") {
@@ -47,19 +50,12 @@ public struct ElevatedApp: App {
     }
 }
 
-struct ImmersiveLauncher: View {
-    @Environment(\.openImmersiveSpace) private var openImmersiveSpace
-    @Environment(\.dismissWindow) private var dismissWindow
-
-    var body: some View {
-        Color.clear
-            .task {
-                let result = await openImmersiveSpace(id: "elevated")
-                if case .opened = result {
-                    dismissWindow()
-                }
-            }
+/// Wraps the UIKit ViewController (MTKView-based) for SwiftUI.
+struct MetalView: UIViewControllerRepresentable {
+    func makeUIViewController(context: Context) -> ViewController {
+        ViewController()
     }
+    func updateUIViewController(_ vc: ViewController, context: Context) {}
 }
 
 struct ContentConfiguration: CompositorLayerConfiguration {
