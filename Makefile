@@ -1,4 +1,4 @@
-.PHONY: all help version stamp-version build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots ios-submit ios-add-tester tv-release tv-submit
+.PHONY: all help version stamp-version build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots mac-screenshots tv-screenshots all-screenshots ios-submit ios-add-tester tv-release tv-submit
 
 BIN       = elevated/.build/release/ElevatedMacCLI
 APP       = Elevated.app
@@ -259,7 +259,15 @@ FASTLANE = PATH="/opt/homebrew/opt/ruby/bin:/opt/homebrew/lib/ruby/gems/4.0.0/bi
 SS_DIR   = fastlane/screenshots/en-GB
 SS_TIMES = 5.0 17.0 48.0 95.0 185.0
 
-# Generate App Store screenshots at key demo moments
+# Generate App Store screenshots at key demo moments.
+# The macOS binary renders at 1920x1080; sips resizes for each device class.
+# App Store required sizes:
+#   iPhone 6.9": 1320x2868 (portrait) — we pad landscape into portrait
+#   iPad 13":    2064x2752 (portrait) — padded
+#   Mac:         2880x1800 or 1920x1080
+#   Apple TV:    3840x2160 or 1920x1080
+#   visionOS:    use Mac screenshots (same render)
+
 ios-screenshots: build
 	@mkdir -p $(SS_DIR)
 	@i=1; for t in $(SS_TIMES); do \
@@ -270,7 +278,32 @@ ios-screenshots: build
 	    rm -f /tmp/ss_$${i}.png; \
 	    i=$$((i+1)); \
 	done
-	@echo "Screenshots: $(SS_DIR)/"
+	@echo "iOS screenshots: $(SS_DIR)/"
+
+mac-screenshots: build
+	@mkdir -p $(SS_DIR)
+	@i=1; for t in $(SS_TIMES); do \
+	    echo "Capturing t=$${t}s..."; \
+	    $(BIN) --icon-at=$${t} --icon-out=/tmp/ss_$${i}.png; \
+	    sips -z 1080 1920 /tmp/ss_$${i}.png --out $(SS_DIR)/Mac_$${i}.png > /dev/null 2>&1; \
+	    rm -f /tmp/ss_$${i}.png; \
+	    i=$$((i+1)); \
+	done
+	@echo "Mac screenshots: $(SS_DIR)/"
+
+tv-screenshots: build
+	@mkdir -p $(SS_DIR)
+	@i=1; for t in $(SS_TIMES); do \
+	    echo "Capturing t=$${t}s..."; \
+	    $(BIN) --icon-at=$${t} --icon-out=/tmp/ss_$${i}.png; \
+	    sips -z 1080 1920 /tmp/ss_$${i}.png --out $(SS_DIR)/AppleTV_$${i}.png > /dev/null 2>&1; \
+	    rm -f /tmp/ss_$${i}.png; \
+	    i=$$((i+1)); \
+	done
+	@echo "Apple TV screenshots: $(SS_DIR)/"
+
+all-screenshots: ios-screenshots mac-screenshots tv-screenshots
+	@echo "All screenshots generated in $(SS_DIR)/"
 
 # Upload metadata (description, keywords, icon, screenshots) to App Store Connect
 ios-metadata:
