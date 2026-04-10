@@ -117,22 +117,66 @@ public class ImmersiveRenderer {
                 let size = CGSize(width: tex.width, height: tex.height)
                 renderer.updateUniformsForTime(time, size: size)
 
-                // Use the demo's own VP matrix (matching macOS exactly)
-                // This includes the correct FOV, roll, and camera path.
-                let demoVP = renderer.demoViewProjection
+                let camPos = renderer.demoCameraPosition
+                let camTarget = renderer.demoCameraTarget
 
-                // Set device anchor on drawable for reprojection
+                // Build demo camera basis (the direction the demo "looks")
+                let demoFwd = normalize(camTarget - camPos)
+                let demoRight = normalize(cross(SIMD3<Float>(0, 1, 0), demoFwd))
+                let demoUp = cross(demoFwd, demoRight)
+                // demoBasis columns: right, up, forward — transforms head-space → world-space
+                let demoBasis = simd_float3x3(columns: (demoRight, demoUp, demoFwd))
+
+                // Head rotation from ARKit (identity if no tracking)
+                let headRotation: simd_float3x3
+                if let anchor = deviceAnchor {
+                    let h = anchor.originFromAnchorTransform
+                    headRotation = simd_float3x3(
+                        SIMD3(h.columns.0.x, h.columns.0.y, h.columns.0.z),
+                        SIMD3(h.columns.1.x, h.columns.1.y, h.columns.1.z),
+                        SIMD3(h.columns.2.x, h.columns.2.y, h.columns.2.z)
+                    )
+                } else {
+                    headRotation = matrix_identity_float3x3
+                }
+
+                // Combined orientation: demo direction + head look-around
+                let orient = demoBasis * headRotation
+
+                // Set device anchor and depth range for compositor reprojection
                 drawable.deviceAnchor = deviceAnchor
+                drawable.depthRange = SIMD2(256.0, 0.03125)  // reverse-Z: (far, near)
 
                 guard let cmd = renderer.cmdQueue.makeCommandBuffer() else { continue }
 
                 for viewIndex in 0..<drawable.views.count {
                     let texture = drawable.colorTextures[viewIndex]
+                    let view = drawable.views[viewIndex]
 
-                    // Use demo's own view-projection for preplanned flight
-                    // (same as macOS — correct FOV, roll, camera path)
+                    // Per-eye offset from device center (IPD / stereo)
+                    let eyeTransform = view.transform
+                    let eyeOffset = SIMD3(eyeTransform.columns.3.x,
+                                          eyeTransform.columns.3.y,
+                                          eyeTransform.columns.3.z)
+                    let eyePos = camPos + orient * eyeOffset
+
+                    // View matrix: inverse of the combined orientation placed at eye position
+                    let r = orient
+                    let viewMatrix = simd_float4x4(columns: (
+                        SIMD4(r.columns.0.x, r.columns.1.x, r.columns.2.x, 0),
+                        SIMD4(r.columns.0.y, r.columns.1.y, r.columns.2.y, 0),
+                        SIMD4(r.columns.0.z, r.columns.1.z, r.columns.2.z, 0),
+                        SIMD4(-dot(r.columns.0, eyePos),
+                               -dot(r.columns.1, eyePos),
+                               -dot(r.columns.2, eyePos), 1)
+                    ))
+
+                    // Per-eye asymmetric projection from compositor
+                    let projMatrix = drawable.computeProjection(viewIndex: viewIndex)
+                    let vp = projMatrix * viewMatrix
+
                     renderer.renderFrame(commandBuffer: cmd, outputTexture: texture,
-                                        viewProjection: demoVP, size: size)
+                                        viewProjection: vp, size: size)
                 }
 
                 drawable.encodePresent(commandBuffer: cmd)
