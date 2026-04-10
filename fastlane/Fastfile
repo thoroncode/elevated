@@ -1,5 +1,23 @@
 default_platform(:ios)
 
+desc "Upload metadata for all platforms to App Store Connect"
+lane :metadata_all do
+  %w[ios osx appletvos].each do |plat|
+    UI.message("Uploading metadata for #{plat}...")
+    deliver(
+      skip_binary_upload: true,
+      skip_screenshots: true,
+      skip_metadata: false,
+      force: true,
+      platform: plat,
+      metadata_path: "fastlane/metadata/#{plat}",
+      pkg: nil,
+      ipa: nil
+    )
+  end
+  UI.success("Metadata uploaded for all platforms.")
+end
+
 def elevated_env!(key)
   ENV.fetch(key) { UI.user_error!("Missing #{key} in fastlane/.env") }
 end
