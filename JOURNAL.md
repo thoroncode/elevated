@@ -1376,3 +1376,20 @@ anywhere. The fade uses a 60fps Timer stepping `engine.mainMixerNode.outputVolum
 
 **Scrub audio**: On scrub begin, audio fades to zero then pauses. On scrub end, audio seeks to new
 position, resumes, and fades back in. Works whether the demo was playing or paused before scrub.
+
+---
+
+## visionOS: P * R * V Head Tracking (2026-04-10)
+
+Rewrote ImmersiveRenderer to use the same `P * R * V` approach proven on iPad:
+- `V_demo` = Renderer's `lastView` matrix (includes demo camera roll, exact path)
+- `R_head` = ARKit head rotation relative to a reference captured on first frame
+- `P_compositor` = per-eye asymmetric projection from `drawable.computeProjection()`
+- Per-eye IPD offset applied as a translation between P and R
+
+Final VP: `P_compositor * eyeOffset * R_head * V_demo`
+
+This preserves the demo director's cinematography (roll, camera path, FOV) while adding
+head-tracked look-around on top. The reference head rotation means "straight ahead" at
+app launch = the demo's forward direction. Previous approach rebuilt the VP from scratch
+using demoCameraPosition/Target, losing the camera roll.

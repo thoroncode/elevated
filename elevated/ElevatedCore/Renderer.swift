@@ -179,8 +179,8 @@ public class Renderer: NSObject, MTKViewDelegate {
     /// When set, draw(in:) applies this rotation between projection and view.
     /// Applied in eye space — correct yaw/pitch without distortion.
     public var viewProjectionRotation: simd_float4x4?
-    private var lastProjection: simd_float4x4 = matrix_identity_float4x4
-    private var lastView: simd_float4x4 = matrix_identity_float4x4
+    public private(set) var lastProjection: simd_float4x4 = matrix_identity_float4x4
+    public private(set) var lastView: simd_float4x4 = matrix_identity_float4x4
     public weak var view: MTKView?
 
     // Debug / capture
