@@ -1377,6 +1377,37 @@ anywhere. The fade uses a 60fps Timer stepping `engine.mainMixerNode.outputVolum
 **Scrub audio**: On scrub begin, audio fades to zero then pauses. On scrub end, audio seeks to new
 position, resumes, and fades back in. Works whether the demo was playing or paused before scrub.
 
+---
+
+## FLIP Fidelity Comparison Pipeline — Future Plan (2026-04-10)
+
+The sibling repo `../fr-025` has a working NVIDIA FLIP perceptual comparison pipeline that we should
+adapt for Elevated to validate our Metal port against the original D3D9 rendering.
+
+**fr-025's pipeline** (proven, working):
+- `tool/flip-cli/` — Custom Rust CLI (139 lines) that computes FLIP mean scores between two PNGs
+- `make capture-frames` — Captures all 15000 frames from D3D9 original via Parallels VM
+- `make screenshot TIME=N` — Renders one frame from the reconstruction app
+- `make fidelity-report` — Renders at sample times (0, 5, 10, 20, 30s), compares against captured
+  reference frames, prints FLIP scores per timestamp
+
+**Adapting for Elevated**:
+1. **Reference capture**: Run the original `elevated.exe` in Parallels at key timestamps, capture
+   D3D9 output frames. Same dsound/d3d9 hook approach fr-025 uses for audio/frame capture.
+2. **Metal capture**: Already have `--icon-at=T --icon-out=path` in the macOS binary. Renders a
+   clean frame at any demo time.
+3. **FLIP comparison**: Port or symlink fr-025's `tool/flip-cli/` Rust tool. Compare reference
+   vs Metal at matching timestamps.
+4. **Report**: `make fidelity-report` prints FLIP scores. Target: mean FLIP < 0.1 (perceptually
+   near-identical). Current known differences: sRGB gamma handling, fbm noise precision.
+
+**Why this matters**: Shader changes (like the alpha=0→1 fix) could accidentally alter the visual
+output. A FLIP baseline catches regressions that aren't visible at a glance but accumulate over
+time. Also validates that the port is truly faithful, not just "looks similar."
+
+**Dependencies**: Rust toolchain (for flip-cli), Parallels VM with Windows (for D3D9 reference
+capture), Python 3 (optional, for flip-evaluator pip package as alternative).
+
 **Race condition fix**: Removed all completion-block-based `synth.pause()` calls from fadeVolume.
 The completion could fire after the user returned from background, killing resumed audio. Now only
 `pausePlayback` (hard background stop) actually pauses the synth. Volume at 0 = silent enough.
