@@ -20,8 +20,7 @@ public struct ElevatedApp: App {
 
     public var body: some Scene {
         WindowGroup {
-            MetalView()
-                .ignoresSafeArea()
+            ImmersiveLauncher()
         }
 
         ImmersiveSpace(id: "elevated") {
@@ -50,12 +49,20 @@ public struct ElevatedApp: App {
     }
 }
 
-/// Wraps the UIKit ViewController (MTKView-based) for SwiftUI.
-struct MetalView: UIViewControllerRepresentable {
-    func makeUIViewController(context: Context) -> ViewController {
-        ViewController()
+/// Auto-opens the immersive space and dismisses the launch window.
+struct ImmersiveLauncher: View {
+    @Environment(\.openImmersiveSpace) private var openImmersiveSpace
+    @Environment(\.dismissWindow) private var dismissWindow
+
+    var body: some View {
+        Color.clear
+            .task {
+                let result = await openImmersiveSpace(id: "elevated")
+                if case .opened = result {
+                    dismissWindow()
+                }
+            }
     }
-    func updateUIViewController(_ vc: ViewController, context: Context) {}
 }
 
 struct ContentConfiguration: CompositorLayerConfiguration {
