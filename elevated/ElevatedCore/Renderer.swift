@@ -176,8 +176,11 @@ public class Renderer: NSObject, MTKViewDelegate {
     private var pauseTime: Double = 0
     public var onDraw: (() -> Void)?
     public var onDemoEnd: (() -> Void)?
-    /// When set, draw(in:) uses this VP matrix instead of the demo camera.
-    public var viewProjectionOverride: simd_float4x4?
+    /// When set, draw(in:) applies this rotation between projection and view.
+    /// Applied in eye space — correct yaw/pitch without distortion.
+    public var viewProjectionRotation: simd_float4x4?
+    private var lastProjection: simd_float4x4 = matrix_identity_float4x4
+    private var lastView: simd_float4x4 = matrix_identity_float4x4
     public weak var view: MTKView?
 
     // Debug / capture
@@ -538,6 +541,8 @@ public class Renderer: NSObject, MTKViewDelegate {
         let aspect = Float(size.width) / Float(size.height)
         let proj = projectionMatrixLH(fovY: camFov, aspect: aspect, near: 0.03125, far: 256.0)
         let view = lookAtLH(eye: camPos, center: camTarget, up: up)
+        lastProjection = proj
+        lastView = view
         uniforms.v  = proj * view
         uniforms.vi = simd_inverse(uniforms.v)
     }
@@ -769,9 +774,10 @@ public class Renderer: NSObject, MTKViewDelegate {
               let rpd = view.currentRenderPassDescriptor else { return }
 
         updateUniforms(size: view.drawableSize)
-        if let vp = viewProjectionOverride {
-            uniforms.v = vp
-            uniforms.vi = simd_inverse(vp)
+        if let rot = viewProjectionRotation {
+            // Apply rotation in eye space: P * R * V (not R * P * V)
+            uniforms.v = lastProjection * rot * lastView
+            uniforms.vi = simd_inverse(uniforms.v)
         }
         frameNumber += 1
 #if os(macOS)

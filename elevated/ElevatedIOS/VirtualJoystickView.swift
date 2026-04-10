@@ -126,6 +126,7 @@ final class VirtualJoystickView: UIView {
 
     private let ghostBase = CAShapeLayer()
     private let ghostKnob = CAShapeLayer()
+    private var ghostGlow: CAGradientLayer?
     private var ghostTimer: Timer?
 
     var isGhostPlaying: Bool { ghostTimer != nil }
@@ -136,7 +137,7 @@ final class VirtualJoystickView: UIView {
         guard ghostTimer == nil else { return }
 
         // Position: right side of screen, vertically centered
-        let cx = bounds.width * 0.65
+        let cx = bounds.width * 0.80
         let cy = bounds.height * 0.5
 
         ghostBase.fillColor = UIColor.white.withAlphaComponent(0.04).cgColor
@@ -158,11 +159,51 @@ final class VirtualJoystickView: UIView {
         ghostKnob.path = UIBezierPath(ovalIn: CGRect(x: cx - kr, y: cy - kr,
                                                       width: kr * 2, height: kr * 2)).cgPath
 
-        // Animation timeline (total ~6s):
-        // 0-1.5s: fade in
-        // 1.5-3.5s: drift right
-        // 3.5-5s: drift back to center
-        // 5-6s: fade out
+        // Animated conic gradient glow around the base
+        let glowSpread: CGFloat = 14
+        let glowSize = (br + glowSpread) * 2
+        let glow = CAGradientLayer()
+        glow.type = .conic
+        glow.startPoint = CGPoint(x: 0.5, y: 0.5)
+        glow.endPoint = CGPoint(x: 0.5, y: 0)
+        glow.colors = [
+            UIColor(red: 0.60, green: 0.30, blue: 0.90, alpha: 1.0).cgColor,  // purple
+            UIColor(red: 0.30, green: 0.50, blue: 1.00, alpha: 1.0).cgColor,  // blue
+            UIColor(red: 0.20, green: 0.80, blue: 0.80, alpha: 1.0).cgColor,  // teal
+            UIColor(red: 0.30, green: 0.85, blue: 0.40, alpha: 1.0).cgColor,  // green
+            UIColor(red: 1.00, green: 0.65, blue: 0.20, alpha: 1.0).cgColor,  // orange
+            UIColor(red: 0.95, green: 0.35, blue: 0.55, alpha: 1.0).cgColor,  // pink
+            UIColor(red: 0.60, green: 0.30, blue: 0.90, alpha: 1.0).cgColor,  // purple (wrap)
+        ]
+        glow.frame = CGRect(x: cx - br - glowSpread, y: cy - br - glowSpread,
+                            width: glowSize, height: glowSize)
+        glow.cornerRadius = glowSize / 2
+        glow.opacity = 0
+
+        // Mask: ring shape (cut out the inside to show only the border glow)
+        let maskLayer = CAShapeLayer()
+        let outerPath = UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: glowSize, height: glowSize))
+        let innerInset = glowSpread - 4  // thin ring with soft outer edge
+        let innerPath = UIBezierPath(ovalIn: CGRect(x: innerInset, y: innerInset,
+                                                     width: glowSize - innerInset * 2,
+                                                     height: glowSize - innerInset * 2))
+        outerPath.append(innerPath.reversing())
+        maskLayer.path = outerPath.cgPath
+        maskLayer.fillRule = .evenOdd
+        glow.mask = maskLayer
+
+        // Spin animation
+        let spin = CABasicAnimation(keyPath: "transform.rotation.z")
+        spin.fromValue = 0
+        spin.toValue = Float.pi * 2
+        spin.duration = 3.0
+        spin.repeatCount = .infinity
+        glow.add(spin, forKey: "spin")
+
+        layer.insertSublayer(glow, below: ghostBase)
+        ghostGlow = glow
+
+        // 4 seconds: single smooth arc. Peak at 2s, symmetric fade in/out.
 
         var elapsed: Float = 0
         let interval: Float = 1.0 / 60.0
@@ -170,54 +211,49 @@ final class VirtualJoystickView: UIView {
         ghostTimer = Timer.scheduledTimer(withTimeInterval: TimeInterval(interval), repeats: true) { [weak self] timer in
             guard let self else { timer.invalidate(); return }
             elapsed += interval
-            let maxD = self.maxDisplacement
 
-            if elapsed < 1.5 {
-                // Fade in
-                let alpha = elapsed / 1.5
-                self.ghostBase.opacity = Float(alpha)
-                self.ghostKnob.opacity = Float(alpha)
-            } else if elapsed < 3.5 {
-                // Drift right and slightly up
-                self.ghostBase.opacity = 1
-                self.ghostKnob.opacity = 1
-                let t = (elapsed - 1.5) / 2.0  // 0→1
-                let smooth = t * t * (3 - 2 * t)  // smoothstep
-                let dx = CGFloat(smooth) * maxD * 0.6
-                let dy = CGFloat(smooth) * maxD * -0.2
-                let rect = CGRect(x: cx + dx - kr, y: cy + dy - kr, width: kr * 2, height: kr * 2)
+            guard elapsed < 4.0 else {
                 CATransaction.begin()
                 CATransaction.setDisableActions(true)
-                self.ghostKnob.path = UIBezierPath(ovalIn: rect).cgPath
+                self.ghostBase.opacity = 0
+                self.ghostKnob.opacity = 0
+                self.ghostGlow?.opacity = 0
                 CATransaction.commit()
-                // Send ghost input to camera
-                self.delegate?.joystickDidUpdate(value: SIMD2(Float(smooth) * 0.3, Float(smooth) * 0.1))
-            } else if elapsed < 5.0 {
-                // Drift back
-                let t = (elapsed - 3.5) / 1.5  // 0→1
-                let smooth = t * t * (3 - 2 * t)
-                let dx = CGFloat(1 - smooth) * maxD * 0.6
-                let dy = CGFloat(1 - smooth) * maxD * -0.2
-                let rect = CGRect(x: cx + dx - kr, y: cy + dy - kr, width: kr * 2, height: kr * 2)
-                CATransaction.begin()
-                CATransaction.setDisableActions(true)
-                self.ghostKnob.path = UIBezierPath(ovalIn: rect).cgPath
-                CATransaction.commit()
-                self.delegate?.joystickDidUpdate(value: SIMD2(Float(1 - smooth) * 0.3, Float(1 - smooth) * 0.1))
-            } else if elapsed < 6.0 {
-                // Fade out
-                let alpha = 1.0 - (elapsed - 5.0)
-                self.ghostBase.opacity = Float(alpha)
-                self.ghostKnob.opacity = Float(alpha)
-                self.delegate?.joystickDidUpdate(value: .zero)
-            } else {
-                // Done
                 self.ghostBase.removeFromSuperlayer()
                 self.ghostKnob.removeFromSuperlayer()
-                self.delegate?.joystickDidUpdate(value: .zero)
+                self.ghostGlow?.removeFromSuperlayer()
+                self.ghostGlow = nil
                 timer.invalidate()
                 self.ghostTimer = nil
+                return
             }
+
+            // Two smoothstep halves: 0→1 over first 2s, 1→0 over last 2s
+            let fade: Float
+            if elapsed < 2.0 {
+                let t = elapsed / 2.0
+                fade = t * t * (3 - 2 * t)
+            } else {
+                let t = (elapsed - 2.0) / 2.0
+                fade = 1.0 - t * t * (3 - 2 * t)
+            }
+
+            // Disable implicit animations for all property changes
+            CATransaction.begin()
+            CATransaction.setDisableActions(true)
+
+            self.ghostBase.opacity = fade * 0.4
+            self.ghostKnob.opacity = fade * 0.5
+            self.ghostGlow?.opacity = fade * 0.7
+
+            // Knob drifts with same arc
+            let maxD = self.maxDisplacement
+            let dx = CGFloat(fade) * maxD * 0.45
+            let dy = CGFloat(fade) * maxD * -0.12
+            let rect = CGRect(x: cx + dx - kr, y: cy + dy - kr, width: kr * 2, height: kr * 2)
+            self.ghostKnob.path = UIBezierPath(ovalIn: rect).cgPath
+
+            CATransaction.commit()
         }
     }
 
@@ -226,6 +262,8 @@ final class VirtualJoystickView: UIView {
         ghostTimer = nil
         ghostBase.removeFromSuperlayer()
         ghostKnob.removeFromSuperlayer()
+        ghostGlow?.removeFromSuperlayer()
+        ghostGlow = nil
         delegate?.joystickDidUpdate(value: .zero)
     }
 }

@@ -1327,24 +1327,36 @@ Full immersion (environment replacement) requires real hardware — simulator al
 
 ---
 
-## Explore Mode — Design Plan (2026-04-10)
+## Explore Mode — Implementation (2026-04-10)
 
-Easter egg for iOS/iPad: long-press app icon → "Explore" quick action. Gyroscope-based free camera
-lets users hold the iPad as a window into the 3D world and fly around with virtual joysticks.
+Easter egg for iOS/iPad: long-press app icon → "Explore" quick action. Single joystick look-around
+while riding the demo flight path.
 
-**Architecture**: Minimal Renderer change — add `viewProjectionOverride: simd_float4x4?` property.
-When set, `draw(in:)` uses it instead of the demo camera VP. Same pattern as the existing
-`renderFrame()` API used by visionOS. Everything else is iOS-side.
+**Architecture**: Renderer exposes `viewProjectionRotation: simd_float4x4?`. When set, `draw(in:)`
+applies the rotation between stored projection and view matrices: `P * R * V`. This preserves the
+demo's position, roll, FOV, and projection — only the look direction changes. At zero offset R is
+identity, so the result is the exact demo VP. No switching between camera systems = no jumps.
+
+**Critical math lesson**: Rotation must be applied in eye space (`P * R * V`), NOT in clip space
+(`R * P * V`). Clip-space rotation causes severe distortion — tilted horizons, stretched terrain.
+The fix required storing P and V separately in `updateUniforms` and recomposing in `draw(in:)`.
 
 **Components**:
-- `ExploreCamera` — CoreMotion `CMMotionManager` with `.xArbitraryZVertical` reference frame.
-  Device attitude relative to reference → LH camera orientation. Joystick input moves position.
-  Terrain bounds clamped to XZ ±52, Y 0.5–15.
-- `VirtualJoystickView` — Two floating translucent thumbsticks (left=move, right=altitude).
-  Appear at touch-down point, fade out on release. Multi-touch.
-- Scene frozen at ~45s (good terrain + lighting). Music keeps playing for atmosphere.
-- Double-tap recalibrates gyro. Long-press (2s) exits to normal demo.
+- `ExploreCamera` — produces a 4x4 rotation matrix from yaw/pitch offsets. Stick input smoothly
+  follows target (0.4/s lerp), cubic response curve + 15px dead zone. Returns nil when offsets
+  are zero. 5s hold after release, then smooth ease back via quadratic ramp.
+- `VirtualJoystickView` — single floating thumbstick (120pt base, 40pt knob). Appears at touch
+  point, fades on release. Ghost hint animation with spinning conic gradient rainbow glow.
 
-**Key insight**: `updateUniformsForTime()` freezes all scene state (terrain, lighting, instrument
-sync) without touching the camera. Combined with `viewProjectionOverride`, this gives us free
-camera with zero changes to the rendering pipeline.
+**Intro flow** (Explore Mode):
+- 0–45s: Normal demo with transport bar (tap/pause/scrub). No joystick, no hint.
+- 45s: Transport fades out, joystick overlay appears (invisible until touched).
+- 1:33: If user hasn't touched, ghost joystick hint with rainbow glow — 4s smoothstep
+  fade in/out, knob drifts to show the gesture. Visual only, no camera movement.
+- Touch anywhere: joystick appears at finger, smooth look-around.
+- Release: holds view 5s, then gently eases back to demo direction.
+- Demo loop: rotation reset to prevent offset carry-over.
+
+**Ghost hint glow**: `CAGradientLayer` with `.conic` type, rainbow colors, spinning via
+`CABasicAnimation`. Ring-masked (inner circle cut out). All opacity changes wrapped in
+`CATransaction.setDisableActions(true)` to prevent implicit CA animation blinks.
