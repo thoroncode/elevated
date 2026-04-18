@@ -4,6 +4,36 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 
 ---
 
+## 2026-04-18 — Full-frame dump path for exact 60 fps capture
+
+### Goal
+
+Add a straightforward way to render and save every frame of the demo at
+exact 60 fps instead of the existing one-PNG-per-second capture mode.
+
+### What changed
+
+- `Makefile` gained `dump-frames`, which runs the app with
+  `--dump-frames`.
+- `ElevatedMac/AppDelegate.swift` gained a headless
+  `dumpEveryFrame()` path that steps time in 1/60 s increments,
+  renders to a dedicated 1920×1080 texture, and saves
+  `frame_00000.png`, `frame_00001.png`, ... into
+  `/tmp/elevated_frames`.
+- `ElevatedCore/Renderer.swift` now exposes `saveTexture(...)` so the
+  frame-dump path can save an offscreen render target directly instead
+  of only a live drawable.
+
+### Verification
+
+- `swift build` completed successfully after the change.
+
+### Note
+
+This is a useful exact-frame extraction path, but the build-only check
+does not prove runtime throughput or disk-space behavior yet. A real
+`make dump-frames` run is still the next practical verification step.
+
 ## 2026-04-18 — Ignore missing Xcode user-state noise across all project variants
 
 ### Goal

@@ -567,7 +567,11 @@ public class Renderer: NSObject, MTKViewDelegate {
 
     // Reads back a drawable texture and saves it as a PNG.
     public func saveDrawable(_ drawable: CAMetalDrawable, to path: String) {
-        let tex = drawable.texture
+        saveTexture(drawable.texture, to: path)
+    }
+
+    /// Reads back a texture and saves it as a PNG.
+    public func saveTexture(_ tex: MTLTexture, to path: String) {
         let w = tex.width, h = tex.height
         let bpr = w * 4
         var raw = [UInt8](repeating: 0, count: bpr * h)

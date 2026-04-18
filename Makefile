@@ -52,6 +52,7 @@ help:
 	@echo ""
 	@echo "  uninstall         Remove /Applications/Elevated.app"
 	@echo "  capture           Capture one PNG per second to /tmp/elevated_cap/"
+	@echo "  dump-frames       Capture EVERY frame (60fps) to /tmp/elevated_frames/"
 	@echo "  branch-frame      Capture one exact frame (use T=<sec> [BRANCHES='...'])"
 	@echo "  ref               Extract reference frames to /tmp/elevated_ref/"
 	@echo "  compare           Compare all matching reference/capture frames"
@@ -343,6 +344,11 @@ uninstall:
 capture: build
 	mkdir -p /tmp/elevated_cap
 	$(BIN) --capture
+
+# Run headless and save every single frame (60fps) to /tmp/elevated_frames/
+dump-frames: build
+	mkdir -p /tmp/elevated_frames
+	$(BIN) --dump-frames
 
 # Capture one exact frame across branches using temporary git worktrees.
 # Example:

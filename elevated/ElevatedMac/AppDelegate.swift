@@ -52,12 +52,13 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         let iconTime = argVal("--icon-at=").flatMap(Double.init)
         let iconOut  = argVal("--icon-out=") ?? "icon_source.png"
-        debugCompareActive = debugCompareActive && !captureMode && iconTime == nil
-        let normalPresentation = !debugActive && !captureMode && iconTime == nil
+        let dumpFrames = args.contains("--dump-frames")
+        debugCompareActive = debugCompareActive && !captureMode && iconTime == nil && !dumpFrames
+        let normalPresentation = !debugActive && !captureMode && iconTime == nil && !dumpFrames
 
         let mtkView = makeMetalView(device: device)
         renderer = Renderer(mtkView: mtkView,
-                            debug: debugActive || captureMode,
+                            debug: debugActive || captureMode || dumpFrames,
                             capture: captureMode,
                             shaderVariant: .optimized)
         renderer.debugLabel = debugCompareActive ? "Current" : ""
@@ -132,6 +133,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             renderer.start()
             renderer.seek(to: t)
             renderer.captureNextFramePath = iconOut
+        } else if dumpFrames {
+            dumpEveryFrame()
         } else {
             synth.synthesize { [weak self] ok in
                 guard let self, ok else { print("Synthesis failed"); return }
@@ -582,6 +585,54 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     private func seekRenderers(to time: Double) {
         setRenderersPlayback(time: time, paused: renderer.isPaused)
+    }
+
+    private func dumpEveryFrame() {
+        let fps = 60.0
+        let step = 1.0 / fps
+        let width = 1920
+        let height = 1080
+        let size = CGSize(width: width, height: height)
+
+        let desc = MTLTextureDescriptor.texture2DDescriptor(pixelFormat: .bgra8Unorm, width: width, height: height, mipmapped: false)
+        desc.usage = [.renderTarget, .shaderRead]
+        desc.storageMode = .shared
+        guard let outputTex = renderer.device.makeTexture(descriptor: desc) else {
+            print("Failed to create output texture")
+            NSApp.terminate(nil)
+            return
+        }
+
+        let outDir = "/tmp/elevated_frames"
+        try? FileManager.default.createDirectory(atPath: outDir, withIntermediateDirectories: true)
+
+        print("Dumping every frame to \(outDir) at \(width)x\(height), \(fps) fps...")
+
+        var t = 0.0
+        var frame = 0
+        while t <= kDemoDuration {
+            renderer.updateUniformsForTime(t, size: size)
+
+            guard let cmd = renderer.cmdQueue.makeCommandBuffer() else {
+                print("Failed to create command buffer at frame \(frame)")
+                break
+            }
+            renderer.renderFrame(commandBuffer: cmd, outputTexture: outputTex, viewProjection: renderer.demoViewProjection, size: size)
+            cmd.commit()
+            cmd.waitUntilCompleted()
+
+            let path = "\(outDir)/frame_\(String(format: "%05d", frame)).png"
+            renderer.saveTexture(outputTex, to: path)
+
+            if frame % 60 == 0 {
+                print(String(format: "Progress: %05d / %.3fs", frame, t))
+            }
+
+            t += step
+            frame += 1
+        }
+        print("Done. Total frames: \(frame)")
+        NSApp.terminate(nil)
     }
 
     private func loadAboutText() -> String {
