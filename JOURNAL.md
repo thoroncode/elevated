@@ -4,6 +4,42 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 
 ---
 
+## 2026-04-18 — Ignore missing Xcode user-state noise across all project variants
+
+### Goal
+
+Stop local Xcode workspace and user-state files from showing up as
+untracked noise in the repository status.
+
+### Facts
+
+- `.gitignore` already ignored `xcuserdata/` and `project.xcworkspace/`
+  for `ElevatedIOS.xcodeproj` and `ElevatedTV.xcodeproj`.
+- The repository also has `ElevatedMac.xcodeproj` and
+  `ElevatedVision.xcodeproj`.
+- Opening those projects in Xcode produced local untracked files under:
+  - `ElevatedMac.xcodeproj/project.xcworkspace/`
+  - `ElevatedMac.xcodeproj/xcuserdata/`
+  - `ElevatedVision.xcodeproj/project.xcworkspace/`
+  - `ElevatedVision.xcodeproj/xcuserdata/`
+
+### Decision
+
+Replace the project-specific ignore entries with generic patterns that
+cover all `*.xcodeproj` variants in the repository.
+
+### Outputs
+
+- Updated `.gitignore` to ignore:
+  - `*.xcodeproj/xcuserdata/`
+  - `*.xcodeproj/project.xcworkspace/`
+
+### Note
+
+This only suppresses Xcode-generated local noise. It does not affect
+real source edits such as the current `dump-frames` feature work in the
+integration checkout.
+
 ## 2026-04-18 — Worktree policy: default agent tree first
 
 ### Decision
