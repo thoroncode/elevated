@@ -8,7 +8,9 @@ By default, if you are going to modify files, do not work in the main checkout a
 
 - Treat the main checkout as read-only integration space for normal implementation work.
 - Read-only investigation on `main` is allowed.
-- Any non-trivial task that edits files should use its own dedicated branch and its own dedicated git worktree.
+- Each AI agent should keep one long-lived default worktree outside the main checkout, for example `~/src/codex-elevated` or `~/src/claude-elevated`.
+- Normal day-to-day agent work should happen in that agent's default worktree, not in the main checkout.
+- Extra task-specific worktrees are for work that is unusually risky, long-running, experimental, or likely to overlap with another active branch.
 - Merge validated task branches back to `main` from the integration checkout.
 
 ### Small Fix Exception
@@ -26,7 +28,7 @@ Examples:
 - Fixing a typo in docs or comments
 - Adjusting a small build warning with an obvious one-file fix
 
-When in doubt, use a branch and a worktree.
+When in doubt, use the agent's default worktree first. Make an extra task worktree only when the default one is not enough.
 
 ## Branch Naming
 
@@ -39,6 +41,18 @@ Use a branch prefix that matches the task:
 Keep names short, concrete, and filesystem-friendly.
 
 ## Standard Task Setup
+
+For normal AI work, bootstrap one default agent worktree and keep using it:
+
+```bash
+cd /path/to/repo
+git switch main
+git pull --ff-only
+git worktree add ~/src/<agent>-elevated -b task/<agent>-default main
+cd ~/src/<agent>-elevated
+```
+
+If the default worktree is already busy and you need a separate feature branch, create an extra task worktree:
 
 ```bash
 cd /path/to/repo

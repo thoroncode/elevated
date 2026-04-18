@@ -4,6 +4,37 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 
 ---
 
+## 2026-04-18 — Worktree policy: default agent tree first
+
+### Decision
+
+The repository now distinguishes between an agent's default long-lived
+worktree and extra task-specific worktrees.
+
+### What changed
+
+- Each AI agent should keep one stable worktree such as
+  `~/src/codex-elevated` or `~/src/claude-elevated`.
+- Ordinary agent work should happen there by default.
+- Extra task worktrees are now reserved for risky, long-running,
+  experimental, or overlapping branches that genuinely need more
+  isolation than the default agent tree provides.
+- The main checkout remains read-only integration space except for the
+  existing small-fix exception.
+
+### Why
+
+The previous wording pushed agents toward creating a new sibling
+worktree for most non-trivial tasks. That maximized isolation but also
+left `~/src/` cluttered with short-lived trees. A stable per-agent
+workspace gives the same day-to-day safety without turning ordinary
+progress into directory sprawl.
+
+### Outputs
+
+- Updated `AGENTS.md` to describe the default-agent-worktree model and
+  to recast extra task worktrees as the escalation path.
+
 ## 2026-04-06 — visionOS immersive renderer: preplanned flight working
 
 **Goal**: Get the visionOS immersive space rendering the Elevated demo identically to macOS — correct colors, correct camera path, no crashes.
