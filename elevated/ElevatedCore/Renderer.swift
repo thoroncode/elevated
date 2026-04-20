@@ -766,7 +766,12 @@ public class Renderer: NSObject, MTKViewDelegate {
         let t = currentTime
         if t >= kDemoDuration && !isPaused && !debugMode {
 #if os(macOS)
-            NSApplication.shared.terminate(nil)
+            if let cb = onDemoEnd {
+                pause()
+                cb()
+            } else {
+                NSApplication.shared.terminate(nil)
+            }
 #else
             pause()
             onDemoEnd?()

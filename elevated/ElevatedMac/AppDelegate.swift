@@ -24,6 +24,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var debugMenuItem: NSMenuItem?
     private var helpMenuItem: NSMenuItem?
     private var muteMenuItem: NSMenuItem?
+    private var loopMenuItem: NSMenuItem?
+    private var eternalLoop = false
     private var captureMode = false
     private var launchTime: CFTimeInterval = 0
     private var fullscreenCursorMonitor: Any?
@@ -120,6 +122,8 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         setDebugActive(debugActive)
 
+        renderer.onDemoEnd = { [weak self] in self?.handleDemoEnd() }
+
         setupMenuBar()
         NSApp.activate(ignoringOtherApps: true)
         if normalPresentation {
@@ -172,6 +176,20 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func toggleMute() {
         synth.isMuted.toggle()
         muteMenuItem?.state = synth.isMuted ? .on : .off
+    }
+
+    @objc private func toggleEternalLoop() {
+        eternalLoop.toggle()
+        loopMenuItem?.state = eternalLoop ? .on : .off
+    }
+
+    private func handleDemoEnd() {
+        if eternalLoop {
+            synth.seek(to: 0)
+            setRenderersPlayback(time: 0, paused: false)
+        } else {
+            NSApp.terminate(nil)
+        }
     }
 
     // ── Transport bar ──────────────────────────────────────────────────────
@@ -315,6 +333,21 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         muteItem.target = self
         audioMenu.addItem(muteItem)
         muteMenuItem = muteItem
+
+        // ── Playback menu ──
+        let playbackItem = NSMenuItem()
+        mainMenu.addItem(playbackItem)
+        let playbackMenu = NSMenu(title: "Playback")
+        playbackItem.submenu = playbackMenu
+
+        let loopItem = NSMenuItem(title: "Eternal Loop",
+                                  action: #selector(toggleEternalLoop),
+                                  keyEquivalent: "l")
+        loopItem.keyEquivalentModifierMask = [.command]
+        loopItem.state = eternalLoop ? .on : .off
+        loopItem.target = self
+        playbackMenu.addItem(loopItem)
+        loopMenuItem = loopItem
 
         // ── View menu ──
         let viewItem = NSMenuItem()
@@ -539,6 +572,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         addHelpSection("App", items: [
             "Cmd+D              Toggle debug overlay",
             "Cmd+M              Mute",
+            "Cmd+L              Toggle eternal loop",
             "Cmd+/              Open this help window",
             "Ctrl+Cmd+F         Toggle full screen",
             "Esc                Quit when in full screen",
