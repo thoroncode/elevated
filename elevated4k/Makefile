@@ -87,7 +87,7 @@ PACKED          = $(OUTDIR)/ElevatedMac4k.4k
 XZ_FLAGS       ?= --arm64 --lzma2=preset=9e,mf=bt4,lc=2,nice=64,depth=0
 
 .DELETE_ON_ERROR:
-.PHONY: all size report review hexdump shader-compare compare-compress pack pack-run tiny-pack tiny-bench tiny-check decoder-size run shaders tables clean stop-run
+.PHONY: all size report review hexdump shader-compare compare-compress pack pack-run sh sh-release tiny-pack tiny-bench tiny-check decoder-size run shaders tables clean stop-run
 
 all: $(STRIPPED)
 
@@ -221,6 +221,37 @@ size: report
 pack-run: pack
 	@$(MAKE) stop-run
 	-$(PACKED)
+
+# Release-ready self-extracting shell script, suitable for web upload.
+SH_NAME ?= abc123.sh
+
+sh: $(PACKED)
+	@cp $(PACKED) $(OUTDIR)/$(SH_NAME)
+	@chmod +x $(OUTDIR)/$(SH_NAME)
+	@rm -f $(OUTDIR)/$(SH_NAME).zip
+	@cd $(OUTDIR) && zip -q $(SH_NAME).zip $(SH_NAME)
+	@sz=$$(wc -c < $(OUTDIR)/$(SH_NAME) | tr -d ' '); \
+	 zsz=$$(wc -c < $(OUTDIR)/$(SH_NAME).zip | tr -d ' '); \
+	 printf '  Binary: %s/%s\n' $$(pwd) $(OUTDIR)/$(SH_NAME); \
+	 awk -v s=$$sz 'BEGIN { printf "  Size:   %d bytes (%.3f kB SI / %.3f KiB IEC)\n", s, s/1000, s/1024 }'; \
+	 printf '  Zip:    %s/%s.zip (%d bytes)\n' $$(pwd) $(OUTDIR)/$(SH_NAME) $$zsz
+
+# Upload the self-extracting script to the web host.
+# Override host/path on the command line if needed:
+#   make sh-release RELEASE_HOST=user@host RELEASE_PATH=public_html/dir
+RELEASE_HOST ?= thoron@hel.daemon.fi
+RELEASE_PATH ?= public_html/hush-hush-secret
+RELEASE_URL  ?= https://thoron.iki.fi/hush-hush-secret
+
+sh-release: sh
+	@echo "  Uploading to $(RELEASE_HOST):$(RELEASE_PATH)/ ..."
+	ssh $(RELEASE_HOST) 'mkdir -p $(RELEASE_PATH)/fonts'
+	scp $(OUTDIR)/$(SH_NAME) $(OUTDIR)/$(SH_NAME).zip index.html $(RELEASE_HOST):$(RELEASE_PATH)/
+	scp fonts/* $(RELEASE_HOST):$(RELEASE_PATH)/fonts/
+	@echo "  URLs:"
+	@echo "    $(RELEASE_URL)/"
+	@echo "    $(RELEASE_URL)/$(SH_NAME)"
+	@echo "    $(RELEASE_URL)/$(SH_NAME).zip"
 
 run: $(RUNBIN)
 	@$(MAKE) stop-run

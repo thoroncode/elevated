@@ -4,7 +4,57 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 
 ---
 
-## 2026-04-18 — Full-frame dump path for exact 60 fps capture
+## 2026-04-21 — Hush-hush-secret landing page (Sneakers-style CRT menu)
+
+### Goal
+
+A private distribution page at
+`https://thoron.iki.fi/hush-hush-secret/` that hands out the 10 kB
+self-extracting macOS 4K build, wrapped in a Sneakers (1992)
+"no-more-secrets" scramble-reveal animation on a fake VT-100 terminal.
+
+### What changed
+
+- `elevated4k/index.html` — DOM-based terminal (25×80 cells, one `<div>`
+  per row, run-length color spans per cell). `@font-face` loads
+  Int10h's IBM VGA 8×16 web font so text stays selectable/copyable.
+  CRT treatment is pure CSS: `filter: blur(0.2px)` + `text-shadow` glow
+  + repeating-linear-gradient scanlines + radial vignette +
+  `@keyframes flicker`. Three screens:
+  - Page 1: full Sneakers "FEDERAL RESERVE TRANSFER MODE" menu, 8 s
+    scramble reveal, space cells pre-locked so the text silhouette is
+    visible in grey during scramble.
+  - Page 2 (`[6] Elevate`): live `fetch("abc123.sh")` data dump,
+    5 grey rows, `[1] Download` call-to-action. Rendered direct, no
+    re-scramble.
+  - Page 3 (`[1] Download`): URL revealed via scramble on the URL row
+    only (other rows lock immediately). Post-reveal the URL is wrapped
+    in `<a href="abc123.sh.zip" download>` — visible text stays as the
+    honest `.sh` URL, click downloads the `.zip` wrapper. No underline.
+  - Keyboard only, no click handlers. ESC returns to previous page.
+    Returning to the menu skips the scramble after first view.
+- `elevated4k/sneakers-menu.txt` — character-exact reference of the
+  movie menu layout, including preserved UI quirks from the film
+  (`2LZP-517`, double-space in `Code Tran:  2LZP-517` and
+  `Security Code:  47-B34`, 6-space stars indent, 9-space menu items,
+  23-space `[ ] Select` indent).
+- `elevated4k/fonts/ibm_vga8.woff2` + `.woff` — Int10h IBM VGA web font.
+- `elevated4k/Makefile` — `sh` target now also produces `abc123.sh.zip`
+  alongside `abc123.sh`; `sh-release` uploads both plus `index.html`
+  and `fonts/*` to the release host.
+- `Makefile` — forwards `4k-sh` and `4k-sh-release` to the subdir.
+
+### Notes
+
+- Color tuning used Digital Color Meter on a YouTube Sneakers reference
+  vs. the rendered page. Final source color is `rgb(110, 175, 255)` —
+  cranked up from the reference `(75, 131, 236)` to compensate for the
+  scanline multiply + vignette dimming.
+- Menu items `[6]` and `[7]` are swapped from the film (the trigger is
+  `[6] Elevate`, `[7] Remote Operator Logon/Logoff`).
+- Firefox and Safari render the CRT look consistently thanks to
+  `text-shadow` (uniform across engines); `filter: blur()` alone
+  diverges between the two.
 
 ### Goal
 

@@ -1,4 +1,4 @@
-.PHONY: all help version stamp-version build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots mac-screenshots tv-screenshots all-screenshots ios-submit ios-add-tester tv-release tv-submit
+.PHONY: all help version stamp-version build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-sh 4k-sh-release 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots mac-screenshots tv-screenshots all-screenshots ios-submit ios-add-tester tv-release tv-submit
 
 BIN       = elevated/.build/release/ElevatedMacCLI
 APP       = Elevated.app
@@ -69,6 +69,8 @@ help:
 	@echo "  4k-size           Alias for 4k-report"
 	@echo "  4k-run            Build and run the 4K version (uncompressed)"
 	@echo "  4k-pack-run       Pack with xz and run the self-extracting binary"
+	@echo "  4k-sh             Pack and produce release-ready elevated.sh"
+	@echo "  4k-sh-release     Pack, zip, and upload to thoron.iki.fi"
 	@echo "  4k-clean          Clean 4K build artifacts"
 
 version:
@@ -408,6 +410,12 @@ clean:
 
 4k-pack-run:
 	$(MAKE) -C elevated4k pack-run
+
+4k-sh:
+	$(MAKE) -C elevated4k sh
+
+4k-sh-release:
+	$(MAKE) -C elevated4k sh-release
 
 4k-clean:
 	$(MAKE) -C elevated4k clean

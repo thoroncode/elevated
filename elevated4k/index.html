@@ -1,0 +1,399 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<title></title>
+<style>
+  @font-face {
+    font-family: "PCVGA";
+    src: url("fonts/ibm_vga8.woff2") format("woff2"),
+         url("fonts/ibm_vga8.woff") format("woff");
+    font-display: block;
+  }
+  html, body {
+    margin: 0; padding: 0;
+    background: #050505;
+    height: 100%;
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    position: relative;
+  }
+  #stage {
+    position: relative;
+    width: min(100vw, 100vh * 1.8);
+    aspect-ratio: 720 / 400;
+    overflow: hidden;
+    animation: flicker 3.2s infinite;
+  }
+  #screen {
+    position: absolute;
+    top: 0; left: 0;
+    width: 720px;
+    height: 400px;
+    font-family: "PCVGA", "Courier New", monospace;
+    font-size: 16px;
+    line-height: 16px;
+    letter-spacing: 1px;
+    color: #6c6c6c;
+    white-space: pre;
+    transform-origin: top left;
+    filter: blur(0.2px);
+    text-shadow: 0 0 1px currentColor;
+    user-select: text;
+    -webkit-user-select: text;
+  }
+  #screen .l { color: rgb(110, 175, 255); }
+  #screen .r { color: #6c6c6c; }
+  #screen .s { color: #6c6c6c; }
+
+  body::before {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    background: repeating-linear-gradient(
+      to bottom,
+      rgba(0, 0, 0, 0) 0px,
+      rgba(0, 0, 0, 0) 2px,
+      rgba(0, 0, 0, 0.34) 3px,
+      rgba(0, 0, 0, 0.34) 3px
+    );
+    mix-blend-mode: multiply;
+  }
+  body::after {
+    content: "";
+    position: fixed; inset: 0;
+    pointer-events: none;
+    z-index: 3;
+    background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0) 45%, rgba(0, 0, 0, 0.80) 100%);
+  }
+  @keyframes flicker {
+    0%, 100% { opacity: 1; }
+    45% { opacity: 0.97; }
+    50% { opacity: 1; }
+    80% { opacity: 0.985; }
+  }
+</style>
+</head>
+<body>
+<div id="stage">
+  <div id="screen"></div>
+</div>
+<script>
+(function () {
+  const screen = document.getElementById("screen");
+  const stage = document.getElementById("stage");
+
+  const COLS = 80;
+  const ROWS = 25;
+
+  const GLYPHS = "!@#$%^*()_+-=[]{}|\\;:,.?/~`0123456789" +
+                 "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+  const FLIP_MS = 40;
+  const SCRAMBLE_MS = 2000;
+  const REVEAL_SPAN_MS = 6000;
+
+  const MENU = [
+    "DATANET PROC RECORD:  45-3456-W-3452                         Transnet on/xc-3",
+    "",
+    "                         FEDERAL RESERVE TRANSFER MODE",
+    "",
+    "                             National Headquarters",
+    "",
+    "      ************  Remote Systems Network Input Station  ************",
+    "      ================================================================",
+    "",
+    "         [1] Interbank Funds Transfer  (Code Prog: 485-GWU)",
+    "         [2] International Telelink Access  (Code Lim: XRP-262)",
+    "         [3] Remote Facsimile Send/Receive  (Code Tran:  2LZP-517)",
+    "         [4] Regional Bank Interconnect  (Security Code:  47-B34)",
+    "         [5] Update System Parameters  (Entry Auth. Req.)",
+    "         [6] Elevate",
+    "         [7] Remote Operator Logon/Logoff",
+    "",
+    "      ================================================================",
+    "",
+    "                       [ ] Select Option or ESC to Abort",
+  ];
+
+  const ABC123_URL = "https://thoron.iki.fi/hush-hush-secret/abc123.sh";
+  const ABC123_HREF = "abc123.sh.zip";
+
+  const rowNodes = [];
+  for (let r = 0; r < ROWS; r++) {
+    const d = document.createElement("div");
+    screen.appendChild(d);
+    rowNodes.push(d);
+  }
+
+  function updateScale() {
+    const sw = stage.clientWidth;
+    const sh = stage.clientHeight;
+    const s = Math.min(sw / 720, sh / 400);
+    screen.style.transform = "scale(" + s + ")";
+  }
+  window.addEventListener("resize", updateScale);
+  updateScale();
+  if (document.fonts && document.fonts.ready) {
+    document.fonts.ready.then(updateScale);
+  }
+
+  function esc(s) {
+    return s.replace(/[&<>]/g, (ch) => ({"&":"&amp;","<":"&lt;",">":"&gt;"}[ch]));
+  }
+
+  function buildTarget(lines) {
+    const rowTop = Math.max(0, Math.floor((ROWS - lines.length) / 2));
+    const target = new Array(ROWS);
+    for (let r = 0; r < ROWS; r++) {
+      let row = "";
+      const mr = r - rowTop;
+      if (mr >= 0 && mr < lines.length) row = lines[mr];
+      if (row.length < COLS) row = row + " ".repeat(COLS - row.length);
+      else row = row.slice(0, COLS);
+      target[r] = row;
+    }
+    return target;
+  }
+
+  function randGlyph() {
+    return GLYPHS[(Math.random() * GLYPHS.length) | 0];
+  }
+
+  function rowHTML(cells, r) {
+    let out = "";
+    let currentCls = null;
+    let run = "";
+    for (let c = 0; c < COLS; c++) {
+      const cell = cells[r * COLS + c];
+      const cls = cell.locked ? cell.color : "s";
+      if (cls !== currentCls) {
+        if (run) out += '<span class="' + currentCls + '">' + esc(run) + '</span>';
+        currentCls = cls;
+        run = cell.current;
+      } else {
+        run += cell.current;
+      }
+    }
+    if (run) out += '<span class="' + currentCls + '">' + esc(run) + '</span>';
+    return out || "\u00a0";
+  }
+
+  function renderCells(cells) {
+    for (let r = 0; r < ROWS; r++) {
+      rowNodes[r].innerHTML = rowHTML(cells, r);
+    }
+  }
+
+  let raf = 0;
+  let keyHandler = null;
+  let menuShownOnce = false;
+
+  function clearHandlers() {
+    if (keyHandler) { window.removeEventListener("keydown", keyHandler); keyHandler = null; }
+  }
+
+  function decrypt(lines, colorFn, scrambleFn) {
+    return new Promise((resolve) => {
+      const target = buildTarget(lines);
+      const cells = new Array(ROWS * COLS);
+      for (let r = 0; r < ROWS; r++) {
+        for (let c = 0; c < COLS; c++) {
+          const ch = target[r][c];
+          const isSpace = ch === " ";
+          const scramble = scrambleFn ? scrambleFn(r, c, ch) : !isSpace;
+          cells[r * COLS + c] = {
+            target: ch,
+            current: scramble ? randGlyph() : ch,
+            unlockAt: SCRAMBLE_MS + Math.random() * REVEAL_SPAN_MS,
+            locked: !scramble,
+            color: colorFn(r, c),
+          };
+        }
+      }
+
+      let start = 0;
+      let lastFlip = 0;
+      let dirty = true;
+
+      function frame(now) {
+        if (!start) start = now;
+        const t = now - start;
+        const flip = (now - lastFlip) >= FLIP_MS;
+        if (flip) lastFlip = now;
+
+        let done = true;
+        for (let i = 0; i < cells.length; i++) {
+          const cell = cells[i];
+          if (cell.locked) continue;
+          if (t >= cell.unlockAt) {
+            cell.current = cell.target;
+            cell.locked = true;
+            dirty = true;
+          } else {
+            done = false;
+            if (flip) {
+              cell.current = randGlyph();
+              dirty = true;
+            }
+          }
+        }
+
+        if (dirty) { renderCells(cells); dirty = false; }
+
+        if (!done) raf = requestAnimationFrame(frame);
+        else { raf = 0; resolve(cells); }
+      }
+      raf = requestAnimationFrame(frame);
+    });
+  }
+
+  function renderDirect(lines, colorFn) {
+    const target = buildTarget(lines);
+    const cells = new Array(ROWS * COLS);
+    for (let r = 0; r < ROWS; r++) {
+      for (let c = 0; c < COLS; c++) {
+        const ch = target[r][c];
+        cells[r * COLS + c] = {
+          target: ch,
+          current: ch,
+          unlockAt: 0,
+          locked: true,
+          color: colorFn(r, c),
+        };
+      }
+    }
+    renderCells(cells);
+    return cells;
+  }
+
+  function byteToGlyph(b) {
+    if (b === 0x20) return " ";
+    if (b >= 0x21 && b <= 0x7E) return String.fromCharCode(b);
+    return GLYPHS[b % GLYPHS.length];
+  }
+
+  async function fetchBytes() {
+    try {
+      const resp = await fetch("abc123.sh", { cache: "no-store" });
+      return new Uint8Array(await resp.arrayBuffer());
+    } catch (e) {
+      const n = (ROWS - 1) * COLS;
+      const buf = new Uint8Array(n);
+      for (let i = 0; i < n; i++) buf[i] = 32 + ((Math.random() * 95) | 0);
+      return buf;
+    }
+  }
+
+  async function showMenu() {
+    clearHandlers();
+    if (raf) cancelAnimationFrame(raf);
+    if (menuShownOnce) {
+      renderDirect(MENU, () => "l");
+    } else {
+      await decrypt(MENU, () => "l");
+      menuShownOnce = true;
+    }
+    keyHandler = (e) => {
+      if (e.key === "6") { e.preventDefault(); showRaw(); }
+    };
+    window.addEventListener("keydown", keyHandler);
+  }
+
+  async function showRaw() {
+    clearHandlers();
+    if (raf) cancelAnimationFrame(raf);
+    const buf = await fetchBytes();
+
+    const topBar = "DATANET PROC RECORD:  45-3456-W-3452                         Transnet rgba/tbc";
+    const title = "                         FEDERAL RESERVE TRANSFER MODE";
+    const subtitle = "                                    Elevate";
+    const starsLine = "      " + "*".repeat(25) + "  Data Dump  " + "*".repeat(26);
+    const eq = "      " + "=".repeat(64);
+    const download = "         [1] Download";
+    const select = "                       [ ] Select Option or ESC to Abort";
+
+    const ROW_COLS = 64;
+    const DATA_ROWS = 5;
+    const lines = [topBar, "", title, "", subtitle, "", starsLine, eq, ""];
+    const dataStart = lines.length;
+    for (let r = 0; r < DATA_ROWS; r++) {
+      let line = "      ";
+      for (let c = 0; c < ROW_COLS; c++) {
+        const idx = r * ROW_COLS + c;
+        line += idx < buf.length ? byteToGlyph(buf[idx]) : " ";
+      }
+      lines.push(line);
+    }
+    const dataEnd = lines.length - 1;
+    lines.push("");
+    lines.push(download);
+    lines.push("");
+    lines.push(eq);
+    lines.push("");
+    lines.push(select);
+
+    const rowTop = Math.max(0, Math.floor((ROWS - lines.length) / 2));
+    const canvasDataStart = rowTop + dataStart;
+    const canvasDataEnd = rowTop + dataEnd;
+    renderDirect(lines, (r) => (r >= canvasDataStart && r <= canvasDataEnd ? "r" : "l"));
+
+    keyHandler = (e) => {
+      if (e.key === "1") { e.preventDefault(); showURL(); }
+      else if (e.key === "Escape" || e.key === "Backspace") { e.preventDefault(); showMenu(); }
+    };
+    window.addEventListener("keydown", keyHandler);
+  }
+
+  async function showURL() {
+    clearHandlers();
+    if (raf) cancelAnimationFrame(raf);
+
+    const topBar = "DATANET PROC RECORD:  45-3456-W-3452                         Transnet rgba/tbc";
+    const title = "                         FEDERAL RESERVE TRANSFER MODE";
+    const subtitle = "                                    Elevate";
+    const starsLine = "      " + "*".repeat(25) + "  Data Dump  " + "*".repeat(26);
+    const eq = "      " + "=".repeat(64);
+    const download = "         [1] Download";
+    const select = "                       [ ] Select Option or ESC to Abort";
+
+    const ROW_COLS = 64;
+    const DATA_ROWS = 5;
+    const urlPad = Math.max(0, Math.floor((ROW_COLS - ABC123_URL.length) / 2));
+    const urlLine = "      " + " ".repeat(urlPad) + ABC123_URL;
+
+    const lines = [topBar, "", title, "", subtitle, "", starsLine, eq, ""];
+    const dataStart = lines.length;
+    for (let r = 0; r < DATA_ROWS; r++) {
+      lines.push(r === 2 ? urlLine : "");
+    }
+    lines.push("");
+    lines.push(download);
+    lines.push("");
+    lines.push(eq);
+    lines.push("");
+    lines.push(select);
+
+    const rowTop = Math.max(0, Math.floor((ROWS - lines.length) / 2));
+    const urlRow = rowTop + dataStart + 2;
+    await decrypt(lines, () => "l", (r, c, ch) => r === urlRow && ch !== " ");
+
+    const urlNode = rowNodes[urlRow];
+    urlNode.innerHTML = '<a href="' + ABC123_HREF + '" download style="color:inherit;text-decoration:none;">' + urlNode.innerHTML + '</a>';
+
+    keyHandler = (e) => {
+      if (e.key === "Escape" || e.key === "Backspace") { e.preventDefault(); showRaw(); }
+    };
+    window.addEventListener("keydown", keyHandler);
+  }
+
+  showMenu();
+})();
+</script>
+</body>
+</html>
