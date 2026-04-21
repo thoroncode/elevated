@@ -24,7 +24,7 @@
     padding-left: calc(5vw + 1px);
     box-sizing: border-box;
     position: relative;
-    filter: contrast(1.06) brightness(0.96);
+    filter: contrast(1.02) brightness(1.05);
   }
   #stage {
     position: relative;
@@ -49,7 +49,7 @@
     color: #5d6f9a;
     white-space: pre;
     transform-origin: top left;
-    filter: blur(0.32px) saturate(1.14);
+    filter: blur(0px) saturate(2);
     -webkit-text-stroke: 0.22px rgba(4, 12, 36, 0.62);
     text-shadow:
       0 0 3px rgba(66, 128, 255, 0.34),
@@ -61,12 +61,12 @@
   }
   #screen .l {
     color: rgb(150, 200, 255);
-    -webkit-text-stroke: 0.26px rgba(5, 16, 44, 0.70);
+    -webkit-text-stroke: 0.20px rgba(5, 16, 44, 0);
     text-shadow:
-      0 0 3.2px rgba(120, 172, 255, 0.62),
-      0 0 6.5px rgba(60, 124, 255, 0.32),
-      0 0 12px rgba(30, 94, 230, 0.16),
-      0 0 22px rgba(18, 70, 200, 0.07);
+      0 0 0px rgba(120, 172, 255, 0.38),
+      0 0 11.85px rgba(60, 124, 255, 0.18),
+      0 0 26.9px rgba(30, 94, 230, 0.09),
+      0 0 0px rgba(18, 70, 200, 0);
   }
   #screen .r {
     color: rgb(86, 132, 220);
@@ -106,9 +106,9 @@
 
   #screenGlow {
     z-index: 1;
-    opacity: 0.78;
+    opacity: 0.24;
     transform-origin: top left;
-    filter: blur(1.2px) saturate(1.28);
+    filter: blur(0px) saturate(0.4);
     mix-blend-mode: screen;
   }
 
@@ -130,9 +130,9 @@
 
   #screenGhost {
     z-index: 2;
-    opacity: 0.22;
+    opacity: 0.34;
     transform-origin: top left;
-    filter: blur(0.9px);
+    filter: blur(0.87px);
     mix-blend-mode: screen;
   }
 
