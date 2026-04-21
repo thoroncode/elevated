@@ -4,6 +4,66 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 
 ---
 
+## 2026-04-21 — Decipher lab, CP437 glyphs, menu variants, funds-transfer page; lab migrated to retros
+
+### index.html changes
+
+- **CP437 glyph scramble**: the `GLYPHS` set now matches the film's
+  DATANET phosphor noise — box drawing (U+2500…), shading blocks
+  (U+2580 ▀, U+2584 ▄, U+2588 █, U+2591–2593 ░▒▓), Greek
+  (α β Γ π Σ σ µ τ Φ Θ Ω δ φ ε), math (∞ ≡ ± ≥ ≤ ÷ ≈ √ ² ·),
+  currency (¢ £ ¥ ₧ ƒ). Verified IBM VGA 8x8 (ibm_vga8.woff2) has
+  glyphs for every codepoint in the set.
+- **Menu variants via query string**: `?test=original` swaps the
+  modern 7-option menu for the film-accurate 6-option one and adds
+  `body.stable` which freezes the `#stage` and `#noise` CSS
+  animations. That makes pixel-diff against the film reference
+  deterministic for the tuning lab.
+- **Lab CSS hook**: empty `<style id="lab-overrides"></style>` in
+  `<head>` so the lab can inject live CSS via `evaluateJavaScript`
+  without reloading.
+- **Menu item [1] active**: pressing `1` on the main menu opens an
+  `Interbank Funds Transfer` ledger page (five fake inter-bank
+  transfers with status `CLEARED`/`PENDING`/`HOLD`). `Esc`/`Backspace`
+  returns to the main menu. Matches the existing layout — same
+  topBar/stars/`====` framing as `showRaw`/`showURL`.
+- Spacing fix in item [5]: `(Code Sim:  RGB-A4K)` →
+  `(Code Sim: RGB-A4K)` (single space).
+
+### Decipher tuning lab (lived in elevated4k/ briefly)
+
+Built a SwiftUI macOS app with live CSS-knob controls (19 knobs
+covering body/screen/bloom×3/halo/glow/ghost), a 171-frame scrubber
+over `frame_01089..frame_01261` of the Sneakers decipher sequence, and
+a per-pixel heatmap against the currently selected reference frame.
+Per-pixel delta is `0.65·lumaΔ + 0.35·colorΔ` with the MOVIECLIPS.com
+watermark (bottom-left, 200×44 at y=316) masked out of the score and
+dimmed grey in the heatmap.
+
+### CRT barrel distortion measured
+
+`analyze_curve.py` fits a parabola to each `====` band's per-column
+weighted centroid in `frame_01261`. Result: bottom `====` bends
+**6.6 px** (smile — edges up, center sagging), top `====` bends
+**3.0 px**. Symmetric about horizontal center — classic barrel
+distortion, roughly quadratic in vertical offset from center.
+Replication via SVG `feDisplacementMap` is pending.
+
+### Migration out
+
+Moved the lab, `analyze_curve.py`, menu-transcription notes, reference
+frame copy, and the experimental DOS fonts to
+`~/src/retros/study/decipher/`. Elevated now carries only the shipping
+landing page and its release infra; the tuning environment lives in
+retros.
+
+Planned fork (not yet wired): RetroOS (retros) will ship the
+film-accurate original menu; Elevated keeps the "Elevate System
+Simulation" modified menu. Until then both live behind
+`?test=original`.
+
+---
+
 ## 2026-04-21 — CRT pass 3: oscilloscope glyph + soft bloom, stuck near the middle
 
 ### Status
