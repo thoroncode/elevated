@@ -4,6 +4,69 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 
 ---
 
+## 2026-04-21 — CRT pass 3: oscilloscope glyph + soft bloom, stuck near the middle
+
+### Status
+
+Landing page is close to the Sneakers reference but still reads a
+touch too blurry. Iterating sharpness and bloom keeps overshooting in
+one direction or the other; we can't quite land the middle ground.
+Committed as `891cd1d` for storage while the problem sits.
+
+### What's in this pass
+
+- `#screen` has a thin dark `-webkit-text-stroke` (0.22px,
+  rgba(4,12,36,0.62)) so each glyph stroke's outer edge darkens into
+  the background. Gives the oscilloscope-trace "hot core, dim edge"
+  look instead of a solid bright block.
+- Base color on `.l` bumped to `rgb(150, 200, 255)`; halo ring
+  extended out to 22px.
+- `#screenGlow` pushed to opacity 0.78 / blur 1.2px / saturate 1.28
+  with a 26px outer halo so dense glyph rows (==== lines) bleed
+  visibly wider.
+- `#screenGhost` nearly doubled (0.14 -> 0.22 opacity, 0.55 -> 0.9px
+  blur) and given its own 4px shadow instead of going shadowless.
+- `#screen` carries a 0.32px base blur to kill hard pixel corners
+  from the rasterized IBM VGA font.
+
+### Experiments that didn't stick
+
+- SVG `feConvolveMatrix` unsharp kernel on `#screen`
+  (kernel `[0 -0.28 0 / -0.28 2.12 -0.28 / 0 -0.28 0]`) made the text
+  *muddier* rather than crisper — translucent shadow alpha plus a
+  chained blur in front of it produced ringing. Also very expensive
+  every flicker frame; visibly laggy. Removed.
+- Replacing the blur with `filter: saturate(1.16) contrast(1.12)` as
+  a pseudo-sharpen made the edges hard and pixelated, losing the CRT
+  softness entirely. Reverted.
+- `letter-spacing: 0` and `-0.25px` were tested; 1px won back.
+- Modern DOS 8x16 (CC0, HarvettFox96, dropped in
+  `elevated4k/fonts/ModernDOS8x16.ttf`) swapped in as the font but
+  its 2-pixel-wide strokes read as bold. Kept the file on disk, but
+  the active `@font-face` is back to `ibm_vga8.woff2/woff`.
+
+### Where we're stuck
+
+Middle ground between:
+- reducing blur on `#screen` + glow layers so strokes stay legible
+  and have visible pixel texture, vs.
+- increasing blur / bloom to hide the hard rasterized corners and
+  match the film's analog CRT softness.
+
+Every adjustment swings one way or the other. Future attempts should
+probably stop twisting `#screen`'s filter and instead work on the
+glow layers' spread independently — or prototype an
+`feGaussianBlur + feColorMatrix` SVG filter once rather than chaining
+CSS filters that cause layout thrash.
+
+### Ref snapshots
+
+- `elevated4k/index-glitch.html` — earlier "broken monitor" snapshot.
+- `0ba5396` — CRT pass 2 baseline (no oscilloscope stroke).
+- `891cd1d` — this pass, current deployed state.
+
+---
+
 ## 2026-04-21 — CRT pass 2: layered glow + chromatic aberration + "screen-blend" glitch
 
 ### Goal
