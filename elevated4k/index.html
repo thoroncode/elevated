@@ -517,22 +517,27 @@
     if (raf) cancelAnimationFrame(raf);
 
     const topBar = "DATANET PROC RECORD:  45-3456-W-3452                         Transnet on/xc-3";
-    const title = "                       INTERBANK FUNDS TRANSFER";
-    const subtitle = "                            Code Prog: 485-GWU";
-    const starsLine = "      " + "*".repeat(22) + "  Transfer Queue  " + "*".repeat(24);
+    // 80-col screen: center = 40. Text is padded left to put its midpoint at col 40.
+    const title = " ".repeat(28) + "INTERBANK FUNDS TRANSFER";
+    const subtitle = " ".repeat(31) + "Code Prog: 485-GWU";
+    const starsLine = "      " + "*".repeat(23) + "  Transfer Queue  " + "*".repeat(23);
     const eq = "      " + "=".repeat(64);
-    const header = "         FROM              TO                AMOUNT        STATUS";
+
+    const ledgerRow = (from, to, amount, status) =>
+      " ".repeat(13) + from.padEnd(14) + "  " + to.padEnd(14) + "    " +
+      amount.padStart(10) + "   " + status;
+    const header = ledgerRow("FROM", "TO", "AMOUNT", "STATUS");
     const rows = [
-      "         4234-5782-0091  9921-3345-1102   $   142,500   CLEARED",
-      "         7712-8834-2301  3301-4412-9988   $    58,200   CLEARED",
-      "         9988-2234-1002  1174-3355-4401   $ 1,204,800   PENDING",
-      "         5521-9912-3044  8802-7743-1122   $    19,400   CLEARED",
-      "         6634-8821-0092  4451-1123-8834   $   987,500   HOLD   ",
+      ledgerRow("4234-5782-0091", "9921-3345-1102", "$142,500",   "CLEARED"),
+      ledgerRow("7712-8834-2301", "3301-4412-9988", "$58,200",    "CLEARED"),
+      ledgerRow("9988-2234-1002", "1174-3355-4401", "$1,204,800", "PENDING"),
+      ledgerRow("5521-9912-3044", "8802-7743-1122", "$19,400",    "CLEARED"),
+      ledgerRow("6634-8821-0092", "4451-1123-8834", "$987,500",   "HOLD"),
     ];
     const select = "                       [ ] Select Option or ESC to Abort";
 
     const lines = [topBar, "", title, "", subtitle, "", starsLine, eq, "", header, ""];
-    for (const row of rows) lines.push(row);
+    for (const r of rows) lines.push(r);
     lines.push("");
     lines.push(eq);
     lines.push("");
