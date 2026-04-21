@@ -49,23 +49,24 @@
     color: #5d6f9a;
     white-space: pre;
     transform-origin: top left;
-    filter: saturate(1.12);
+    filter: blur(0.32px) saturate(1.14);
+    -webkit-text-stroke: 0.22px rgba(4, 12, 36, 0.62);
     text-shadow:
-      0 0 1.1px currentColor,
-      0 0 2.2px currentColor,
-      0 0 4.2px rgba(48, 108, 255, 0.22),
-      0 0 7px rgba(36, 94, 255, 0.10);
+      0 0 3px rgba(66, 128, 255, 0.34),
+      0 0 6.5px rgba(42, 102, 255, 0.18),
+      0 0 12px rgba(24, 80, 220, 0.08);
     user-select: text;
     -webkit-user-select: text;
     z-index: 3;
   }
   #screen .l {
-    color: rgb(108, 162, 248);
+    color: rgb(150, 200, 255);
+    -webkit-text-stroke: 0.26px rgba(5, 16, 44, 0.70);
     text-shadow:
-      0 0 1.2px rgba(130, 175, 248, 0.58),
-      0 0 2.4px rgba(90, 148, 248, 0.46),
-      0 0 5.2px rgba(44, 106, 255, 0.22),
-      0 0 9px rgba(24, 82, 220, 0.09);
+      0 0 3.2px rgba(120, 172, 255, 0.62),
+      0 0 6.5px rgba(60, 124, 255, 0.32),
+      0 0 12px rgba(30, 94, 230, 0.16),
+      0 0 22px rgba(18, 70, 200, 0.07);
   }
   #screen .r {
     color: rgb(86, 132, 220);
@@ -105,18 +106,19 @@
 
   #screenGlow {
     z-index: 1;
-    opacity: 0.68;
+    opacity: 0.78;
     transform-origin: top left;
-    filter: blur(0.82px) saturate(1.22);
+    filter: blur(1.2px) saturate(1.28);
     mix-blend-mode: screen;
   }
 
   #screenGlow .l {
-    color: rgba(72, 132, 255, 0.82);
+    color: rgba(88, 150, 255, 0.92);
     text-shadow:
-      0 0 2px rgba(80, 138, 255, 0.72),
-      0 0 6px rgba(52, 112, 255, 0.46),
-      0 0 12px rgba(24, 82, 255, 0.22);
+      0 0 3px rgba(92, 152, 255, 0.80),
+      0 0 8px rgba(56, 120, 255, 0.54),
+      0 0 16px rgba(28, 90, 255, 0.30),
+      0 0 26px rgba(18, 70, 220, 0.14);
   }
   #screenGlow .r {
     color: rgba(52, 108, 230, 0.56);
@@ -128,17 +130,17 @@
 
   #screenGhost {
     z-index: 2;
-    opacity: 0.14;
+    opacity: 0.22;
     transform-origin: top left;
-    filter: blur(0.55px);
+    filter: blur(0.9px);
     mix-blend-mode: screen;
   }
 
   #screenGhost .l,
   #screenGhost .r,
   #screenGhost .s {
-    color: rgba(132, 188, 255, 0.42);
-    text-shadow: none;
+    color: rgba(150, 198, 255, 0.52);
+    text-shadow: 0 0 4px rgba(80, 140, 255, 0.30);
   }
 
   #fx {
