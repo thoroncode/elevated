@@ -4,6 +4,62 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 
 ---
 
+## 2026-04-21 — CRT pass 2: layered glow + chromatic aberration + "screen-blend" glitch
+
+### Goal
+
+Push the landing-page CRT look further: multi-layer text glow, a ghost
+layer shifted horizontally for chromatic aberration, animated scanline
+noise, richer vignette, and an irregular stepped flicker.
+
+### What changed
+
+- `elevated4k/index.html` — added two extra text layers
+  (`#screenGlow` behind, `#screenGhost` offset by `0.45px` on top),
+  an `#fx` layer with compound gradient + scanline pattern, and a
+  `#noise` layer with stepped-transform grain drift
+  (`@keyframes noiseDrift`). Text color moved from a single
+  `rgb(110, 175, 255)` to per-class layered text-shadow stacks so
+  bright / raw / scramble cells each get their own glow profile.
+  Body-level `filter: contrast(1.06) brightness(0.96)` added for
+  CRT-tube tonal response. Flicker rewritten with irregular stops
+  and `steps(1)` for a non-linear blink rather than a smooth fade.
+
+### "Screen-blend" glitch snapshot
+
+First version of the `#fx` layer used
+
+```css
+mix-blend-mode: screen, multiply, screen, normal;
+```
+
+`mix-blend-mode` only accepts a single keyword, so the whole
+declaration was dropped by the browser. That combined with the glow
+and ghost layers not being sized to `720×400` produced an
+unintentional but striking double-exposure / CRT-decay look — the
+scaled terminal rendered correctly in the center while unscaled
+mirrored text overflowed from the top-left, overlapping in soft blue.
+
+Preserved verbatim at `elevated4k/index-glitch.html` as a reference
+for any future "broken monitor" / "digital decay" variant.
+
+### Fix
+
+- `mix-blend-mode: screen, multiply, screen, normal` →
+  `background-blend-mode: screen, multiply, screen, normal` plus
+  `mix-blend-mode: normal` on `#fx`. `background-blend-mode` takes a
+  comma-separated list matching the `background` layers, which is what
+  was actually intended.
+
+### Note
+
+The glitch's layout mess was additionally driven by `#screenGlow` /
+`#screenGhost` being `inset: 0` without a fixed `720×400` box, so
+their row divs flowed at stage width instead of the terminal width.
+That is intentionally left as-is in `index-glitch.html` for now;
+`index.html` inherits the same sizing, so some of the glow/ghost
+texture may still bleed — iterate later if it reads wrong.
+
 ## 2026-04-21 — Hush-hush-secret landing page (Sneakers-style CRT menu)
 
 ### Goal

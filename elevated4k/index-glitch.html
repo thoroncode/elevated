@@ -19,10 +19,8 @@
   body {
     display: flex;
     align-items: center;
-    justify-content: flex-start;
+    justify-content: center;
     height: 100vh;
-    padding-left: calc(5vw + 1px);
-    box-sizing: border-box;
     position: relative;
     filter: contrast(1.06) brightness(0.96);
   }
@@ -30,7 +28,7 @@
     position: relative;
     width: min(100vw, 100vh * 1.8);
     aspect-ratio: 720 / 400;
-    overflow: visible;
+    overflow: hidden;
     animation: flicker 4.8s infinite steps(1);
     background:
       radial-gradient(ellipse at 50% 48%, rgba(26, 72, 170, 0.11) 0%, rgba(8, 18, 48, 0.05) 26%, rgba(0, 0, 0, 0) 58%),
@@ -49,31 +47,33 @@
     color: #5d6f9a;
     white-space: pre;
     transform-origin: top left;
-    filter: saturate(1.12);
+    filter: blur(0.42px) saturate(1.15);
     text-shadow:
+      0 0 0.45px currentColor,
       0 0 1.1px currentColor,
-      0 0 2.2px currentColor,
-      0 0 4.2px rgba(48, 108, 255, 0.22),
-      0 0 7px rgba(36, 94, 255, 0.10);
+      0 0 2.6px currentColor,
+      0 0 5.6px rgba(48, 108, 255, 0.30),
+      0 0 9px rgba(36, 94, 255, 0.14);
     user-select: text;
     -webkit-user-select: text;
     z-index: 3;
   }
   #screen .l {
-    color: rgb(108, 162, 248);
+    color: rgb(114, 170, 255);
     text-shadow:
-      0 0 1.2px rgba(130, 175, 248, 0.58),
-      0 0 2.4px rgba(90, 148, 248, 0.46),
-      0 0 5.2px rgba(44, 106, 255, 0.22),
-      0 0 9px rgba(24, 82, 220, 0.09);
+      0 0 0.55px rgba(150, 195, 255, 0.95),
+      0 0 1.2px rgba(125, 180, 255, 0.92),
+      0 0 3px rgba(74, 132, 255, 0.72),
+      0 0 7px rgba(44, 106, 255, 0.34),
+      0 0 12px rgba(24, 82, 220, 0.14);
   }
   #screen .r {
     color: rgb(86, 132, 220);
     text-shadow:
-      0 0 0.35px rgba(115, 165, 255, 0.84),
-      0 0 0.8px rgba(92, 146, 255, 0.66),
-      0 0 1.8px rgba(54, 112, 235, 0.34),
-      0 0 3.5px rgba(26, 82, 204, 0.10);
+      0 0 0.45px rgba(115, 165, 255, 0.90),
+      0 0 1px rgba(92, 146, 255, 0.72),
+      0 0 2.3px rgba(54, 112, 235, 0.44),
+      0 0 5px rgba(26, 82, 204, 0.14);
   }
   #screen .s {
     color: rgb(62, 98, 176);
@@ -91,23 +91,11 @@
     pointer-events: none;
   }
 
-  #screenGlow,
-  #screenGhost {
-    top: 0; left: 0;
-    width: 720px;
-    height: 400px;
-    font-family: "PCVGA", "Courier New", monospace;
-    font-size: 16px;
-    line-height: 16px;
-    letter-spacing: 1px;
-    white-space: pre;
-  }
-
   #screenGlow {
     z-index: 1;
-    opacity: 0.68;
+    opacity: 0.95;
     transform-origin: top left;
-    filter: blur(0.82px) saturate(1.22);
+    filter: blur(1.2px) saturate(1.35);
     mix-blend-mode: screen;
   }
 
@@ -128,9 +116,9 @@
 
   #screenGhost {
     z-index: 2;
-    opacity: 0.14;
+    opacity: 0.22;
     transform-origin: top left;
-    filter: blur(0.55px);
+    filter: blur(0.9px);
     mix-blend-mode: screen;
   }
 
@@ -162,14 +150,13 @@
       ),
       radial-gradient(ellipse at center, rgba(50, 110, 255, 0.08) 0%, rgba(0,0,0,0) 44%),
       radial-gradient(ellipse at center, rgba(0,0,0,0) 54%, rgba(0,0,0,0.20) 78%, rgba(0,0,0,0.52) 100%);
-    background-blend-mode: screen, multiply, screen, normal;
-    mix-blend-mode: normal;
-    opacity: 0.92;
+    mix-blend-mode: screen, multiply, screen, normal;
+    opacity: 0.98;
   }
 
   #noise {
     z-index: 5;
-    opacity: 0.028;
+    opacity: 0.07;
     background-image:
       radial-gradient(circle at 20% 30%, rgba(255,255,255,0.7) 0 0.55px, transparent 0.7px),
       radial-gradient(circle at 73% 62%, rgba(255,255,255,0.55) 0 0.45px, transparent 0.6px),
@@ -255,8 +242,8 @@
     "         [2] International Telelink Access  (Code Lim: XRP-262)",
     "         [3] Remote Facsimile Send/Receive  (Code Tran:  2LZP-517)",
     "         [4] Regional Bank Interconnect  (Security Code:  47-B34)",
-    "         [5] Elevate System Simulation  (Code Sim:  RGB-A4K)",
-    "         [6] Update System Parameters  (Entry Auth. Req.)",
+    "         [5] Update System Parameters  (Entry Auth. Req.)",
+    "         [6] Elevate",
     "         [7] Remote Operator Logon/Logoff",
     "",
     "      ================================================================",
@@ -459,7 +446,7 @@
       menuShownOnce = true;
     }
     keyHandler = (e) => {
-      if (e.key === "5") { e.preventDefault(); showRaw(); }
+      if (e.key === "6") { e.preventDefault(); showRaw(); }
     };
     window.addEventListener("keydown", keyHandler);
   }
@@ -471,7 +458,7 @@
 
     const topBar = "DATANET PROC RECORD:  45-3456-W-3452                         Transnet rgba/tbc";
     const title = "                         FEDERAL RESERVE TRANSFER MODE";
-    const subtitle = "                                    Elevated";
+    const subtitle = "                                    Elevate";
     const starsLine = "      " + "*".repeat(25) + "  Data Dump  " + "*".repeat(26);
     const eq = "      " + "=".repeat(64);
     const download = "         [1] Download";
@@ -515,7 +502,7 @@
 
     const topBar = "DATANET PROC RECORD:  45-3456-W-3452                         Transnet rgba/tbc";
     const title = "                         FEDERAL RESERVE TRANSFER MODE";
-    const subtitle = "                                    Elevated";
+    const subtitle = "                                    Elevate";
     const starsLine = "      " + "*".repeat(25) + "  Data Dump  " + "*".repeat(26);
     const eq = "      " + "=".repeat(64);
     const download = "         [1] Download";
