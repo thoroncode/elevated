@@ -4,6 +4,131 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 
 ---
 
+## 2026-04-22 — OCR central-window NCC, phosphor picker, full 58-knob lab, Safari-match WKWebView
+
+### OCR: text-shadow bloom was eating the templates
+
+`ocr_frames.py` was matching each 8-wide canonical cell against the
+full CP437 9x16 VGA bitmap template and losing 'a/e/n' to 'm' at a
+nominally blurred BLOOM_SIGMA=1.0. Root cause wasn't the template
+blur — it was *neighbour bleed*. The Sneakers reference frames apply
+a phosphor halo that reaches several pixels past each glyph's cell
+boundary, so the outer columns of cell N are a linear mix of glyph N
+plus glyphs N-1 and N+1. Matching on those columns rewards whichever
+template has the widest footprint (→ 'm').
+
+**Fix**: window the NCC to the central columns only. Added
+constants `MATCH_X0=1, MATCH_X1=6, MATCH_W=5` and sliced both
+`templates[:, 1:6]` and the extracted cell before correlation. Kept
+the full-cell luma mean for blank-cell gating. Accuracy on the
+01261 menu frame jumped from 29.3 % to 40.2 % (then 42.3 % after
+re-running calibration, which converged on `origin=(20.0, -9.75),
+cell=(7.54, 17.53)`).
+
+Tried the opposite hypothesis first — narrow 6.25-wide cells with
+origin_x ~72 — based on misreading the bright-text span. It gave
+6.4 % accuracy. The 7.3-wide calibration was correct all along; the
+templates just needed to ignore the edge columns.
+
+### Lab renamed "Decipher CRT Lab"
+
+`WindowGroup` title changed from "Elevated CRT Lab". The tool lives
+in retros under `study/decipher/`, so "Decipher" is the accurate
+name; "Elevated" was left over from when the code lived in the
+elevated repo.
+
+### Phosphor picker, baked through *every* rgba
+
+Added a SwiftUI `ColorPicker` to the control panel bound to a new
+`PhosphorColor` struct. Original CSS has 11 distinct rgba triplets
+across `#screen`, `#screen .l/.r/.s`, `#screenGlow .l/.r/.s`, and
+`#screenGhost` glyphs — all variations on the canonical blue
+`(60, 124, 255)`.
+
+First pass only tinted the four `#screen .l` bloom layers via a
+hand-coded `layerRatios` tuple. Drag-testing the picker produced
+"no effect" because the dominant visual contribution comes from
+`#screenGlow` (opacity × mix-blend-mode: screen on top of a larger
+shadow stack), which still had hardcoded blue rgba.
+
+**Fix**: `PhosphorColor.recolor(refR, refG, refB)` returns a per-
+channel scaled triplet: reference divided by canonical-blue,
+multiplied by the picker's sRGB components. Every `rgba()` in
+`CSSBuilder.css` now goes through a local `rgba(r, g, b, a)` helper
+that calls `color.recolor(...)`. Drag the wheel to amber and the
+entire phosphor family (glyph colour + every shadow layer across
+all three passes) shifts as one; the original cool→warm gradient
+within each bloom stack is preserved.
+
+The sRGB round-trip used `Color(.sRGB, red:green:blue:)` explicit
+construction on the getter side and `NSColor(self)
+.usingColorSpace(.sRGB)` on the setter side. A prior shortcut using
+SwiftUI's default colour space picked up a different colourspace
+and displayed `#5A86FF` where the stored value was `#3C7CFF`.
+
+### 58-knob full exposure
+
+`Parameters.swift` now declares every CSS rule in the landing page
+as a knob: `#screen` base stroke + 3 shadow layers, `.l`/`.r`/`.s`
+shadow stacks (×4/×4/×2), `#screenGlow .l` / `.r` shadows, ghost
+glyph shadow + colour alpha, plus `#fx`/`#noise`/`body::before`/
+`body::after`/flicker-depth opacity knobs. Grouped in
+`ControlPanel.groupOrder` top-to-bottom roughly in z-order.
+
+Defaults for the shipping CSS are baked into both
+`Knobs.defaults` (`value:` and `defaultValue:`) and
+`elevated4k/index.html` so "Reset all" in the lab lands exactly on
+what Safari renders.
+
+### WKWebView render matches Safari
+
+WKWebView and Safari share the same WebKit engine, so the drift
+we were seeing was config, not capability.
+
+- `NSApp.windows[*].colorSpace = NSColorSpace.sRGB` in the
+  `onAppear` of `ContentView`. WKWebView's CGImage snapshot path
+  honours the hosting window's colour space. On P3 displays the
+  lab was drifting cooler/more saturated without this.
+- `Freeze anim` toggle in the bottom bar emits
+  `animation: none !important` on body, `#stage`, `#noise`,
+  `#screen`, `#screenGlow`, `#screenGhost`, `#fx` so the snapshot
+  is deterministic. Defaults to on for the diff workflow.
+- `Export CSS…` always exports with `freezeAnimations: false` so
+  the production CSS stays animated regardless of lab state.
+
+### Shipping defaults
+
+Retuned from scratch against Sneakers frame 01261, using the lab.
+New values in `elevated4k/index.html`:
+
+- body: contrast 1.02, brightness 1.05 (was 1.06 / 0.96)
+- `#screen` filter: blur 0, saturate 2 (was 0.32px / 1.14)
+- `#screen .l` stroke: 0.20px, alpha 0 (was 0.26px / 0.70) — no
+  dark outline; the bloom alone carries the glyph edge
+- `#screen .l` shadow stack: 0→11.85→26.9→0 px blur at
+  0.38/0.18/0.09/0 alpha (was 3.2→6.5→12→22 at 0.62/0.32/0.16/0.07)
+  — tighter inner spike, softer mid/far haloes, halo disabled
+- `#screenGlow`: opacity 0.24, blur 0, saturate 0.4 (was 0.78 /
+  1.2px / 1.28) — glow layer mostly fades out
+- `#screenGhost`: opacity 0.34, blur 0.87px (was 0.22 / 0.9px)
+
+Lab commit: retros `4d090be`. Landing page commit: elevated
+`7602211`.
+
+### Files touched this pass
+
+- `study/decipher/ocr/ocr_frames.py` (central-window NCC)
+- `study/decipher/ocr/frames.json` (regenerated, 171 frames)
+- `study/decipher/lab/Sources/ElevatedLab/Parameters.swift`
+  (58 knobs, PhosphorColor.recolor, full rgba routing, freeze)
+- `study/decipher/lab/Sources/ElevatedLab/LabApp.swift`
+  (sRGB window, freeze toggle, phosphor row, group order,
+  export-without-freeze)
+- `elevated4k/index.html` (body / #screen / #screen .l /
+  #screenGlow / #screenGhost defaults)
+
+---
+
 ## 2026-04-21 — Decipher lab, CP437 glyphs, menu variants, funds-transfer page; lab migrated to retros
 
 ### index.html changes
