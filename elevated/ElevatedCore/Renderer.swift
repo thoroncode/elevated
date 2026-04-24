@@ -184,6 +184,7 @@ public class Renderer: NSObject, MTKViewDelegate {
     public weak var view: MTKView?
 
     // Debug / capture
+    public var loopPlayback = false
     public var debugMode: Bool
     public let captureMode: Bool    // --capture: save one PNG per second to /tmp/elevated_cap/
     public var debugLabel: String
@@ -764,7 +765,7 @@ public class Renderer: NSObject, MTKViewDelegate {
 
     public func draw(in view: MTKView) {
         let t = currentTime
-        if t >= kDemoDuration && !isPaused && !debugMode {
+        if t >= kDemoDuration && !isPaused && (loopPlayback || !debugMode) {
 #if os(macOS)
             if let cb = onDemoEnd {
                 pause()

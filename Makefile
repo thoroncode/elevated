@@ -1,8 +1,8 @@
 .PHONY: all help version stamp-version build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-sh 4k-sh-release 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots mac-screenshots tv-screenshots all-screenshots ios-submit ios-add-tester tv-release tv-submit
 
-BIN       = elevated/.build/release/ElevatedMacCLI
+BIN       = elevated/.build/release/Elevated
 APP       = Elevated.app
-APP_BIN   = $(APP)/Contents/MacOS/ElevatedMacCLI
+APP_BIN   = $(APP)/Contents/MacOS/Elevated
 ICON_TIME = 185.867
 ICON_SRC  = assets/icon_source.png
 ICON_ICNS = assets/icon.icns
@@ -80,7 +80,7 @@ stamp-version:
 	@./stamp-version.sh
 
 build:
-	swift build -c release --package-path elevated --product ElevatedMacCLI
+	swift build -c release --package-path elevated --product Elevated
 
 # Normal playback: fullscreen by default, with a 5s startup delay.
 run: app
@@ -128,7 +128,7 @@ app-icon: build
 # Build a self-contained Elevated.app bundle (double-clickable, drag to Applications)
 #   Normal:  open Elevated.app
 #   Debug:   open Elevated.app --args --debug
-#   CLI:     Elevated.app/Contents/MacOS/ElevatedMacCLI --debug
+#   CLI:     Elevated.app/Contents/MacOS/Elevated --debug
 app: build
 	@echo "Assembling $(APP)..."
 	@rm -rf $(APP)
@@ -149,7 +149,7 @@ app: build
 	        -c "Add :CFBundleIdentifier     string $(ELEVATED_MACOS_APP_IDENTIFIER)" \
 	        -c "Add :CFBundleVersion        string $$buildver" \
 	    -c "Add :CFBundleShortVersionString string $$shortver" \
-	    -c "Add :CFBundleExecutable     string ElevatedMacCLI" \
+	    -c "Add :CFBundleExecutable     string Elevated" \
 	    -c "Add :CFBundlePackageType    string APPL" \
 	    -c "Add :CFBundleIconFile       string icon" \
 	    -c "Add :NSPrincipalClass       string NSApplication" \
@@ -377,7 +377,7 @@ compare-range:
 	bash tools/compare.sh $(T0) $(T1)
 
 clean:
-	-killall ElevatedMacCLI ElevatedMac4k ElevatedMac4k.run ElevatedMac4k.4k _ 2>/dev/null
+	-killall Elevated ElevatedMac4k ElevatedMac4k.run ElevatedMac4k.4k _ 2>/dev/null
 	swift package --package-path elevated clean
 	$(MAKE) -C elevated4k clean
 	rm -rf /tmp/elevated_ref /tmp/elevated_cap /tmp/elevated_cmp

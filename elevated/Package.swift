@@ -65,7 +65,7 @@ let package = Package(
 
         // ── macOS CLI executable (thin wrapper for `make app`) ───────────
         .executableTarget(
-            name: "ElevatedMacCLI",
+            name: "Elevated",
             dependencies: ["ElevatedMac"],
             path: "ElevatedMacCLI",
             swiftSettings: [

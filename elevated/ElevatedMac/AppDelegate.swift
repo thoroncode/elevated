@@ -47,6 +47,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         captureMode = args.contains("--capture")
         debugCompareActive = args.contains("--debug-compare") || args.contains("--compare-shaders")
         debugActive = args.contains("--debug") || debugCompareActive
+        let windowedMode = args.contains("--windowed")
+        let muteMode = args.contains("--mute")
+        let loopMode = args.contains("--loop")
 
         // --icon-at=T  renders one clean frame at time T, saves to --icon-out=path, exits
         func argVal(_ prefix: String) -> String? {
@@ -125,8 +128,13 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         renderer.onDemoEnd = { [weak self] in self?.handleDemoEnd() }
 
         setupMenuBar()
+        if loopMode {
+            eternalLoop = true
+            for r in activeRenderers { r.loopPlayback = true }
+            loopMenuItem?.state = .on
+        }
         NSApp.activate(ignoringOtherApps: true)
-        if normalPresentation {
+        if normalPresentation && !windowedMode {
             DispatchQueue.main.async { [weak self] in
                 self?.window.toggleFullScreen(nil)
             }
@@ -146,8 +154,9 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
                 let delay = normalPresentation ? max(0, Self.releaseStartupDelay - elapsed) : 0
                 DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
                     self.setRenderersPlayback(time: 0, paused: false)
-                    self.synth.isMuted = self.debugActive
-                    self.muteMenuItem?.state = self.debugActive ? .on : .off
+                    let shouldMute = self.debugActive || muteMode
+                    self.synth.isMuted = shouldMute
+                    self.muteMenuItem?.state = shouldMute ? .on : .off
                     self.synth.play()
                 }
             }
@@ -181,6 +190,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     @objc private func toggleEternalLoop() {
         eternalLoop.toggle()
         loopMenuItem?.state = eternalLoop ? .on : .off
+        for r in activeRenderers { r.loopPlayback = eternalLoop }
     }
 
     private func handleDemoEnd() {
@@ -297,7 +307,7 @@ public class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         // ── App menu ──
         let appItem = NSMenuItem()
         mainMenu.addItem(appItem)
-        let appMenu = NSMenu()
+        let appMenu = NSMenu(title: "Elevated")
         appItem.submenu = appMenu
 
         appMenu.addItem(NSMenuItem(title: "About Elevated",
