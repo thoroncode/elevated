@@ -12,8 +12,34 @@ public class SynthPlayer {
     private let engine   = AVAudioEngine()
     private let player   = AVAudioPlayerNode()
     private var buffer: AVAudioPCMBuffer?
+    private var configChangeObserver: NSObjectProtocol?
 
-    public init() {}
+    public init() {
+        configChangeObserver = NotificationCenter.default.addObserver(
+            forName: .AVAudioEngineConfigurationChange,
+            object: engine,
+            queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            guard self.buffer != nil else { return }
+            print("[SynthPlayer] Engine configuration changed; restarting")
+            do { try self.engine.start() }
+            catch { print("[SynthPlayer] Engine restart failed: \(error)"); return }
+            if !self.isPaused { self.player.play() }
+        }
+    }
+
+    deinit {
+        if let obs = configChangeObserver {
+            NotificationCenter.default.removeObserver(obs)
+        }
+    }
+
+    private func ensureEngineRunning() -> Bool {
+        if engine.isRunning { return true }
+        do { try engine.start(); return true }
+        catch { print("[SynthPlayer] Engine start failed: \(error)"); return false }
+    }
 
     /// Synthesize and enqueue the audio.  Runs synthesis on a background thread;
     /// calls completion(success) on the main thread when done.
@@ -102,6 +128,7 @@ public class SynthPlayer {
 
     public func resume() {
         guard isPaused else { return }
+        guard ensureEngineRunning() else { return }
         player.play()
         isPaused = false
     }
@@ -148,6 +175,7 @@ public class SynthPlayer {
                                                count: remaining)
         }
         player.stop()
+        guard ensureEngineRunning() else { return }
         player.scheduleBuffer(slice, at: nil, options: [], completionHandler: nil)
         if !isPaused { player.play() }
     }

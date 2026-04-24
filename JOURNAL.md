@@ -4,6 +4,73 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 
 ---
 
+## 2026-04-24 — SynthPlayer crash after sleep/wake in eternal loop
+
+A user-submitted macOS crash report showed `SIGABRT` from an
+unhandled `NSException` raised inside `AVAudioPlayerNodeImpl::
+StartImpl` → `-[AVAudioPlayerNode play]`. The Swift stack was:
+
+    SynthPlayer.seek(to:) + 404    (SynthPlayer.swift:152)
+    AppDelegate.handleDemoEnd() + 80 (AppDelegate.swift:198)
+    Renderer.draw(in:) + 3188
+
+i.e. the demo hit its natural end, `handleDemoEnd` ran
+`synth.seek(to: 0)`, and `player.play()` threw.
+
+The crash-report header gave away the cause:
+
+    Time Awake Since Boot: 14000 seconds
+    Time Since Wake:          86 seconds
+
+Process launch to crash spanned ~66 minutes, so the app had
+already looped many times. The Mac slept, woke ~86 s before the
+crash, and `AVAudioEngine` was no longer running. Swift doesn't
+catch Objective-C exceptions — unhandled `NSException` on a Swift
+stack terminates the process.
+
+**Fix (SynthPlayer.swift)**: three layers.
+
+1. `ensureEngineRunning()` — checks `engine.isRunning`; starts it
+   if not. Called from `seek(to:)` (after `player.stop()`) and
+   `resume()` so post-wake audio never hits `play()` on a stopped
+   engine.
+2. Observer on `.AVAudioEngineConfigurationChange` — fires on
+   route changes, media-services resets, hardware format changes.
+   Gated on `buffer != nil` (proxy for "`play()` has attached the
+   node") and uses our explicit `isPaused` state instead of the
+   ambiguous `player.isPlaying`. Block holds `[weak self]`,
+   `deinit` removes the observer.
+3. Existing `player.stop()` in `seek` is kept; it's safe on a
+   stopped engine. The guard goes *between* stop and the new
+   `scheduleBuffer` + `play`.
+
+Why the observer isn't enough on its own: `AVAudioEngine` can
+stop across sleep/wake without posting a config-change
+notification (it's not guaranteed). The direct guards in
+`seek`/`resume` are the primary defense; the observer catches
+route-change scenarios like plugging/unplugging AirPods mid-demo.
+
+### Renamed CLI binary: ElevatedMacCLI → Elevated
+
+`Package.swift` executable target, Makefile build rules, and
+`.app/Contents/MacOS/` path all renamed. Single-word binary name
+matches the bundle and shows up as `Elevated` in `ps` and in the
+crash reporter (the submitted report still had the old path but
+future ones will be cleaner).
+
+### Launch flags: --windowed, --mute, --loop
+
+`--windowed` skips the auto-fullscreen on launch (useful while
+debugging against the CRT lab).
+`--mute` forces `synth.isMuted = true` regardless of debug mode,
+so side-by-side visual comparisons don't double up the audio.
+`--loop` presets eternal-loop at launch (previously only
+toggleable from the menu). `Renderer.loopPlayback` lets the
+demo-end callback fire even when `debugMode` is on, so looping
+actually works during debug sessions.
+
+---
+
 ## 2026-04-22 — OCR central-window NCC, phosphor picker, full 58-knob lab, Safari-match WKWebView
 
 ### OCR: text-shadow bloom was eating the templates
