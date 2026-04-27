@@ -296,10 +296,10 @@
 				buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16.56;
+				CURRENT_PROJECT_VERSION = 23.55;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AppTV/Info.plist;
-				MARKETING_VERSION = 26.4.10;
+				MARKETING_VERSION = 26.4.27;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
@@ -320,10 +320,10 @@
 				buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = "App Icon & Top Shelf Image";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 16.56;
+				CURRENT_PROJECT_VERSION = 23.55;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = AppTV/Info.plist;
-				MARKETING_VERSION = 26.4.10;
+				MARKETING_VERSION = 26.4.27;
 				LD_RUNPATH_SEARCH_PATHS = (
 					"$(inherited)",
 					"@executable_path/Frameworks",
