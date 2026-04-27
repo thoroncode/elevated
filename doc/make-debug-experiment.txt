@@ -1,0 +1,11 @@
+Abandoned macOS packaging experiment from the removed fix/make-debug worktree.
+
+Idea:
+- Make `make app` fall back to bundling `Shaders.metal` and
+  `ShadersBaseline.txt` for runtime compilation when the `metal` CLI tool is
+  unavailable.
+
+Status:
+- Never validated.
+- Never merged.
+- Current packaging still expects prebuilt `.metallib` resources.
