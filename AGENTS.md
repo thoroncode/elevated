@@ -83,6 +83,7 @@ For experiments, keep the branch only as long as it still adds comparison value.
 - Do not rewrite or delete someone else's in-progress work without explicit approval.
 - Do not use destructive git commands unless explicitly requested.
 - If multiple agents are working at once, each agent should use a separate worktree.
+- Do not add `Co-Authored-By:` trailers to commits.
 
 ## 4K Fidelity Policy
 
