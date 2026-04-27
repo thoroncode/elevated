@@ -155,9 +155,6 @@ public class ImmersiveRenderer {
                 let viewDemo = renderer.lastView
 
                 drawable.deviceAnchor = deviceAnchor
-                // CompositorServices still expects its reverse-Z near/far ordering here
-                // even though we render with the demo's own forward-Z projection.
-                drawable.depthRange = SIMD2(256.0, 0.03125)
 
                 guard let cmd = renderer.cmdQueue.makeCommandBuffer() else { continue }
 
