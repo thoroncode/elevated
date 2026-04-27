@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Extract reference frames from elevated_8000.avi at 1 fps.
+# Extract reference frames from the local artifact copy of elevated_8000.avi at 1 fps.
 # Output: /tmp/elevated_ref/ref_XXXX.png  (XXXX = second 0001..0215)
 #
 # Usage:
@@ -8,11 +8,31 @@
 
 set -euo pipefail
 
-AVI="$(dirname "$0")/../elevated_8000.avi"
+ROOT="$(CDPATH= cd "$(dirname "$0")/.." && pwd)"
+DEFAULT_AVI="$ROOT/artifact/reference/elevated_8000.avi"
+LEGACY_AVI="$ROOT/elevated_8000.avi"
+AVI="${ELEVATED_REFERENCE_AVI:-}"
 OUT="/tmp/elevated_ref"
 
 START=${1:-0}
 END=${2:-9999}
+
+if [[ -z "$AVI" ]]; then
+    if [[ -f "$DEFAULT_AVI" ]]; then
+        AVI="$DEFAULT_AVI"
+    elif [[ -f "$LEGACY_AVI" ]]; then
+        AVI="$LEGACY_AVI"
+    else
+        echo "Reference video missing: $DEFAULT_AVI" >&2
+        echo "Run \`make ref-video\` or set ELEVATED_REFERENCE_AVI=/path/to/elevated_8000.avi." >&2
+        exit 1
+    fi
+fi
+
+if [[ ! -f "$AVI" ]]; then
+    echo "Reference video not found: $AVI" >&2
+    exit 1
+fi
 
 mkdir -p "$OUT"
 

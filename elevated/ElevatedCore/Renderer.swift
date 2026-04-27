@@ -150,13 +150,22 @@ public class Renderer: NSObject, MTKViewDelegate {
     /// pow(1/2.4) sRGB encoding, preserving the exact macOS look. 0 = no correction.
     public var outputGamma: Float = 0
 
+    /// Reverse-Z mode: clip-space z=1 at near, 0 at far (the convention visionOS
+    /// CompositorServices' projections produce). Switches the G-buffer depth test
+    /// to .greater and clearDepth to 0.0. Default false for forward-Z (.less,
+    /// clearDepth=1.0) which matches the demo's own projection on macOS/iOS/tvOS.
+    public var useReverseZ: Bool = false
+
     // Pipelines
     var gbufferPSO:  MTLRenderPipelineState!
     var deferredPSO: MTLRenderPipelineState!
     var postPSO:     MTLRenderPipelineState!
 
-    // Depth stencil
-    var depthState: MTLDepthStencilState!
+    // Depth stencil — both directions built up front, picked per draw via useReverseZ
+    var depthStateForwardZ: MTLDepthStencilState!
+    var depthStateReverseZ: MTLDepthStencilState!
+    var depthState: MTLDepthStencilState! { useReverseZ ? depthStateReverseZ : depthStateForwardZ }
+    var clearDepth: Double { useReverseZ ? 0.0 : 1.0 }
 
     // G-buffer textures
     var gbufWorldPos: MTLTexture!  // rgba32float — world pos + hit flag
@@ -298,10 +307,15 @@ public class Renderer: NSObject, MTKViewDelegate {
         postDesc.colorAttachments[0].pixelFormat = mtkView.colorPixelFormat
         postPSO = try! device.makeRenderPipelineState(descriptor: postDesc)
 
-        let dsDesc = MTLDepthStencilDescriptor()
-        dsDesc.depthCompareFunction = .less
-        dsDesc.isDepthWriteEnabled  = true
-        depthState = device.makeDepthStencilState(descriptor: dsDesc)!
+        let dsForward = MTLDepthStencilDescriptor()
+        dsForward.depthCompareFunction = .less
+        dsForward.isDepthWriteEnabled  = true
+        depthStateForwardZ = device.makeDepthStencilState(descriptor: dsForward)!
+
+        let dsReverse = MTLDepthStencilDescriptor()
+        dsReverse.depthCompareFunction = .greater
+        dsReverse.isDepthWriteEnabled  = true
+        depthStateReverseZ = device.makeDepthStencilState(descriptor: dsReverse)!
     }
 
     private func loadLibrary() throws -> MTLLibrary {
@@ -672,7 +686,7 @@ public class Renderer: NSObject, MTKViewDelegate {
         gbRPD.depthAttachment.texture         = gbufDepth
         gbRPD.depthAttachment.loadAction      = .clear
         gbRPD.depthAttachment.storeAction     = .dontCare
-        gbRPD.depthAttachment.clearDepth      = 1.0
+        gbRPD.depthAttachment.clearDepth      = clearDepth
 
         if let enc = cmd.makeRenderCommandEncoder(descriptor: gbRPD) {
             enc.setRenderPipelineState(gbufferPSO)
@@ -804,7 +818,7 @@ public class Renderer: NSObject, MTKViewDelegate {
         gbRPD.depthAttachment.texture         = gbufDepth
         gbRPD.depthAttachment.loadAction      = .clear
         gbRPD.depthAttachment.storeAction     = .dontCare
-        gbRPD.depthAttachment.clearDepth      = 1.0
+        gbRPD.depthAttachment.clearDepth      = clearDepth
 
         var uCopy = uniforms
         if let enc = cmd.makeRenderCommandEncoder(descriptor: gbRPD) {

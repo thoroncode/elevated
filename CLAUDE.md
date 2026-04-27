@@ -52,6 +52,13 @@ This sets `core.sshCommand` in `.git/config` so all subsequent git operations (f
 | `make tv-release` | Stamp + archive (unsigned) + export+upload tvOS |
 | `make tv-submit` | Submit latest tvOS build for App Store review |
 
+## Reference Artifacts
+
+- **Reference AVI**: `make ref-video` downloads the original `elevated_8000.avi` from scene.org to `artifact/reference/elevated_8000.avi` and verifies SHA-256 `2c8d12fcb757ba1e5080f53e2bc5ba52f14dca92115cc53f3ed131d67effb73c`
+- **Original intro source**: `make intro-source` downloads `rgba_tbc_elevated_2016.zip` from scene.org to `artifact/original-source/rgba_tbc_elevated_2016.zip`, verifies SHA-256 `2a650b0b0f7ae16362d5edf0ea0610a156c2e773b70c7362a5e5a5f976fafabe`, and extracts it to `artifact/original-source/rgba_tbc_elevated_2016/`
+- **Canonical party text**: the original `file_id.diz` text is preserved in `doc/file_id.diz`; treat it as authoritative context alongside the 2016 compatibility repack
+- **Reference frames**: `make ref` extracts 1 fps PNGs from that local artifact into `/tmp/elevated_ref/`
+
 ## tvOS Key Findings
 
 - **Code signing workaround**: No registered tvOS devices → archive unsigned (`CODE_SIGNING_ALLOWED=NO`), sign at export with `-allowProvisioningUpdates`

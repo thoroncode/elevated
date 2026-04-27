@@ -12,6 +12,7 @@ elevated_1920_1080.exe
 elevated_8000.avi
 
 # Ephemeral artifacts
+artifact/
 camera_log.csv
 wine_crash.txt
 d3d9.dll

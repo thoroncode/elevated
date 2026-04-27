@@ -1,4 +1,4 @@
-.PHONY: all help version stamp-version build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-sh 4k-sh-release 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots mac-screenshots tv-screenshots all-screenshots ios-submit ios-add-tester tv-release tv-submit
+.PHONY: all help version stamp-version build run debug debug-compare capture branch-frame app app-icon pkg zip src-distribution uninstall ref-video intro-source ref compare compare-one compare-range clean 4k 4k-report 4k-review 4k-size 4k-shaders 4k-tables 4k-run 4k-pack-run 4k-sh 4k-sh-release 4k-clean ios-archive ios-upload ios-release ios-metadata ios-screenshots mac-screenshots tv-screenshots all-screenshots ios-submit ios-add-tester tv-release tv-submit
 
 BIN       = elevated/.build/release/Elevated
 APP       = Elevated.app
@@ -12,6 +12,16 @@ SRC_DIST_ARCHIVE = $(DIST_DIR)/$(SRC_DIST_NAME).zip
 SRC_DIST_OPTIONAL_FILES = LICENSE
 SRC_DIST_EXCLUDE_FILES = elevated_music.wav
 VERSION_SCRIPT = ./scripts/version.sh
+ARTIFACT_DIR = artifact
+REFERENCE_DIR = $(ARTIFACT_DIR)/reference
+REFERENCE_VIDEO = $(REFERENCE_DIR)/elevated_8000.avi
+REFERENCE_VIDEO_URL = https://files.scene.org/get/parties/2009/breakpoint09/in4k/elevated_8000.avi
+REFERENCE_VIDEO_SHA256 = 2c8d12fcb757ba1e5080f53e2bc5ba52f14dca92115cc53f3ed131d67effb73c
+INTRO_SOURCE_DIR = $(ARTIFACT_DIR)/original-source
+INTRO_SOURCE_ZIP = $(INTRO_SOURCE_DIR)/rgba_tbc_elevated_2016.zip
+INTRO_SOURCE_URL = https://files.scene.org/get/parties/2009/breakpoint09/in4k/rgba_tbc_elevated_2016.zip
+INTRO_SOURCE_SHA256 = 2a650b0b0f7ae16362d5edf0ea0610a156c2e773b70c7362a5e5a5f976fafabe
+INTRO_SOURCE_EXTRACTED = $(INTRO_SOURCE_DIR)/rgba_tbc_elevated_2016
 
 -include fastlane/.env
 
@@ -54,6 +64,8 @@ help:
 	@echo "  capture           Capture one PNG per second to /tmp/elevated_cap/"
 	@echo "  dump-frames       Capture EVERY frame (60fps) to /tmp/elevated_frames/"
 	@echo "  branch-frame      Capture one exact frame (use T=<sec> [BRANCHES='...'])"
+	@echo "  ref-video         Download the original reference AVI to artifact/reference/"
+	@echo "  intro-source      Download and extract the original intro source ZIP to artifact/original-source/"
 	@echo "  ref               Extract reference frames to /tmp/elevated_ref/"
 	@echo "  compare           Compare all matching reference/capture frames"
 	@echo "  compare-one       Compare one second (use T=<sec>)"
@@ -360,8 +372,41 @@ branch-frame:
 	@test -n "$(T)" || (echo "Usage: make branch-frame T=<seconds> [BRANCHES='main other-branch'] [OUT_DIR=/tmp/elevated_branch_frames]" && exit 1)
 	bash tools/capture_branches.sh --time "$(T)" --out "$(if $(OUT_DIR),$(OUT_DIR),/tmp/elevated_branch_frames)" $(BRANCHES)
 
-# Extract 1fps reference frames from elevated_8000.avi → /tmp/elevated_ref/
-ref:
+# Download the native-render reference AVI into the local artifact cache.
+ref-video: $(REFERENCE_VIDEO)
+
+$(REFERENCE_VIDEO):
+	@mkdir -p $(REFERENCE_DIR)
+	@tmp="$@.tmp"; \
+	    rm -f "$$tmp"; \
+	    echo "Downloading reference video..."; \
+	    curl -L --fail -o "$$tmp" '$(REFERENCE_VIDEO_URL)'; \
+	    echo "$(REFERENCE_VIDEO_SHA256)  $$tmp" | shasum -a 256 -c - >/dev/null || (rm -f "$$tmp" && echo "FATAL: hash mismatch — download corrupted or tampered" && exit 1); \
+	    mv "$$tmp" "$@"; \
+	    echo "  Reference video: $@"
+
+# Download and extract the original intro source ZIP into the local artifact cache.
+intro-source: $(INTRO_SOURCE_EXTRACTED)/.done
+
+$(INTRO_SOURCE_ZIP):
+	@mkdir -p $(INTRO_SOURCE_DIR)
+	@tmp="$@.tmp"; \
+	    rm -f "$$tmp"; \
+	    echo "Downloading original intro source..."; \
+	    curl -L --fail -o "$$tmp" '$(INTRO_SOURCE_URL)'; \
+	    echo "$(INTRO_SOURCE_SHA256)  $$tmp" | shasum -a 256 -c - >/dev/null || (rm -f "$$tmp" && echo "FATAL: hash mismatch — download corrupted or tampered" && exit 1); \
+	    mv "$$tmp" "$@"; \
+	    echo "  Original source ZIP: $@"
+
+$(INTRO_SOURCE_EXTRACTED)/.done: $(INTRO_SOURCE_ZIP)
+	@rm -rf $(INTRO_SOURCE_EXTRACTED)
+	@mkdir -p $(INTRO_SOURCE_EXTRACTED)
+	@unzip -oq $(INTRO_SOURCE_ZIP) -d $(INTRO_SOURCE_EXTRACTED)
+	@touch $@
+	@echo "  Original source extracted to: $(INTRO_SOURCE_EXTRACTED)"
+
+# Extract 1fps reference frames from artifact/reference/elevated_8000.avi → /tmp/elevated_ref/
+ref: ref-video
 	bash tools/extract_ref.sh
 
 # Compare all matching ref vs cap frames (opens in Preview)

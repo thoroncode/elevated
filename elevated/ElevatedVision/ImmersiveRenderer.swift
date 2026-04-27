@@ -1,7 +1,7 @@
 // ImmersiveRenderer.swift
 // Immersive Metal renderer for visionOS using CompositorServices.
-// Uses P_compositor * R_head * V_demo to preserve the demo's exact
-// camera path (including roll) while adding head-tracked look-around.
+// Uses the demo's own projection/FOV plus eye offset and head rotation to
+// preserve Elevated's cinematography while adding head-tracked look-around.
 
 #if os(visionOS)
 import CompositorServices
@@ -148,11 +148,15 @@ public class ImmersiveRenderer {
                 let tex = drawable.colorTextures[0]
                 let size = CGSize(width: tex.width, height: tex.height)
 
-                // Update uniforms — this computes V_demo (with roll) and stores it
+                // Update uniforms — this computes the demo's exact projection + view
+                // (camera path, roll, sync-driven FOV) for this frame.
                 renderer.updateUniformsForTime(time, size: size)
+                let demoProjection = renderer.lastProjection
                 let viewDemo = renderer.lastView
 
                 drawable.deviceAnchor = deviceAnchor
+                // CompositorServices still expects its reverse-Z near/far ordering here
+                // even though we render with the demo's own forward-Z projection.
                 drawable.depthRange = SIMD2(256.0, 0.03125)
 
                 guard let cmd = renderer.cmdQueue.makeCommandBuffer() else { continue }
@@ -160,9 +164,6 @@ public class ImmersiveRenderer {
                 for viewIndex in 0..<drawable.views.count {
                     let texture = drawable.colorTextures[viewIndex]
                     let view = drawable.views[viewIndex]
-
-                    // Per-eye projection from compositor (correct stereo FOV)
-                    let projMatrix = drawable.computeProjection(viewIndex: viewIndex)
 
                     // Per-eye view offset (IPD) as a 4x4 translation
                     let eyeTransform = view.transform
@@ -175,10 +176,9 @@ public class ImmersiveRenderer {
                                -eyeTransform.columns.3.z, 1)
                     ))
 
-                    // P_compositor * eyeOffset * R_head * V_demo
-                    // Preserves demo roll, position, cinematography.
-                    // Head rotation adds look-around on top.
-                    let vp = projMatrix * eyeView * relativeRotation * viewDemo
+                    // Keep the demo's intended projection/FOV and layer stereo eye
+                    // offset + head look-around in view space: P_demo * eyeOffset * R_head * V_demo
+                    let vp = demoProjection * eyeView * relativeRotation * viewDemo
 
                     renderer.renderFrame(commandBuffer: cmd, outputTexture: texture,
                                         viewProjection: vp, size: size)
