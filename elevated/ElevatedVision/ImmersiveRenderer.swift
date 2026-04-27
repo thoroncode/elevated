@@ -74,6 +74,11 @@ public class ImmersiveRenderer {
         // "straight ahead" = the demo's forward direction.
         var referenceHeadRotation: simd_float3x3?
 
+        var lastFpsTick = CACurrentMediaTime()
+        var framesThisTick = 0
+        var smoothedFps: Double = 0
+        var totalFrames = 0
+
         while !isStopped {
             guard layerRenderer.state == .running else {
                 if layerRenderer.state == .paused {
@@ -184,6 +189,34 @@ public class ImmersiveRenderer {
             }
 
             frame.endSubmission()
+
+            framesThisTick += 1
+            totalFrames += 1
+            let now = CACurrentMediaTime()
+            let dt = now - lastFpsTick
+            if dt >= 0.5 {
+                smoothedFps = Double(framesThisTick) / dt
+                framesThisTick = 0
+                lastFpsTick = now
+            }
+
+            if let firstDrawable = drawables.first {
+                let firstTex = firstDrawable.colorTextures[0]
+                let snapshotSize = CGSize(width: firstTex.width, height: firstTex.height)
+                let camPos = renderer.demoCameraPosition
+                let fps = smoothedFps
+                let frameNo = totalFrames
+                Task { @MainActor in
+                    if let s = sharedDebugState {
+                        s.time = time
+                        s.fps = fps
+                        s.frameCount = frameNo
+                        s.renderSize = snapshotSize
+                        s.minNearPlane = capturedMinNearPlane
+                        s.cameraPos = camPos
+                    }
+                }
+            }
         }
 
         if !isStopped {
