@@ -11,6 +11,8 @@ This repo belongs to the `thoroncode` GitHub account. Commits must use the ident
 
     Petri Koistinen <thoron@iki.fi>
 
+- Do not add `Co-authored-by: Copilot <223556219+Copilot@users.noreply.github.com>` trailers to commits.
+
 The default SSH key (`id_ed25519`) belongs to the `pkoistin` work account. This repo needs the `thoroncode-m3` key instead. Both identity and SSH key are configured per-repo in `.git/config` — no SSH host aliases needed.
 
 ### Clone and configure
