@@ -74,6 +74,15 @@ public class ImmersiveRenderer {
         // "straight ahead" = the demo's forward direction.
         var referenceHeadRotation: simd_float3x3?
 
+        // Push the near plane as close as the runtime allows (visionOS 26 enforces
+        // a per-device floor; 0.03125 m fails on hardware and the simulator).
+        let depthRangeFarNear = SIMD2<Float>(256.0, max(capturedMinNearPlane, 0.03125))
+
+        var lastFpsTick = CACurrentMediaTime()
+        var framesThisTick = 0
+        var smoothedFps: Double = 0
+        var totalFrames = 0
+
         while !isStopped {
             guard layerRenderer.state == .running else {
                 if layerRenderer.state == .paused {
@@ -148,16 +157,26 @@ public class ImmersiveRenderer {
                 let viewDemo = renderer.lastView
 
                 drawable.deviceAnchor = deviceAnchor
-                drawable.depthRange = SIMD2(256.0, 0.03125)
+                drawable.depthRange = depthRangeFarNear
 
                 guard let cmd = renderer.cmdQueue.makeCommandBuffer() else { continue }
+
+                // Compositor projection is reverse-Z (1 at near, 0 at far). Renderer's
+                // pipeline uses .less depth comparison (forward-Z). Apply zc' = wc - zc
+                // to convert clip-space depth to forward-Z so .less stays correct.
+                let zFlip = simd_float4x4(columns: (
+                    SIMD4<Float>(1, 0, 0, 0),
+                    SIMD4<Float>(0, 1, 0, 0),
+                    SIMD4<Float>(0, 0, -1, 0),
+                    SIMD4<Float>(0, 0, 1, 1)
+                ))
 
                 for viewIndex in 0..<drawable.views.count {
                     let texture = drawable.colorTextures[viewIndex]
                     let view = drawable.views[viewIndex]
 
                     // Per-eye projection from compositor (correct stereo FOV)
-                    let projMatrix = drawable.computeProjection(viewIndex: viewIndex)
+                    let projMatrix = zFlip * drawable.computeProjection(viewIndex: viewIndex)
 
                     // Per-eye view offset (IPD) as a 4x4 translation
                     let eyeTransform = view.transform
@@ -184,6 +203,35 @@ public class ImmersiveRenderer {
             }
 
             frame.endSubmission()
+
+            framesThisTick += 1
+            totalFrames += 1
+            let now = CACurrentMediaTime()
+            let dt = now - lastFpsTick
+            if dt >= 0.5 {
+                smoothedFps = Double(framesThisTick) / dt
+                framesThisTick = 0
+                lastFpsTick = now
+            }
+
+            if let firstDrawable = drawables.first {
+                let firstTex = firstDrawable.colorTextures[0]
+                let snapshotSize = CGSize(width: firstTex.width, height: firstTex.height)
+                let camPos = renderer.demoCameraPosition
+                let fps = smoothedFps
+                let frameNo = totalFrames
+                Task { @MainActor in
+                    if let s = sharedDebugState {
+                        s.time = time
+                        s.fps = fps
+                        s.frameCount = frameNo
+                        s.renderSize = snapshotSize
+                        s.minNearPlane = capturedMinNearPlane
+                        s.depthRange = depthRangeFarNear
+                        s.cameraPos = camPos
+                    }
+                }
+            }
         }
 
         if !isStopped {
