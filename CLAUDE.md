@@ -20,10 +20,10 @@ GIT_SSH_COMMAND="ssh -i ~/.ssh/thoroncode-m3" git clone git@github.com:thoroncod
 cd elevated
 git config user.name "Petri Koistinen"
 git config user.email "thoron@iki.fi"
-git config core.sshCommand "ssh -i ~/.ssh/thoroncode-m3"
+git config core.sshCommand "ssh -i ~/.ssh/thoroncode-m3 -o IdentitiesOnly=yes"
 ```
 
-This sets `core.sshCommand` in `.git/config` so all subsequent git operations (fetch, push, pull) use the correct key automatically.
+This sets `core.sshCommand` in `.git/config` so all subsequent git operations (fetch, push, pull) use the correct key automatically. `IdentitiesOnly=yes` is required: without it, ssh-agent offers `id_ed25519` (the pkoistin work key) first, authenticates as the wrong account, and GitHub responds with "Repository not found" before the thoroncode key is ever tried.
 
 ## Xcode Cloud
 
