@@ -82,13 +82,26 @@ This sets `core.sshCommand` in `.git/config` so all subsequent git operations (f
 
 ## Xcode Cloud Build Strategy
 
-Current: all workflows trigger on every push to `main` (wasteful).
+Per-platform release branches so a push only rebuilds the affected app:
 
-Planned: single `release` branch triggers all workflows. Develop freely on `main` with no CI builds.
-- To release: `git push origin main:release`
-- Configure each workflow's Start Conditions in App Store Connect to watch `release` branch only
-- Manual trigger in ASC available for ad-hoc builds during development
-- TODO: implement once all platforms build cleanly
+| Branch | Triggers |
+|--------|----------|
+| `release-ios` | iOS workflow |
+| `release-macos` | macOS workflow |
+| `release-tvos` | tvOS workflow |
+| `release-visionos` | visionOS workflow |
+
+Develop freely on `main` with no CI builds. To release one platform:
+
+```bash
+git push origin main:release-ios       # or release-macos / release-tvos / release-visionos
+```
+
+Cross-platform changes (shaders, renderer) need one push per affected branch — explicit beats wasteful.
+
+- Configure each workflow's Start Conditions in App Store Connect to watch its specific `release-*` branch
+- Manual trigger in ASC remains available for ad-hoc builds
+- TODO: reconfigure each workflow's Start Conditions in ASC (cannot be done from CLI)
 
 ## iOS Simulator
 
