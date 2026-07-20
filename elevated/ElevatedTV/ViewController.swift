@@ -48,12 +48,14 @@ public class ViewController: UIViewController {
         mtkView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
         mtkView.contentScaleFactor = 1.0
         mtkView.autoResizeDrawable = false
-        // A8 (Apple TV HD/4th gen) can't handle 1080p; A15+ (4K) can.
-        // A8: 342×342 mesh LOD (proven identical XZ → identical terrain) + 540p.
-        // 4K: full 1024×1024 mesh + 1080p.
+        // A8 (Apple TV HD/4th gen) needs the deliberately coarse 240p path.
+        // On Apple TV 4K, 1728×972 is the measured 60 Hz quality/performance
+        // profile: Metal renders 90% of 1080p in each dimension and tvOS
+        // upscales the drawable to the 4K display output. The 342×342 indexed
+        // grid is an exact subset of the original terrain lattice.
         let is4K = UIScreen.main.nativeBounds.height >= 2160
-        let renderSize = is4K ? CGSize(width: 1920, height: 1080) : CGSize(width: 426, height: 240)
-        let meshSize = is4K ? 1024 : 342
+        let renderSize = is4K ? CGSize(width: 1728, height: 972) : CGSize(width: 426, height: 240)
+        let meshSize = 342
         mtkView.drawableSize = renderSize
         mtkView.preferredFramesPerSecond = 60
         print("[ElevatedTV] drawableSize: \(mtkView.drawableSize), meshSize: \(meshSize), screen: \(UIScreen.main.bounds)")

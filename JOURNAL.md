@@ -4,6 +4,22 @@ A log of discoveries, fixes, and decisions for future agent sessions.
 
 ---
 
+## 2026-07-20 — Apple TV 4K 1728×972 performance profile
+
+Physical-device testing on an Apple TV 4K (3rd generation) found that a
+1920×1080 internal Metal drawable could fall below the 60 Hz presentation
+cadence in the shader-heavy parts of the intro. The tvOS player now uses a
+1728×972 drawable with the fidelity-preserving 342×342 indexed terrain grid on
+4K models. tvOS scales that drawable to the device's 3840×2160 display output.
+
+This is live rendering through the original three-pass pipeline, not a video or
+a cached frame sequence. The resolution is 90% of 1080p in each dimension
+(81% of its pixels), which retained a clean 4K-upscaled image while recovering
+the 60 Hz presentation budget in representative physical-device measurements.
+The existing 426×240 fallback remains in place for Apple TV HD.
+
+---
+
 ## 2026-04-24 — SynthPlayer crash after sleep/wake in eternal loop
 
 A user-submitted macOS crash report showed `SIGABRT` from an
